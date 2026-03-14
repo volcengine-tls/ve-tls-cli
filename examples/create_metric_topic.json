@@ -1,0 +1,13 @@
+{
+  "ProjectId": "00000000-0000-0000-0000-000000000000",
+  "TopicName": "demo-metric-topic",
+  "Description": "metric topic created by tlsctl",
+  "Ttl": 30,
+  "ShardCount": 2,
+  "AutoSplit": true,
+  "MaxSplitShard": 10,
+  "Tags": [
+    { "Key": "env", "Value": "dev" }
+  ]
+}
+

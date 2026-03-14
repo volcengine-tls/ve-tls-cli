@@ -1,0 +1,11 @@
+{
+  "ProjectName": "demo-project",
+  "Description": "demo project created by tlsctl",
+  "Region": "cn-beijing",
+  "IamProjectName": "default",
+  "Tags": [
+    { "Key": "env", "Value": "dev" },
+    { "Key": "owner", "Value": "alice" }
+  ]
+}
+

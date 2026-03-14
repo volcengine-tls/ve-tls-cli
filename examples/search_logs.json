@@ -1,0 +1,13 @@
+{
+  "TopicId": "00000000-0000-0000-0000-000000000000",
+  "Query": "* | limit 10",
+  "StartTime": 1710374400000,
+  "EndTime": 1710378000000,
+  "Limit": 100,
+  "Sort": "desc",
+  "HighLight": false,
+  "AccurateQuery": false,
+  "MustComplete": false,
+  "Offset": 0
+}
+
