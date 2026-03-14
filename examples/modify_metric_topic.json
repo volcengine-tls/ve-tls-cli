@@ -1,0 +1,9 @@
+{
+  "TopicId": "00000000-0000-0000-0000-000000000000",
+  "Description": "updated metric topic description",
+  "Ttl": 60,
+  "AutoSplit": true,
+  "MaxSplitShard": 10,
+  "Favourite": true
+}
+

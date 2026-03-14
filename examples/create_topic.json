@@ -1,0 +1,28 @@
+{
+  "ProjectId": "00000000-0000-0000-0000-000000000000",
+  "TopicName": "demo-topic",
+  "Description": "demo topic created by tlsctl",
+  "Ttl": 30,
+  "ShardCount": 2,
+  "AutoSplit": true,
+  "MaxSplitShard": 10,
+  "EnableTracking": false,
+  "MeteringMode": "ChargeByFunction",
+  "LogPublicIP": false,
+  "TimeKey": "requestTime",
+  "TimeFormat": "%F %T",
+  "EncryptConf": {
+    "enable": false,
+    "encrypt_type": "",
+    "user_cmk_info": {
+      "from_tls": false,
+      "region_id": "",
+      "trn": "",
+      "user_cmk_id": ""
+    }
+  },
+  "Tags": [
+    { "Key": "env", "Value": "dev" }
+  ]
+}
+

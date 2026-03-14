@@ -1,0 +1,27 @@
+{
+  "EnableAutoIndex": true,
+  "FullText": {
+    "CaseSensitive": false,
+    "Delimiter": " \t\n",
+    "IncludeChinese": true
+  },
+  "KeyValue": [
+    {
+      "Key": "level",
+      "Value": {
+        "ValueType": "text",
+        "CaseSensitive": false,
+        "SqlFlag": true
+      }
+    },
+    {
+      "Key": "cost_ms",
+      "Value": {
+        "ValueType": "long",
+        "SqlFlag": true
+      }
+    }
+  ],
+  "MaxTextLen": 2048
+}
+

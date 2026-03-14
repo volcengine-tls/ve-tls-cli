@@ -1,0 +1,93 @@
+name: release-tlsctl
+
+on:
+  push:
+    tags:
+      - "tlsctl-v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Test
+        run: go test ./...
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist
+          out="dist/tlsctl"
+          if [ "$GOOS" = "windows" ]; then
+            out="dist/tlsctl.exe"
+          fi
+          go build -ldflags "-s -w -X tlsctl/internal/version.Version=${{ github.ref_name }}" -o "$out" ./cmd/tlsctl
+      - name: Package
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          cd dist
+          if [ "$GOOS" = "windows" ]; then
+            pkg="tlsctl_${GOOS}_${GOARCH}.zip"
+            zip -q "$pkg" tlsctl.exe
+          else
+            pkg="tlsctl_${GOOS}_${GOARCH}.tar.gz"
+            tar -czf "$pkg" tlsctl
+          fi
+          sha256sum "$pkg" > "${pkg}.sha256"
+          cp "$pkg" "../$pkg"
+          cp "${pkg}.sha256" "../${pkg}.sha256"
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tlsctl-${{ matrix.goos }}-${{ matrix.goarch }}
+          if-no-files-found: ignore
+          path: |
+            tlsctl_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
+            tlsctl_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz.sha256
+            tlsctl_${{ matrix.goos }}_${{ matrix.goarch }}.zip
+            tlsctl_${{ matrix.goos }}_${{ matrix.goarch }}.zip.sha256
+
+  release:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/tlsctl_*.tar.gz
+            dist/tlsctl_*.tar.gz.sha256
+            dist/tlsctl_*.zip
+            dist/tlsctl_*.zip.sha256
