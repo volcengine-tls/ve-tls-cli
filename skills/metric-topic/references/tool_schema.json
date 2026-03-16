@@ -1,0 +1,47 @@
+{
+  "name": "metric-topic",
+  "tools": [
+    {
+      "name": "metric_topic_execute",
+      "description": "Execute MetricTopic management and Prom queries via tlsctl-runner. Use dry_run for create/modify/delete and require confirm_token to apply.",
+      "input_schema": {
+        "type": "object",
+        "required": ["account", "region", "action"],
+        "properties": {
+          "account": { "type": "string" },
+          "region": { "type": "string" },
+          "action": {
+            "type": "string",
+            "enum": [
+              "metric_topic.list",
+              "metric_topic.get",
+              "metric_topic.create",
+              "metric_topic.modify",
+              "metric_topic.delete",
+              "metric_topic.search",
+              "metric_topic.prom.query",
+              "metric_topic.prom.query_range",
+              "metric_topic.prom.series",
+              "metric_topic.prom.labels",
+              "metric_topic.prom.label_values"
+            ]
+          },
+          "args": { "type": "object" },
+          "output": { "type": "string", "enum": ["json", "jsonl"] },
+          "dry_run": { "type": "boolean" },
+          "confirm_token": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "metric_topic_text",
+      "description": "Execute via semi-structured Chinese text. The runner only parses key=value pairs and ignores other text.",
+      "input_schema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": { "text": { "type": "string" } }
+      }
+    }
+  ]
+}
+

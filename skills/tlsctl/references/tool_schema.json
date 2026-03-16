@@ -1,0 +1,63 @@
+{
+  "name": "tlsctl",
+  "tools": [
+    {
+      "name": "tlsctl_execute",
+      "description": "Execute Volcengine TLS operations via tlsctl-runner. Prefer dry_run for create/modify/delete/export actions and require confirm_token to apply.",
+      "input_schema": {
+        "type": "object",
+        "required": ["account", "region", "action"],
+        "properties": {
+          "account": { "type": "string" },
+          "region": { "type": "string" },
+          "action": {
+            "type": "string",
+            "enum": [
+              "project.list",
+              "project.get",
+              "project.create",
+              "project.modify",
+              "project.delete",
+              "topic.list",
+              "topic.get",
+              "topic.create",
+              "topic.modify",
+              "topic.delete",
+              "metric_topic.list",
+              "metric_topic.get",
+              "metric_topic.create",
+              "metric_topic.modify",
+              "metric_topic.delete",
+              "metric_topic.search",
+              "metric_topic.prom.query",
+              "metric_topic.prom.query_range",
+              "metric_topic.prom.series",
+              "metric_topic.prom.labels",
+              "metric_topic.prom.label_values",
+              "index.get",
+              "index.create",
+              "index.modify",
+              "log.search",
+              "log.export"
+            ]
+          },
+          "args": { "type": "object" },
+          "output": { "type": "string", "enum": ["json", "jsonl"] },
+          "dry_run": { "type": "boolean" },
+          "confirm_token": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "tlsctl_text",
+      "description": "Execute via semi-structured Chinese text. The runner only parses key=value pairs and ignores other text.",
+      "input_schema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": { "type": "string" }
+        }
+      }
+    }
+  ]
+}

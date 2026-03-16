@@ -1,13 +1,11 @@
-name: release-tlsctl
+name: pr-artifacts
 
 on:
-  push:
-    tags:
-      - "tlsctl-v*"
+  pull_request: {}
   workflow_dispatch: {}
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -45,6 +43,7 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
+          set -euo pipefail
           mkdir -p dist
           out="dist/tlsctl"
           out_runner="dist/tlsctl-runner"
@@ -52,7 +51,7 @@ jobs:
             out="dist/tlsctl.exe"
             out_runner="dist/tlsctl-runner.exe"
           fi
-          go build -ldflags "-s -w -X tlsctl/internal/version.Version=${{ github.ref_name }}" -o "$out" ./cmd/tlsctl
+          go build -ldflags "-s -w -X tlsctl/internal/version.Version=${{ github.sha }}" -o "$out" ./cmd/tlsctl
           cp "$out" internal/runner/embedded_tlsctl.bin
           go build -tags embed_tlsctl -ldflags "-s -w" -o "$out_runner" ./cmd/tlsctl-runner
           rm -f internal/runner/embedded_tlsctl.bin
@@ -84,7 +83,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tlsctl-${{ matrix.goos }}-${{ matrix.goarch }}
-          if-no-files-found: ignore
+          if-no-files-found: error
           path: |
             tlsctl_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
             tlsctl_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz.sha256
@@ -94,24 +93,3 @@ jobs:
             tlsctl-runner_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz.sha256
             tlsctl-runner_${{ matrix.goos }}_${{ matrix.goarch }}.zip
             tlsctl-runner_${{ matrix.goos }}_${{ matrix.goarch }}.zip.sha256
-
-  release:
-    needs: [build]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-      - name: Publish release assets
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/tlsctl_*.tar.gz
-            dist/tlsctl_*.tar.gz.sha256
-            dist/tlsctl_*.zip
-            dist/tlsctl_*.zip.sha256
-            dist/tlsctl-runner_*.tar.gz
-            dist/tlsctl-runner_*.tar.gz.sha256
-            dist/tlsctl-runner_*.zip
-            dist/tlsctl-runner_*.zip.sha256
