@@ -512,12 +512,6 @@ tlsctl index -h
 tlsctl log -h
 ```
 
-### 6.9 ai（AI packs）
-
-```bash
-tlsctl ai -h
-```
-
 ***
 
 ## 7. 逐命令参数手册（参数说明 + body 示例）
@@ -920,26 +914,6 @@ tlsctl log search --topic-id <tid> --query <expr> --from <t> --to <t> [--limit <
 
 ```bash
 tlsctl --output jsonl log export --topic-id <tid> --query <expr> --from <t> --to <t> [--limit <n>] [--max-pages <n>] [--request <file://...>]
-```
-
-### 7.9 ai（AI packs）
-
-#### 7.9.1 ai list-packs
-
-```bash
-tlsctl ai list-packs
-```
-
-#### 7.9.2 ai bootstrap
-
-```bash
-tlsctl ai bootstrap --pack <name> --project-id <pid> [--topic-name <s>]
-```
-
-#### 7.9.3 ai export
-
-```bash
-tlsctl --output jsonl ai export --pack <name> --project-id <pid> --from <t> --to <t> [--limit <n>]
 ```
 
 ***

@@ -12,7 +12,6 @@
 - 快速上手
 - 输入与输出约定
 - 常用命令
-- 实验特性与路线图
 - 进一步阅读
 
 ## 安装
@@ -159,36 +158,6 @@ tlsctl log search --request file://./examples/search_logs.json
 tlsctl api call --method GET --path /DescribeProject --query ProjectId=<pid>
 tlsctl api call --method POST --path /SearchLogs --body file://./examples/search_logs.json
 ```
-
-## 实验特性与路线图
-
-### AI Packs（实验特性）
-
-AI Packs 用于将一套“Topic + Index + 导出规则”模板化，便于在自动化场景中快速准备日志采集与检索条件。
-
-状态声明：
-- 当前功能仍在演进中，pack 规范、默认索引配置与导出行为可能调整
-- 不建议在生产环境中作为关键链路依赖；如需生产使用，建议先在非生产环境验证并锁定版本
-
-当前能力（已实现）：
-- `tlsctl ai list-packs`：列出内置 packs
-- `tlsctl ai bootstrap`：按 pack 约定创建/复用 Topic，并创建或更新 Index
-- `tlsctl ai export`：按 pack 默认 Query/Limit/Sort 导出日志（底层调用 SearchLogs 自动翻页）
-
-已内置 packs：
-- `llm-trace-v1`（TopicName: `ai-llm-trace`）
-
-示例：
-```bash
-tlsctl ai list-packs
-tlsctl ai bootstrap --pack llm-trace-v1 --project-id <pid>
-tlsctl --output jsonl ai export --pack llm-trace-v1 --project-id <pid> --from 1710374400000 --to 1710378000000
-```
-
-### 路线图（规划中）
-- 支持自定义 pack（从文件加载 pack 定义）
-- 支持 pack 的 plan/apply 工作流（可预览变更、审计与回滚）
-- 增强导出能力（并发、断点续传、可插拔落盘格式）
 
 ## 进一步阅读
 - 中文逐命令参数手册：[README_CN.md](./README_CN.md)

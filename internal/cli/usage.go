@@ -166,19 +166,3 @@ Examples:
   tlsctl --output jsonl log export --topic-id <tid> --query "*" --from 1710374400000 --to 1710378000000 --max-pages 10
 `
 }
-
-func usageAI() string {
-	return `Usage:
-  tlsctl ai <command> [args]
-
-Commands:
-  list-packs  List builtin packs
-  bootstrap   Create or reuse topic and ensure index
-  export      Export logs for a pack
-
-Examples:
-  tlsctl ai list-packs
-  tlsctl ai bootstrap --pack llm-trace-v1 --project-id <pid>
-  tlsctl --output jsonl ai export --pack llm-trace-v1 --project-id <pid> --from 1710374400000 --to 1710378000000
-`
-}

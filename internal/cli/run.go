@@ -53,8 +53,6 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		out, err = runIndex(ctx, rest)
 	case "log":
 		out, err = runLog(ctx, rest)
-	case "ai":
-		out, err = runAI(ctx, rest)
 	default:
 		_, _ = stderr.Write([]byte(usageText()))
 		return 1
@@ -93,7 +91,6 @@ Groups:
   metric-topic Metric topic operations (ID-first)
   index       Index operations (ID-first)
   log         Log search/export
-  ai          AI packs bootstrap/export
 
 Global Flags:
   --profile <name>
