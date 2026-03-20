@@ -13,7 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"tlsctl/internal/signv4"
+	"volclog/internal/signv4"
+	"volclog/internal/version"
 )
 
 type Client struct {
@@ -86,7 +87,7 @@ func (c *Client) Do(ctx context.Context, method, path string, query map[string]s
 	}
 	req.Host = u.Host
 
-	req.Header.Set("User-Agent", "tlsctl/0.1")
+	req.Header.Set("User-Agent", "volclog/"+version.Version)
 	req.Header.Set("x-tls-apiversion", "0.3.0")
 	req.Header.Set("Content-Type", "application/json")
 

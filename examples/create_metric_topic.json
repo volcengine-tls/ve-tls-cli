@@ -1,7 +1,7 @@
 {
   "ProjectId": "00000000-0000-0000-0000-000000000000",
   "TopicName": "demo-metric-topic",
-  "Description": "metric topic created by tlsctl",
+  "Description": "metric topic created by volclog",
   "Ttl": 30,
   "ShardCount": 2,
   "AutoSplit": true,
@@ -10,4 +10,3 @@
     { "Key": "env", "Value": "dev" }
   ]
 }
-

@@ -3,6 +3,7 @@ package util
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,9 @@ func ReadMaybeFile(s string) ([]byte, error) {
 	v := strings.TrimSpace(s)
 	if v == "" {
 		return []byte{}, nil
+	}
+	if v == "-" {
+		return io.ReadAll(os.Stdin)
 	}
 	if strings.HasPrefix(v, "file://") {
 		p := strings.TrimPrefix(v, "file://")

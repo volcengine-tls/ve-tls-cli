@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"tlsctl/internal/cli"
+	"volclog/internal/cli"
 )
 
 func main() {

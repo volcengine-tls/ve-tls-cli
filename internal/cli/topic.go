@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"tlsctl/internal/util"
+	"volclog/internal/util"
 )
 
 func runTopic(ctx *Context, args []string) (any, error) {
@@ -13,6 +13,9 @@ func runTopic(ctx *Context, args []string) (any, error) {
 		return nil, &usageError{Text: usageTopic(), ExitCode: 1}
 	}
 	if args[0] == "-h" || args[0] == "--help" {
+		return nil, &usageError{Text: usageTopic(), ExitCode: 0}
+	}
+	if hasHelp(args[1:]) {
 		return nil, &usageError{Text: usageTopic(), ExitCode: 0}
 	}
 	switch args[0] {
@@ -107,6 +110,12 @@ func topicList(ctx *Context, args []string) (any, error) {
 				query["Tags"] = s
 			}
 			args = args[2:]
+		case "--is-full-name":
+			query["IsFullName"] = "true"
+			args = args[1:]
+		case "--no-is-full-name":
+			query["IsFullName"] = "false"
+			args = args[1:]
 		case "--favourite":
 			query["Favourite"] = "true"
 			args = args[1:]

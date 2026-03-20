@@ -3,10 +3,17 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
+
+type Credential struct {
+	AccessKeyID     string `json:"access_key_id"`
+	SecretAccessKey string `json:"secret_access_key"`
+}
 
 type Profile struct {
 	AccessKeyID     string `json:"access_key_id"`
@@ -15,30 +22,39 @@ type Profile struct {
 	Region          string `json:"region,omitempty"`
 	Endpoint        string `json:"endpoint,omitempty"`
 	TimeoutSeconds  int    `json:"timeout_seconds,omitempty"`
+	CredRef         string `json:"cred_ref,omitempty"`
 }
 
 type Config struct {
-	Version        int                `json:"version"`
-	CurrentProfile string             `json:"current_profile,omitempty"`
-	Profiles       map[string]Profile `json:"profiles,omitempty"`
+	Version        int                   `json:"version"`
+	CurrentProfile string                `json:"current_profile,omitempty"`
+	Profiles       map[string]Profile    `json:"profiles,omitempty"`
+	Creds          map[string]Credential `json:"creds,omitempty"`
+}
+
+type ProfileDefaults struct {
+	Region         string
+	Endpoint       string
+	TimeoutSeconds int
 }
 
 func DefaultConfig() Config {
 	return Config{
 		Version:  1,
 		Profiles: map[string]Profile{},
+		Creds:    map[string]Credential{},
 	}
 }
 
 func DefaultConfigPath() (string, error) {
-	if p := strings.TrimSpace(os.Getenv("TLSCTL_CONFIG")); p != "" {
+	if p := strings.TrimSpace(os.Getenv("VOLCLOG_CONFIG")); p != "" {
 		return p, nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".tlsctl", "config.json"), nil
+	return filepath.Join(home, ".volclog", "config.json"), nil
 }
 
 func Load() (Config, string, error) {
@@ -63,6 +79,9 @@ func Load() (Config, string, error) {
 	}
 	if cfg.Profiles == nil {
 		cfg.Profiles = map[string]Profile{}
+	}
+	if cfg.Creds == nil {
+		cfg.Creds = map[string]Credential{}
 	}
 	return cfg, p, nil
 }
@@ -102,20 +121,35 @@ func (c *Config) PutProfile(name string, p Profile) {
 	c.Profiles[name] = p
 }
 
-func EffectiveProfile(cfg Config, name string) (Profile, error) {
+func (c *Config) GetCred(name string) (Credential, bool) {
+	if c.Creds == nil {
+		return Credential{}, false
+	}
+	v, ok := c.Creds[name]
+	return v, ok
+}
+
+func (c *Config) PutCred(name string, v Credential) {
+	if c.Creds == nil {
+		c.Creds = map[string]Credential{}
+	}
+	c.Creds[name] = v
+}
+
+func EffectiveProfile(cfg Config, name string, defaults ProfileDefaults) (Profile, error) {
 	envAK := strings.TrimSpace(os.Getenv("VOLCENGINE_ACCESS_KEY_ID"))
 	envSK := strings.TrimSpace(os.Getenv("VOLCENGINE_ACCESS_KEY_SECRET"))
 	envToken := strings.TrimSpace(os.Getenv("VOLCENGINE_TOKEN"))
 	envRegion := strings.TrimSpace(os.Getenv("VOLCENGINE_REGION"))
 	envEndpoint := strings.TrimSpace(os.Getenv("VOLCENGINE_ENDPOINT"))
 	if envAK != "" && envSK != "" {
-		return normalize(Profile{
+		return normalize(applyDefaults(Profile{
 			AccessKeyID:     envAK,
 			SecretAccessKey: envSK,
 			SecurityToken:   envToken,
 			Region:          envRegion,
 			Endpoint:        envEndpoint,
-		})
+		}, defaults))
 	}
 
 	profileName := strings.TrimSpace(name)
@@ -130,7 +164,20 @@ func EffectiveProfile(cfg Config, name string) (Profile, error) {
 	if !ok {
 		return Profile{}, errors.New("profile not found: " + profileName)
 	}
-	return normalize(p)
+	if strings.TrimSpace(p.CredRef) != "" {
+		credName := strings.TrimSpace(p.CredRef)
+		if cred, ok := cfg.GetCred(credName); ok {
+			if strings.TrimSpace(p.AccessKeyID) == "" {
+				p.AccessKeyID = cred.AccessKeyID
+			}
+			if strings.TrimSpace(p.SecretAccessKey) == "" {
+				p.SecretAccessKey = cred.SecretAccessKey
+			}
+		} else {
+			return Profile{}, errors.New("credential not found: " + credName)
+		}
+	}
+	return normalize(applyDefaults(p, defaults))
 }
 
 func normalize(p Profile) (Profile, error) {
@@ -139,8 +186,9 @@ func normalize(p Profile) (Profile, error) {
 	p.SecurityToken = strings.TrimSpace(p.SecurityToken)
 	p.Region = strings.TrimSpace(p.Region)
 	p.Endpoint = strings.TrimSpace(p.Endpoint)
-	if p.Region != "" && p.Endpoint == "" {
-		p.Endpoint = DefaultEndpointForRegion(p.Region)
+	p.CredRef = strings.TrimSpace(p.CredRef)
+	if p.Region == "" && p.Endpoint != "" {
+		p.Region = DeriveRegionFromEndpoint(p.Endpoint)
 	}
 	if p.TimeoutSeconds <= 0 {
 		p.TimeoutSeconds = 60
@@ -157,6 +205,19 @@ func normalize(p Profile) (Profile, error) {
 	return p, nil
 }
 
+func applyDefaults(p Profile, d ProfileDefaults) Profile {
+	if strings.TrimSpace(p.Region) == "" && strings.TrimSpace(d.Region) != "" {
+		p.Region = strings.TrimSpace(d.Region)
+	}
+	if strings.TrimSpace(p.Endpoint) == "" && strings.TrimSpace(d.Endpoint) != "" {
+		p.Endpoint = strings.TrimSpace(d.Endpoint)
+	}
+	if p.TimeoutSeconds <= 0 && d.TimeoutSeconds > 0 {
+		p.TimeoutSeconds = d.TimeoutSeconds
+	}
+	return p
+}
+
 func DefaultEndpointForRegion(region string) string {
 	r := strings.TrimSpace(region)
 	if r == "" {
@@ -166,6 +227,31 @@ func DefaultEndpointForRegion(region string) string {
 		return r
 	}
 	return "https://tls-" + r + ".volces.com"
+}
+
+var endpointRegionRe = regexp.MustCompile(`(?i)^tls-([a-z0-9-]+)\.`)
+
+func DeriveRegionFromEndpoint(endpoint string) string {
+	ep := strings.TrimSpace(endpoint)
+	if ep == "" {
+		return ""
+	}
+	host := ep
+	if strings.HasPrefix(ep, "http://") || strings.HasPrefix(ep, "https://") {
+		if u, err := url.Parse(ep); err == nil && u.Hostname() != "" {
+			host = u.Hostname()
+		}
+	} else {
+		if u, err := url.Parse("https://" + ep); err == nil && u.Hostname() != "" {
+			host = u.Hostname()
+		}
+	}
+	host = strings.TrimSpace(host)
+	m := endpointRegionRe.FindStringSubmatch(host)
+	if len(m) != 2 {
+		return ""
+	}
+	return strings.TrimSpace(m[1])
 }
 
 func MaskAK(ak string) string {

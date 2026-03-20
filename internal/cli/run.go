@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"errors"
 	"io"
 	"os"
+	"strings"
 
-	"tlsctl/internal/output"
-	"tlsctl/internal/version"
+	"volclog/internal/config"
+	"volclog/internal/output"
+	"volclog/internal/version"
 )
 
 func Run(args []string, stdout, stderr io.Writer) int {
@@ -20,24 +23,72 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	if strings.TrimSpace(gf.SecretsFile) != "" {
+		if err := loadSecretsFile(gf.SecretsFile); err != nil {
+			writeCLIError(stderr, err, "", 0, "config", "failed to load --secrets-file")
+			return 2
+		}
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		writeCLIError(stderr, err, "", 0, "config", "failed to get working directory")
+		return 2
+	}
+	projectCfg, _, err := config.LoadProjectConfig(wd)
+	if err != nil {
+		writeCLIError(stderr, err, "", 0, "config", "failed to load project config")
+		return 2
+	}
+	outputExplicit := strings.TrimSpace(gf.Output) != ""
+	if strings.TrimSpace(gf.Output) == "" && strings.TrimSpace(projectCfg.Output) != "" {
+		gf.Output = projectCfg.Output
+	}
+	if strings.TrimSpace(gf.OutputMode) == "" && strings.TrimSpace(projectCfg.OutputMode) != "" {
+		gf.OutputMode = projectCfg.OutputMode
+	}
+	if strings.TrimSpace(gf.TraceRedact) == "" && strings.TrimSpace(projectCfg.TraceRedact) != "" {
+		gf.TraceRedact = projectCfg.TraceRedact
+	}
+	if g == "log" && len(rest) > 0 && rest[0] == "export-analysis" && !outputExplicit {
+		gf.Output = "jsonl"
+	}
+
 	if gf.ShowHelp {
 		_, _ = stdout.Write([]byte(usageText()))
 		return 0
 	}
 	if gf.ShowVersion {
-		_, _ = stdout.Write([]byte("tlsctl " + version.Version + "\n"))
+		_, _ = stdout.Write([]byte("volclog " + version.Version + "\n"))
 		return 0
 	}
 
 	format, err := output.ParseFormat(gf.Output)
 	if err != nil {
-		writeCLIError(stderr, err, "", 0)
-		return 2
+		writeCLIError(stderr, err, "", 0, "usage", "invalid --output")
+		return 1
 	}
 
 	ctx := newContext(stdout, stderr, format, gf.Profile, gf.Filter, gf.Debug)
+	ctx.TraceDir = gf.TraceDir
+	ctx.TraceRedact = gf.TraceRedact
+	ctx.SetProfileDefaults(config.ProfileDefaults{
+		Region:         projectCfg.Region,
+		Endpoint:       projectCfg.Endpoint,
+		TimeoutSeconds: projectCfg.TimeoutSeconds,
+	})
+	defer ctx.Close()
+
+	outputMode := strings.ToLower(strings.TrimSpace(gf.OutputMode))
+	if outputMode == "" {
+		outputMode = "stdout"
+	}
+	if outputMode != "stdout" && outputMode != "file" {
+		writeCLIError(stderr, errors.New("unsupported output-mode: "+gf.OutputMode), "", 0, "usage", "invalid --output-mode")
+		return 1
+	}
 
 	var out any
+	exitCode := 0
 	switch g {
 	case "configure":
 		out, err = runConfigure(ctx, rest)
@@ -53,6 +104,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		out, err = runIndex(ctx, rest)
 	case "log":
 		out, err = runLog(ctx, rest)
+	case "assistant":
+		out, err = runAssistant(ctx, rest)
+	case "doctor":
+		out, exitCode, err = runDoctor(ctx, rest)
+	case "completion":
+		out, exitCode, err = runCompletion(ctx, rest)
 	default:
 		_, _ = stderr.Write([]byte(usageText()))
 		return 1
@@ -62,26 +119,57 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			_, _ = stdout.Write([]byte(ue.Text))
 			return ue.ExitCode
 		}
-		writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode)
-		return 2
+		payload, code := classifyError(err, ctx.RequestID, ctx.StatusCode)
+		writeCLIError(stderr, err, payload.RequestID, payload.StatusCode, payload.Kind, payload.Hint)
+		return code
 	}
 	if ctx.Filter != "" {
 		out, err = output.ApplyFilter(out, ctx.Filter)
 		if err != nil {
-			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode)
-			return 2
+			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "invalid --jmes-filter")
+			return 3
 		}
 	}
-	if err := output.Write(stdout, out, format); err != nil {
-		writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode)
-		return 2
+	if g == "completion" {
+		if s, ok := out.(string); ok {
+			if outputMode == "file" {
+				p, err := writeTextFile(gf.OutputFile, g, s)
+				if err != nil {
+					writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
+					return 3
+				}
+				_, _ = stdout.Write([]byte(p + "\n"))
+				return exitCode
+			}
+			_, _ = stdout.Write([]byte(s))
+			return exitCode
+		}
 	}
-	return 0
+	if strings.TrimSpace(ctx.TraceDir) != "" {
+		_ = ctx.initTrace()
+		if strings.TrimSpace(ctx.TracePath) != "" {
+			out = attachMeta(out, ctx.TracePath)
+		}
+	}
+	if outputMode == "file" {
+		p, err := writeOutputFile(gf.OutputFile, g, out, format)
+		if err != nil {
+			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
+			return 3
+		}
+		_, _ = stdout.Write([]byte(p + "\n"))
+		return exitCode
+	}
+	if err := output.Write(stdout, out, format); err != nil {
+		writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
+		return 3
+	}
+	return exitCode
 }
 
 func usageText() string {
 	return `Usage:
-  tlsctl [--profile <name>] [--output json|jsonl] [--jmes-filter <expr>] [--debug] <group> <command> [args]
+  volclog [--profile <name>] [--output json|jsonl] [--output-mode stdout|file] [--output-file <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--debug] <group> <command> [args]
 
 Groups:
   configure   Manage local profiles
@@ -91,14 +179,33 @@ Groups:
   metric-topic Metric topic operations (ID-first)
   index       Index operations (ID-first)
   log         Log search/export
+  assistant   AI assistant operations
+  doctor      Diagnose config and environment
+  completion  Generate shell completion
 
 Global Flags:
   --profile <name>
   --output <json|jsonl>
+  --output-mode <stdout|file>
+  --output-file <path>
   --jmes-filter <expr>
+  --trace-dir <path>
+  --trace-redact <strict|default>
+  --secrets-file <path>
   --debug
   --help
   --version
+
+Exit Code:
+  0 success
+  1 usage / invalid args
+  2 request/runtime failure
+  3 output/decode failure
+
+Agent Tips:
+  - Prefer --output-mode file for large output (stdout returns a file path)
+  - Use --trace-dir to generate redacted trace artifacts for debugging
+  - On failure, parse stderr JSON (errorCode/errorMessage/requestId/statusCode/kind/hint)
 `
 }
 

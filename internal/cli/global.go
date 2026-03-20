@@ -6,6 +6,11 @@ type GlobalFlags struct {
 	Profile     string
 	Output      string
 	Filter      string
+	OutputMode  string
+	OutputFile  string
+	TraceDir    string
+	TraceRedact string
+	SecretsFile string
 	Debug       bool
 	ShowHelp    bool
 	ShowVersion bool
@@ -30,11 +35,41 @@ func parseGlobal(args []string) (group string, rest []string, flags GlobalFlags,
 			}
 			flags.Output = args[1]
 			args = args[2:]
+		case "--output-mode":
+			if len(args) < 2 {
+				return "", nil, GlobalFlags{}, false
+			}
+			flags.OutputMode = args[1]
+			args = args[2:]
+		case "--output-file":
+			if len(args) < 2 {
+				return "", nil, GlobalFlags{}, false
+			}
+			flags.OutputFile = args[1]
+			args = args[2:]
 		case "--jmes-filter":
 			if len(args) < 2 {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.Filter = args[1]
+			args = args[2:]
+		case "--trace-dir":
+			if len(args) < 2 {
+				return "", nil, GlobalFlags{}, false
+			}
+			flags.TraceDir = args[1]
+			args = args[2:]
+		case "--trace-redact":
+			if len(args) < 2 {
+				return "", nil, GlobalFlags{}, false
+			}
+			flags.TraceRedact = args[1]
+			args = args[2:]
+		case "--secrets-file":
+			if len(args) < 2 {
+				return "", nil, GlobalFlags{}, false
+			}
+			flags.SecretsFile = args[1]
 			args = args[2:]
 		case "--debug":
 			flags.Debug = true

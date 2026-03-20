@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"tlsctl/internal/config"
+	"volclog/internal/config"
 )
 
 func runConfigure(ctx *Context, args []string) (any, error) {
@@ -17,6 +17,9 @@ func runConfigure(ctx *Context, args []string) (any, error) {
 		return nil, &usageError{Text: usageConfigure(), ExitCode: 1}
 	}
 	if args[0] == "-h" || args[0] == "--help" {
+		return nil, &usageError{Text: usageConfigure(), ExitCode: 0}
+	}
+	if hasHelp(args[1:]) {
 		return nil, &usageError{Text: usageConfigure(), ExitCode: 0}
 	}
 	switch args[0] {
@@ -44,6 +47,7 @@ func configureSet(ctx *Context, args []string) (any, error) {
 		region   string
 		endpoint string
 		timeout  int
+		credRef  string
 	)
 	for len(args) > 0 {
 		switch args[0] {
@@ -93,6 +97,12 @@ func configureSet(ctx *Context, args []string) (any, error) {
 			}
 			timeout = v
 			args = args[2:]
+		case "--cred-ref":
+			if len(args) < 2 {
+				return nil, errors.New("missing --cred-ref value")
+			}
+			credRef = args[1]
+			args = args[2:]
 		default:
 			return nil, errors.New("unknown flag: " + args[0])
 		}
@@ -108,12 +118,37 @@ func configureSet(ctx *Context, args []string) (any, error) {
 		Region:          strings.TrimSpace(region),
 		Endpoint:        strings.TrimSpace(endpoint),
 		TimeoutSeconds:  timeout,
+		CredRef:         strings.TrimSpace(credRef),
 	}
-	if p.Region != "" && p.Endpoint == "" {
-		p.Endpoint = config.DefaultEndpointForRegion(p.Region)
+	if p.Region == "" && p.Endpoint != "" {
+		p.Region = config.DeriveRegionFromEndpoint(p.Endpoint)
 	}
-	if p.AccessKeyID == "" || p.SecretAccessKey == "" || p.Region == "" || p.Endpoint == "" {
-		return nil, errors.New("missing required fields: --ak --sk --region [--endpoint]")
+	maskedAK := config.MaskAK(p.AccessKeyID)
+	credPresent := p.AccessKeyID != "" && p.SecretAccessKey != ""
+	if strings.TrimSpace(p.CredRef) != "" {
+		credName := strings.TrimSpace(p.CredRef)
+		if credPresent {
+			ctx.cfg.PutCred(credName, config.Credential{
+				AccessKeyID:     p.AccessKeyID,
+				SecretAccessKey: p.SecretAccessKey,
+			})
+		}
+		cred, ok := ctx.cfg.GetCred(credName)
+		if !ok {
+			return nil, errors.New("credential not found: " + credName)
+		}
+		maskedAK = config.MaskAK(cred.AccessKeyID)
+		p.AccessKeyID = ""
+		p.SecretAccessKey = ""
+	}
+	if strings.TrimSpace(p.CredRef) == "" && (p.AccessKeyID == "" || p.SecretAccessKey == "") {
+		return nil, errors.New("missing required fields: --ak --sk (or --cred-ref <name>)")
+	}
+	if p.Endpoint == "" {
+		return nil, errors.New("missing required fields: --endpoint")
+	}
+	if p.Region == "" {
+		return nil, errors.New("missing required fields: --region (or use tls-<region>.volces.com endpoint)")
 	}
 	ctx.cfg.PutProfile(name, p)
 	if ctx.cfg.CurrentProfile == "" {
@@ -126,7 +161,8 @@ func configureSet(ctx *Context, args []string) (any, error) {
 		"profile":       name,
 		"region":        p.Region,
 		"endpoint":      p.Endpoint,
-		"access_key_id": config.MaskAK(p.AccessKeyID),
+		"cred_ref":      strings.TrimSpace(p.CredRef),
+		"access_key_id": maskedAK,
 	}, nil
 }
 
@@ -167,11 +203,24 @@ func configureShow(ctx *Context, args []string) (any, error) {
 	if !ok {
 		return nil, errors.New("profile not found: " + name)
 	}
+	maskedAK := config.MaskAK(p.AccessKeyID)
+	credRef := strings.TrimSpace(p.CredRef)
+	credOK := p.AccessKeyID != "" && p.SecretAccessKey != ""
+	if credRef != "" {
+		if cred, ok := ctx.cfg.GetCred(credRef); ok {
+			maskedAK = config.MaskAK(cred.AccessKeyID)
+			credOK = strings.TrimSpace(cred.AccessKeyID) != "" && strings.TrimSpace(cred.SecretAccessKey) != ""
+		} else {
+			credOK = false
+		}
+	}
 	return map[string]any{
 		"profile":            name,
 		"region":             p.Region,
 		"endpoint":           p.Endpoint,
-		"access_key_id":      config.MaskAK(p.AccessKeyID),
+		"cred_ref":           credRef,
+		"credential_present": credOK,
+		"access_key_id":      maskedAK,
 		"has_security_token": p.SecurityToken != "",
 		"timeout_seconds":    p.TimeoutSeconds,
 	}, nil
@@ -207,11 +256,24 @@ func configureList(ctx *Context, args []string) (any, error) {
 		if !ok {
 			continue
 		}
+		maskedAK := config.MaskAK(p.AccessKeyID)
+		credRef := strings.TrimSpace(p.CredRef)
+		credOK := p.AccessKeyID != "" && p.SecretAccessKey != ""
+		if credRef != "" {
+			if cred, ok := ctx.cfg.GetCred(credRef); ok {
+				maskedAK = config.MaskAK(cred.AccessKeyID)
+				credOK = strings.TrimSpace(cred.AccessKeyID) != "" && strings.TrimSpace(cred.SecretAccessKey) != ""
+			} else {
+				credOK = false
+			}
+		}
 		profiles = append(profiles, map[string]any{
 			"profile":            name,
 			"region":             p.Region,
 			"endpoint":           p.Endpoint,
-			"access_key_id":      config.MaskAK(p.AccessKeyID),
+			"cred_ref":           credRef,
+			"credential_present": credOK,
+			"access_key_id":      maskedAK,
 			"has_security_token": p.SecurityToken != "",
 			"timeout_seconds":    p.TimeoutSeconds,
 		})

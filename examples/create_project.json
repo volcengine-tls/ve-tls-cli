@@ -1,6 +1,6 @@
 {
   "ProjectName": "demo-project",
-  "Description": "demo project created by tlsctl",
+  "Description": "demo project created by volclog",
   "Region": "cn-beijing",
   "IamProjectName": "default",
   "Tags": [
@@ -8,4 +8,3 @@
     { "Key": "owner", "Value": "alice" }
   ]
 }
-

@@ -63,6 +63,17 @@ func TestCLIMinimalE2E_HTTPPathsAndShapes(t *testing.T) {
 				return
 			}
 			_, _ = w.Write([]byte(`{"Logs":[{"x":2}],"ListOver":true,"Context":""}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/DescribeAppInstances":
+			_, _ = w.Write([]byte(`{"InstanceInfo":[]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/CreateAppInstance":
+			_, _ = w.Write([]byte(`{"InstanceID":"ai1"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/CreateAppSceneMeta":
+			_, _ = w.Write([]byte(`{"Id":"s1"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/DescribeSessionAnswer":
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte("data: " + `{"RspMsgType":"inference","ModelAnswer":{"Answer":"hello "}}` + "\n\n"))
+			_, _ = w.Write([]byte("data: " + `{"RspMsgType":"inference","ModelAnswer":{"Answer":"world"}}` + "\n\n"))
+			_, _ = w.Write([]byte("data: [DONE]\n\n"))
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/topic/") && strings.HasSuffix(r.URL.Path, "/api/v1/query"):
 			_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
 		default:
@@ -81,7 +92,7 @@ func TestCLIMinimalE2E_HTTPPathsAndShapes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv("TLSCTL_CONFIG", cfgPath)
+	t.Setenv("VOLCLOG_CONFIG", cfgPath)
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
@@ -98,6 +109,7 @@ func TestCLIMinimalE2E_HTTPPathsAndShapes(t *testing.T) {
 		{name: "log search", args: []string{"log", "search", "--topic-id", "tid", "--query", "*", "--from", "1710374400000", "--to", "1710378000000"}},
 		{name: "log export", args: []string{"--output", "jsonl", "log", "export", "--topic-id", "tid", "--query", "*", "--from", "1710374400000", "--to", "1710378000000", "--max-pages", "2"}},
 		{name: "metric-topic prom query", args: []string{"metric-topic", "prom", "query", "--topic-id", "mtid", "--query", "up", "--time", "1710374400000"}},
+		{name: "assistant describe-session-answer", args: []string{"assistant", "describe-session-answer", "--topic-id", "tid", "--question", "q", "--account-id", "acc"}},
 	}
 
 	for _, tc := range cases {

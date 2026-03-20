@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"tlsctl/internal/util"
+	"volclog/internal/util"
 )
 
 func runMetricTopic(ctx *Context, args []string) (any, error) {
@@ -14,6 +14,9 @@ func runMetricTopic(ctx *Context, args []string) (any, error) {
 		return nil, &usageError{Text: usageMetricTopic(), ExitCode: 1}
 	}
 	if args[0] == "-h" || args[0] == "--help" {
+		return nil, &usageError{Text: usageMetricTopic(), ExitCode: 0}
+	}
+	if args[0] != "prom" && hasHelp(args[1:]) {
 		return nil, &usageError{Text: usageMetricTopic(), ExitCode: 0}
 	}
 	switch args[0] {
@@ -106,6 +109,12 @@ func metricTopicList(ctx *Context, args []string) (any, error) {
 				query["Tags"] = s
 			}
 			args = args[2:]
+		case "--is-full-name":
+			query["IsFullName"] = "true"
+			args = args[1:]
+		case "--no-is-full-name":
+			query["IsFullName"] = "false"
+			args = args[1:]
 		case "--favourite":
 			query["Favourite"] = "true"
 			args = args[1:]
@@ -301,12 +310,12 @@ func metricTopicModify(ctx *Context, args []string) (any, error) {
 	var (
 		topicID       string
 		description   string
+		clearDesc     bool
 		topicName     string
 		favSet        bool
 		fav           bool
 		ttl           int
-		autoSplitSet  bool
-		autoSplit     bool
+		autoSplit     *bool
 		maxSplitShard int
 		requestArg    string
 	)
@@ -324,6 +333,9 @@ func metricTopicModify(ctx *Context, args []string) (any, error) {
 			}
 			description = args[1]
 			args = args[2:]
+		case "--clear-description":
+			clearDesc = true
+			args = args[1:]
 		case "--topic-name":
 			if len(args) < 2 {
 				return nil, errors.New("missing --topic-name value")
@@ -349,12 +361,12 @@ func metricTopicModify(ctx *Context, args []string) (any, error) {
 			ttl = v
 			args = args[2:]
 		case "--auto-split":
-			autoSplitSet = true
-			autoSplit = true
+			v := true
+			autoSplit = &v
 			args = args[1:]
 		case "--no-auto-split":
-			autoSplitSet = true
-			autoSplit = false
+			v := false
+			autoSplit = &v
 			args = args[1:]
 		case "--max-split-shard":
 			if len(args) < 2 {
@@ -376,6 +388,9 @@ func metricTopicModify(ctx *Context, args []string) (any, error) {
 			return nil, errors.New("unknown flag: " + args[0])
 		}
 	}
+	if clearDesc && strings.TrimSpace(description) != "" {
+		return nil, errors.New("--clear-description and --description cannot be provided together")
+	}
 	topicID = strings.TrimSpace(topicID)
 	if topicID == "" {
 		return nil, errors.New("missing --topic-id")
@@ -392,8 +407,14 @@ func metricTopicModify(ctx *Context, args []string) (any, error) {
 		req = map[string]any{}
 	}
 	req["TopicId"] = topicID
-	if strings.TrimSpace(description) != "" {
-		req["Description"] = description
+	if clearDesc {
+		req["Description"] = ""
+	} else if strings.TrimSpace(description) != "" {
+		if strings.TrimSpace(description) == "-" {
+			req["Description"] = ""
+		} else {
+			req["Description"] = description
+		}
 	}
 	if strings.TrimSpace(topicName) != "" {
 		req["TopicName"] = topicName
@@ -404,8 +425,8 @@ func metricTopicModify(ctx *Context, args []string) (any, error) {
 	if ttl > 0 {
 		req["Ttl"] = ttl
 	}
-	if autoSplitSet {
-		req["AutoSplit"] = autoSplit
+	if autoSplit != nil {
+		req["AutoSplit"] = *autoSplit
 	}
 	if maxSplitShard > 0 {
 		req["MaxSplitShard"] = maxSplitShard
@@ -465,6 +486,9 @@ func metricTopicProm(ctx *Context, args []string) (any, error) {
 		return nil, &usageError{Text: usageMetricTopicProm(), ExitCode: 1}
 	}
 	if args[0] == "-h" || args[0] == "--help" {
+		return nil, &usageError{Text: usageMetricTopicProm(), ExitCode: 0}
+	}
+	if hasHelp(args[1:]) {
 		return nil, &usageError{Text: usageMetricTopicProm(), ExitCode: 0}
 	}
 	switch args[0] {

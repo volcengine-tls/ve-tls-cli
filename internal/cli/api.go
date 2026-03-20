@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"tlsctl/internal/util"
+	"volclog/internal/util"
 )
 
 func runAPI(ctx *Context, args []string) (any, error) {
@@ -12,6 +12,9 @@ func runAPI(ctx *Context, args []string) (any, error) {
 		return nil, &usageError{Text: usageAPI(), ExitCode: 1}
 	}
 	if args[0] == "-h" || args[0] == "--help" {
+		return nil, &usageError{Text: usageAPI(), ExitCode: 0}
+	}
+	if hasHelp(args[1:]) {
 		return nil, &usageError{Text: usageAPI(), ExitCode: 0}
 	}
 	switch args[0] {

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BIN_NAME="${BIN_NAME:-tlsctl}"
+BIN_NAME="${BIN_NAME:-volclog}"
 PREFIX="${PREFIX:-$HOME/.local}"
 DEST_DIR="${DEST_DIR:-$PREFIX/bin}"
 DEST="$DEST_DIR/$BIN_NAME"
 
-DOWNLOAD_URL="${TLSCTL_DOWNLOAD_URL:-}"
-BASE_URL="${TLSCTL_BASE_URL:-}"
-VERSION="${TLSCTL_VERSION:-}"
+DOWNLOAD_URL="${VOLCLOG_DOWNLOAD_URL:-}"
+BASE_URL="${VOLCLOG_BASE_URL:-}"
+VERSION="${VOLCLOG_VERSION:-}"
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
@@ -19,13 +19,13 @@ esac
 
 if [[ -z "$DOWNLOAD_URL" ]]; then
   if [[ -z "$BASE_URL" ]]; then
-    echo "missing TLSCTL_DOWNLOAD_URL or TLSCTL_BASE_URL" >&2
+    echo "missing VOLCLOG_DOWNLOAD_URL or VOLCLOG_BASE_URL" >&2
     echo "examples:" >&2
-    echo "  TLSCTL_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash scripts/install-binary.sh" >&2
-    echo "  TLSCTL_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/download/<tag> bash scripts/install-binary.sh" >&2
+    echo "  VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash scripts/install-binary.sh" >&2
+    echo "  VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/download/<tag> bash scripts/install-binary.sh" >&2
     exit 2
   fi
-  pkg="tlsctl_${os}_${arch}.tar.gz"
+  pkg="volclog_${os}_${arch}.tar.gz"
   DOWNLOAD_URL="${BASE_URL%/}/$pkg"
 fi
 
@@ -51,11 +51,6 @@ if curl -fsSL "$sha_url" -o "$tmp/pkg.tgz.sha256" 2>/dev/null; then
 fi
 
 tar -xzf "$tmp/pkg.tgz" -C "$tmp"
-if [[ ! -f "$tmp/$BIN_NAME" ]]; then
-  if [[ -f "$tmp/tlsctl" ]]; then
-    BIN_NAME="tlsctl"
-  fi
-fi
 if [[ ! -f "$tmp/$BIN_NAME" ]]; then
   echo "binary not found in package" >&2
   exit 4

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 
-	"tlsctl/internal/tlsapi"
-	"tlsctl/internal/util"
+	"volclog/internal/tlsapi"
+	"volclog/internal/util"
 )
 
 type httpError struct {

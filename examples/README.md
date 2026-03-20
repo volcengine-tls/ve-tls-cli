@@ -1,6 +1,6 @@
-# tlsctl examples
+# volclog examples
 
-本目录提供可直接配合 `tlsctl` 使用的示例文件（用于 `file://...` 输入或 `--request file://...`）。
+本目录提供可直接配合 `volclog` 使用的示例文件（用于 `file://...` 输入或 `--request file://...`）。
 
 ## 目录
 
@@ -16,4 +16,3 @@
 - `time.txt`：Prom 查询时间示例（用于 `--time file://...`）
 - `match.json`：Prom `match[]` 的 JSON 数组示例（用于 `--match file://...`）
 - `match.txt`：Prom `match[]` 的按行文本示例（用于 `--match file://...`）
-

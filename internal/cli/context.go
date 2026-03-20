@@ -5,25 +5,30 @@ import (
 	"io"
 	"time"
 
-	"tlsctl/internal/config"
-	"tlsctl/internal/output"
-	"tlsctl/internal/tlsapi"
+	"volclog/internal/config"
+	"volclog/internal/output"
+	"volclog/internal/tlsapi"
 )
 
 type Context struct {
-	Stdout     io.Writer
-	Stderr     io.Writer
-	Format     output.Format
-	Profile    string
-	Filter     string
-	Debug      bool
-	RequestID  string
-	StatusCode int
+	Stdout      io.Writer
+	Stderr      io.Writer
+	Format      output.Format
+	Profile     string
+	Filter      string
+	Debug       bool
+	TraceDir    string
+	TraceRedact string
+	TracePath   string
+	RequestID   string
+	StatusCode  int
 
-	cfg     config.Config
-	cfgPath string
-	profile config.Profile
-	client  *tlsapi.Client
+	cfg      config.Config
+	cfgPath  string
+	profile  config.Profile
+	client   *tlsapi.Client
+	traceW   io.WriteCloser
+	defaults config.ProfileDefaults
 }
 
 func newContext(stdout, stderr io.Writer, format output.Format, profile, filter string, debug bool) *Context {
@@ -57,12 +62,16 @@ func (c *Context) ResolveProfile() error {
 			return err
 		}
 	}
-	p, err := config.EffectiveProfile(c.cfg, c.Profile)
+	p, err := config.EffectiveProfile(c.cfg, c.Profile, c.defaults)
 	if err != nil {
 		return err
 	}
 	c.profile = p
 	return nil
+}
+
+func (c *Context) SetProfileDefaults(d config.ProfileDefaults) {
+	c.defaults = d
 }
 
 func (c *Context) Client() (*tlsapi.Client, error) {
@@ -88,10 +97,14 @@ func (c *Context) DoRaw(method, path string, query map[string]string, header map
 	if err != nil {
 		return tlsapi.Response{}, err
 	}
+	start := time.Now()
+	c.traceRequest(method, path, query, body)
 	resp, err := client.Do(context.Background(), method, path, query, header, body)
 	if err != nil {
+		c.traceResponse(0, "", time.Since(start), nil, err)
 		return tlsapi.Response{}, err
 	}
+	c.traceResponse(resp.StatusCode, resp.Header.Get("x-tls-requestid"), time.Since(start), resp.Body, nil)
 	c.RequestID = resp.Header.Get("x-tls-requestid")
 	c.StatusCode = resp.StatusCode
 	return resp, nil
@@ -103,4 +116,11 @@ func (c *Context) Do(method, path string, query map[string]string, header map[st
 		return nil, err
 	}
 	return decodeResponse(resp)
+}
+
+func (c *Context) Close() {
+	if c.traceW != nil {
+		_ = c.traceW.Close()
+		c.traceW = nil
+	}
 }

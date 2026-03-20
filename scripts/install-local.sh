@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BIN_NAME="${BIN_NAME:-tlsctl}"
+BIN_NAME="${BIN_NAME:-volclog}"
 PREFIX="${PREFIX:-$HOME/.local}"
 DEST_DIR="${DEST_DIR:-$PREFIX/bin}"
 DEST="$DEST_DIR/$BIN_NAME"
@@ -10,14 +10,14 @@ DEST="$DEST_DIR/$BIN_NAME"
 if ! command -v go >/dev/null 2>&1; then
   echo "go not found. use one of:" >&2
   echo "  bash scripts/install-binary.sh" >&2
-  echo "  docker build -t tlsctl:local . && docker run --rm tlsctl:local --help" >&2
+  echo "  docker build -t volclog:local . && docker run --rm volclog:local --help" >&2
   exit 2
 fi
 
 mkdir -p "$DEST_DIR"
 
 cd "$ROOT"
-go build -o "$DEST" ./cmd/tlsctl
+go build -o "$DEST" ./cmd/volclog
 
 echo "installed: $DEST"
 echo "version:"
