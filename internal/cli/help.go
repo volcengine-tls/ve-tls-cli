@@ -8,4 +8,3 @@ func hasHelp(args []string) bool {
 	}
 	return false
 }
-

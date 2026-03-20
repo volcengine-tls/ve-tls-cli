@@ -12,18 +12,18 @@ import (
 )
 
 type traceEvent struct {
-	TS           string   `json:"ts"`
-	Type         string   `json:"type"`
-	Method       string   `json:"method,omitempty"`
-	Path         string   `json:"path,omitempty"`
-	QueryKeys    []string `json:"query_keys,omitempty"`
+	TS              string   `json:"ts"`
+	Type            string   `json:"type"`
+	Method          string   `json:"method,omitempty"`
+	Path            string   `json:"path,omitempty"`
+	QueryKeys       []string `json:"query_keys,omitempty"`
 	HeadersRedacted []string `json:"headers_redacted,omitempty"`
-	BodySHA256   string   `json:"body_sha256,omitempty"`
-	Status       int      `json:"status,omitempty"`
-	RequestID    string   `json:"request_id,omitempty"`
-	ElapsedMS    int64    `json:"elapsed_ms,omitempty"`
-	RespSHA256   string   `json:"resp_body_sha256,omitempty"`
-	ErrorMessage string   `json:"error_message,omitempty"`
+	BodySHA256      string   `json:"body_sha256,omitempty"`
+	Status          int      `json:"status,omitempty"`
+	RequestID       string   `json:"request_id,omitempty"`
+	ElapsedMS       int64    `json:"elapsed_ms,omitempty"`
+	RespSHA256      string   `json:"resp_body_sha256,omitempty"`
+	ErrorMessage    string   `json:"error_message,omitempty"`
 }
 
 func (c *Context) initTrace() error {
@@ -67,13 +67,13 @@ func (c *Context) traceRequest(method, path string, query map[string]string, bod
 	}
 	sort.Strings(keys)
 	evt := traceEvent{
-		TS:         time.Now().UTC().Format(time.RFC3339Nano),
-		Type:       "http_request",
-		Method:     method,
-		Path:       path,
-		QueryKeys:  keys,
+		TS:              time.Now().UTC().Format(time.RFC3339Nano),
+		Type:            "http_request",
+		Method:          method,
+		Path:            path,
+		QueryKeys:       keys,
 		HeadersRedacted: []string{"Authorization", "X-Security-Token"},
-		BodySHA256: sha256Hex(body),
+		BodySHA256:      sha256Hex(body),
 	}
 	_ = c.writeTrace(evt)
 }
@@ -86,11 +86,11 @@ func (c *Context) traceResponse(status int, requestID string, elapsed time.Durat
 		return
 	}
 	evt := traceEvent{
-		TS:        time.Now().UTC().Format(time.RFC3339Nano),
-		Type:      "http_response",
-		Status:    status,
-		RequestID: requestID,
-		ElapsedMS: elapsed.Milliseconds(),
+		TS:         time.Now().UTC().Format(time.RFC3339Nano),
+		Type:       "http_response",
+		Status:     status,
+		RequestID:  requestID,
+		ElapsedMS:  elapsed.Milliseconds(),
 		RespSHA256: sha256Hex(body),
 	}
 	if err != nil {
