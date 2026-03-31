@@ -15,6 +15,7 @@ type ProjectConfig struct {
 	Output         string `json:"output,omitempty"`
 	OutputMode     string `json:"output_mode,omitempty"`
 	TraceRedact    string `json:"trace_redact,omitempty"`
+	HintsFile      string `json:"hints_file,omitempty"`
 }
 
 func LoadProjectConfig(wd string) (ProjectConfig, string, error) {
@@ -50,5 +51,6 @@ func LoadProjectConfig(wd string) (ProjectConfig, string, error) {
 	cfg.Output = strings.TrimSpace(cfg.Output)
 	cfg.OutputMode = strings.TrimSpace(cfg.OutputMode)
 	cfg.TraceRedact = strings.TrimSpace(cfg.TraceRedact)
+	cfg.HintsFile = strings.TrimSpace(cfg.HintsFile)
 	return cfg, p, nil
 }

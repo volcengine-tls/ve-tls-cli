@@ -30,6 +30,24 @@ func attachMeta(out any, tracePath string) any {
 }
 
 func writeOutputFile(outputFile string, group string, out any, format output.Format) (string, error) {
+	if raw, ok := out.(rawBinaryOutput); ok {
+		p := strings.TrimSpace(outputFile)
+		if p == "" {
+			var err error
+			p, err = defaultBinaryOutputFile(group, raw.Ext)
+			if err != nil {
+				return "", err
+			}
+		}
+		p = filepath.Clean(p)
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(p, raw.Data, 0o600); err != nil {
+			return "", err
+		}
+		return p, nil
+	}
 	p := strings.TrimSpace(outputFile)
 	if p == "" {
 		var err error
@@ -92,5 +110,26 @@ func defaultOutputFile(group string, format output.Format) (string, error) {
 		return "", errors.New("empty group")
 	}
 	name := g + "-" + time.Now().UTC().Format("2006-01-02T15-04-05.000Z") + "." + ext
+	return filepath.Join(dir, name), nil
+}
+
+func defaultBinaryOutputFile(group string, ext string) (string, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(wd, ".volclog", "output")
+	g := strings.TrimSpace(group)
+	if g == "" {
+		return "", errors.New("empty group")
+	}
+	suffix := strings.TrimSpace(ext)
+	if suffix == "" {
+		suffix = ".bin"
+	}
+	if !strings.HasPrefix(suffix, ".") {
+		suffix = "." + suffix
+	}
+	name := g + "-" + time.Now().UTC().Format("2006-01-02T15-04-05.000Z") + suffix
 	return filepath.Join(dir, name), nil
 }

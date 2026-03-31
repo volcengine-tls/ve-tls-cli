@@ -15,6 +15,8 @@ func usageConfigure() string {
 
 Commands:
   set     Set a profile
+  profile Alias commands: add/use/show/list/delete
+  cred    Manage shared credentials (delete)
   use     Set default profile
   show    Show a profile
   list    List profiles
@@ -25,12 +27,15 @@ Examples:
   tlsctl configure set --profile tenant-a-sg --ak <ak> --sk <sk> --endpoint https://tls-ap-singapore-1.volces.com
   tlsctl configure set --profile abc-bj --cred-ref ma-abc-root --ak <ak> --sk <sk> --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure set --profile abc-sg --cred-ref ma-abc-root --endpoint https://tls-ap-singapore-1.volces.com
+  tlsctl configure profile add tenant-a --ak <ak> --sk <sk> --endpoint https://tls-cn-beijing.volces.com
+  tlsctl configure profile use tenant-a
   tlsctl configure use default
   tlsctl configure show --profile default
   tlsctl --profile tenant-a-sg project list
   tlsctl configure list
   tlsctl configure delete tenant-a-sg
   tlsctl configure delete --prefix tenant-a --yes
+  tlsctl configure cred delete ma-abc-root
 
 Exit Code:
   0 success
@@ -44,17 +49,26 @@ Agent:
 
 func usageAPI() string {
 	return u(`Usage:
-  tlsctl api call --method <GET|POST|PUT|DELETE> --path <path> [--query k=v] [--header k=v] [--body <json|file://...>]
+  tlsctl api <group>
+  tlsctl api <group> <action> [flags]
+  tlsctl api call --method <GET|POST|PUT|DELETE> --path <path> [--query k=v] [--header k=v] [--body <json|file://...|->] [--request-format <json|jsonl>]
 
-Notes:
-  - --body also accepts "-" to read JSON from stdin.
+Key Flags (generated action):
+  --request <json|file://...|->
+  --request-format <json|jsonl>
+  --print-request-template[=required|full]
+  --describe
+  --query k=v
+  --header k=v
 
 Examples:
-  tlsctl api call --method GET --path /DescribeProject --query ProjectId=<pid>
-  tlsctl api call --method POST --path /SearchLogs --body file://./search.json
-  cat ./search.json | tlsctl api call --method POST --path /SearchLogs --body -
-  tlsctl --output-mode file api call --method GET --path /DescribeProjects --query PageSize=1
-  tlsctl --trace-dir ./.tlsctl/traces api call --method GET --path /DescribeProjects --query PageSize=1
+  tlsctl api log
+  tlsctl api log SearchLogs -h
+  tlsctl api call -h
+  tlsctl api log SearchLogs --describe
+  tlsctl api log SearchLogs --print-request-template=full
+  tlsctl --dry-run api log SearchLogs --request file://./req.json
+  tlsctl api log SearchLogs --request file://./req.json
 
 Exit Code:
   0 success
@@ -63,9 +77,45 @@ Exit Code:
   3 output/decode failure
 
 Agent:
-  - Prefer --output-mode file for large output
-  - Use --trace-dir to generate trace artifacts for debugging
-  - Typical flow: tlsctl doctor -> run command -> on failure rerun with --trace-dir
+  - Discover: tlsctl capabilities --group <group> --action <action>
+  - Constraints: tlsctl api <group> <action> --describe
+  - Validate first: tlsctl --dry-run api <group> <action> --request file://req.json
+`)
+}
+
+func usageCapabilities() string {
+	return u(`Usage:
+  tlsctl capabilities [--group <group>] [--action <action>] [--view <compact|full>] [--hints-file <path>]
+
+Description:
+  Output machine-readable API capability contract.
+  Includes metadata: contract_version/param_doc_source/supports_dry_run/output_mode_hint.
+  Includes declarative hints: hints_mode/risk_level/idempotency (advisory only).
+  view=compact (default) hides verbose params/request_params_doc for token saving.
+  view=full returns complete parameter constraints and official doc intros.
+  Hints file resolution when --hints-file is omitted: VOLCLOG_HINTS_FILE > project .volclog/cli.config.json hints_file.
+
+Examples:
+  tlsctl capabilities
+  tlsctl capabilities --group log
+  tlsctl capabilities --group log --action SearchLogs
+  tlsctl capabilities --group log --action SearchLogs --view full
+  tlsctl capabilities --action create
+  tlsctl capabilities --hints-file ./docs/agentic-stage1/capability-hints-overrides.example.json
+`)
+}
+
+func usageCommands() string {
+	return u(`Usage:
+  tlsctl commands [--group <group>] [--action <action>]
+
+Description:
+  List API commands in human-friendly text.
+
+Examples:
+  tlsctl commands
+  tlsctl commands --group project
+  tlsctl commands --group log --action SearchLogs
 `)
 }
 

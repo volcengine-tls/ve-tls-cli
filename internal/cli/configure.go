@@ -33,8 +33,65 @@ func runConfigure(ctx *Context, args []string) (any, error) {
 		return configureList(ctx, args[1:])
 	case "delete":
 		return configureDelete(ctx, args[1:])
+	case "profile":
+		return runConfigureProfile(ctx, args[1:])
+	case "cred":
+		return runConfigureCred(ctx, args[1:])
 	default:
 		return nil, errors.New("unknown configure command: " + args[0])
+	}
+}
+
+func runConfigureProfile(ctx *Context, args []string) (any, error) {
+	if len(args) == 0 {
+		return nil, &usageError{Text: usageConfigure(), ExitCode: 1}
+	}
+	if args[0] == "-h" || args[0] == "--help" {
+		return nil, &usageError{Text: usageConfigure(), ExitCode: 0}
+	}
+	switch args[0] {
+	case "add":
+		if len(args) < 2 {
+			return nil, errors.New("missing profile name")
+		}
+		mapped := make([]string, 0, len(args)+1)
+		mapped = append(mapped, "--profile", args[1])
+		mapped = append(mapped, args[2:]...)
+		return configureSet(ctx, mapped)
+	case "use":
+		if len(args) < 2 {
+			return nil, errors.New("missing profile name")
+		}
+		return configureUse(ctx, []string{args[1]})
+	case "show":
+		if len(args) >= 2 && strings.TrimSpace(args[1]) != "" && !strings.HasPrefix(args[1], "-") {
+			return configureShow(ctx, []string{"--profile", args[1]})
+		}
+		return configureShow(ctx, args[1:])
+	case "list":
+		return configureList(ctx, args[1:])
+	case "delete":
+		if len(args) >= 2 && strings.TrimSpace(args[1]) != "" && !strings.HasPrefix(args[1], "-") {
+			return configureDelete(ctx, []string{args[1]})
+		}
+		return configureDelete(ctx, args[1:])
+	default:
+		return nil, errors.New("unknown configure profile command: " + args[0])
+	}
+}
+
+func runConfigureCred(ctx *Context, args []string) (any, error) {
+	if len(args) == 0 {
+		return nil, &usageError{Text: usageConfigure(), ExitCode: 1}
+	}
+	if args[0] == "-h" || args[0] == "--help" {
+		return nil, &usageError{Text: usageConfigure(), ExitCode: 0}
+	}
+	switch args[0] {
+	case "delete":
+		return configureCredDelete(ctx, args[1:])
+	default:
+		return nil, errors.New("unknown configure cred command: " + args[0])
 	}
 }
 
@@ -206,19 +263,30 @@ func configureShow(ctx *Context, args []string) (any, error) {
 	maskedAK := config.MaskAK(p.AccessKeyID)
 	credRef := strings.TrimSpace(p.CredRef)
 	credOK := p.AccessKeyID != "" && p.SecretAccessKey != ""
+	credentialSource := "profile_inline"
+	if !credOK {
+		credentialSource = "profile_missing"
+	}
 	if credRef != "" {
+		credentialSource = "profile_cred_ref"
 		if cred, ok := ctx.cfg.GetCred(credRef); ok {
 			maskedAK = config.MaskAK(cred.AccessKeyID)
 			credOK = strings.TrimSpace(cred.AccessKeyID) != "" && strings.TrimSpace(cred.SecretAccessKey) != ""
+			if !credOK {
+				credentialSource = "profile_cred_ref_missing"
+			}
 		} else {
 			credOK = false
+			credentialSource = "profile_cred_ref_missing"
 		}
 	}
 	return map[string]any{
 		"profile":            name,
+		"effective_profile":  name,
 		"region":             p.Region,
 		"endpoint":           p.Endpoint,
 		"cred_ref":           credRef,
+		"credential_source":  credentialSource,
 		"credential_present": credOK,
 		"access_key_id":      maskedAK,
 		"has_security_token": p.SecurityToken != "",
@@ -259,19 +327,30 @@ func configureList(ctx *Context, args []string) (any, error) {
 		maskedAK := config.MaskAK(p.AccessKeyID)
 		credRef := strings.TrimSpace(p.CredRef)
 		credOK := p.AccessKeyID != "" && p.SecretAccessKey != ""
+		credentialSource := "profile_inline"
+		if !credOK {
+			credentialSource = "profile_missing"
+		}
 		if credRef != "" {
+			credentialSource = "profile_cred_ref"
 			if cred, ok := ctx.cfg.GetCred(credRef); ok {
 				maskedAK = config.MaskAK(cred.AccessKeyID)
 				credOK = strings.TrimSpace(cred.AccessKeyID) != "" && strings.TrimSpace(cred.SecretAccessKey) != ""
+				if !credOK {
+					credentialSource = "profile_cred_ref_missing"
+				}
 			} else {
 				credOK = false
+				credentialSource = "profile_cred_ref_missing"
 			}
 		}
 		profiles = append(profiles, map[string]any{
 			"profile":            name,
+			"effective_profile":  name,
 			"region":             p.Region,
 			"endpoint":           p.Endpoint,
 			"cred_ref":           credRef,
+			"credential_source":  credentialSource,
 			"credential_present": credOK,
 			"access_key_id":      maskedAK,
 			"has_security_token": p.SecurityToken != "",
@@ -371,6 +450,52 @@ func configureDelete(ctx *Context, args []string) (any, error) {
 		"deleted":         name,
 		"current_profile": strings.TrimSpace(ctx.cfg.CurrentProfile),
 	}, nil
+}
+
+func configureCredDelete(ctx *Context, args []string) (any, error) {
+	var name string
+	for len(args) > 0 {
+		switch {
+		case strings.HasPrefix(args[0], "--"):
+			return nil, errors.New("unknown flag: " + args[0])
+		default:
+			if name != "" {
+				return nil, errors.New("too many arguments")
+			}
+			name = args[0]
+			args = args[1:]
+		}
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, errors.New("missing credential name")
+	}
+	if _, ok := ctx.cfg.GetCred(name); !ok {
+		return nil, errors.New("credential not found: " + name)
+	}
+	inUse := profilesUsingCredential(ctx.cfg, name)
+	if len(inUse) > 0 {
+		return nil, errors.New("credential in use by profiles: " + strings.Join(inUse, ","))
+	}
+	delete(ctx.cfg.Creds, name)
+	if err := ctx.SaveConfig(); err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"deleted":         name,
+		"current_profile": strings.TrimSpace(ctx.cfg.CurrentProfile),
+	}, nil
+}
+
+func profilesUsingCredential(cfg config.Config, credName string) []string {
+	names := make([]string, 0, 8)
+	for profileName, p := range cfg.Profiles {
+		if strings.TrimSpace(p.CredRef) == credName {
+			names = append(names, profileName)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 func adjustCurrentProfile(cfg *config.Config) {

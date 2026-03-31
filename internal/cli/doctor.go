@@ -232,7 +232,7 @@ func runDoctor(ctx *Context, args []string) (any, int, error) {
 
 		ok := false
 		detail := ""
-		if credPresent && strings.TrimSpace(region) != "" && strings.TrimSpace(endpoint) != "" {
+		if strings.TrimSpace(region) != "" && strings.TrimSpace(endpoint) != "" {
 			ak := envAK
 			sk := envSK
 			token := envToken
@@ -242,7 +242,7 @@ func runDoctor(ctx *Context, args []string) (any, int, error) {
 				token = strings.TrimSpace(p.SecurityToken)
 			}
 			timeout := time.Duration(timeoutSeconds) * time.Second
-			cl, err := tlsapi.New(endpoint, region, ak, sk, token, timeout)
+			cl, err := tlsapi.New(endpoint, region, profileName, ak, sk, token, timeout)
 			if err != nil {
 				detail = err.Error()
 			} else {
@@ -280,7 +280,7 @@ func runDoctor(ctx *Context, args []string) (any, int, error) {
 				}
 			}
 		} else {
-			detail = "missing credentials/region/endpoint"
+			detail = "missing region/endpoint"
 		}
 		checks = append(checks, map[string]any{"name": "online_describe_projects", "ok": ok, "detail": detail})
 		if serverMS > 0 {

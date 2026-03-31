@@ -39,3 +39,21 @@ func TestEffectiveProfileUsesDefaults(t *testing.T) {
 		t.Fatalf("unexpected endpoint: %q", p.Endpoint)
 	}
 }
+
+func TestLoadProjectConfigHintsFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".volclog"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, ".volclog", "cli.config.json")
+	if err := os.WriteFile(p, []byte(`{"hints_file":" ./hints.json "}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := LoadProjectConfig(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.HintsFile != "./hints.json" {
+		t.Fatalf("unexpected hints_file: %q", cfg.HintsFile)
+	}
+}

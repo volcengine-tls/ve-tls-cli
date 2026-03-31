@@ -2,18 +2,23 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"io"
+	"sort"
+	"strings"
 	"time"
 
 	"volclog/internal/config"
 	"volclog/internal/output"
 	"volclog/internal/tlsapi"
+	"volclog/internal/util"
 )
 
 type Context struct {
 	Stdout      io.Writer
 	Stderr      io.Writer
 	Format      output.Format
+	OutputMode  string
 	Profile     string
 	Filter      string
 	Debug       bool
@@ -22,13 +27,16 @@ type Context struct {
 	TracePath   string
 	RequestID   string
 	StatusCode  int
+	DryRun      bool
+	Action      string
 
-	cfg      config.Config
-	cfgPath  string
-	profile  config.Profile
-	client   *tlsapi.Client
-	traceW   io.WriteCloser
-	defaults config.ProfileDefaults
+	cfg       config.Config
+	cfgPath   string
+	profile   config.Profile
+	client    *tlsapi.Client
+	traceW    io.WriteCloser
+	defaults  config.ProfileDefaults
+	apiIOMeta apiIOMeta
 }
 
 func newContext(stdout, stderr io.Writer, format output.Format, profile, filter string, debug bool) *Context {
@@ -84,7 +92,7 @@ func (c *Context) Client() (*tlsapi.Client, error) {
 		}
 	}
 	t := time.Duration(c.profile.TimeoutSeconds) * time.Second
-	cl, err := tlsapi.New(c.profile.Endpoint, c.profile.Region, c.profile.AccessKeyID, c.profile.SecretAccessKey, c.profile.SecurityToken, t)
+	cl, err := tlsapi.New(c.profile.Endpoint, c.profile.Region, c.Profile, c.profile.AccessKeyID, c.profile.SecretAccessKey, c.profile.SecurityToken, t)
 	if err != nil {
 		return nil, err
 	}
@@ -111,11 +119,163 @@ func (c *Context) DoRaw(method, path string, query map[string]string, header map
 }
 
 func (c *Context) Do(method, path string, query map[string]string, header map[string]string, body []byte) (any, error) {
+	meta := c.apiIOMeta
+	if meta.Method == "" {
+		meta.Method = method
+	}
+	if meta.Path == "" {
+		meta.Path = path
+	}
+	if meta.RequestFormat == "" {
+		meta.RequestFormat = requestFormatJSON
+	}
+	if meta.OutputFormat == "" {
+		meta.OutputFormat = c.Format
+	}
+	if meta.OutputMode == "" {
+		meta.OutputMode = c.OutputMode
+	}
+	adaptedHeader, adaptedBody, state, specialHandled, err := prepareSpecialIORequest(meta, header, body)
+	if err != nil {
+		return nil, err
+	}
+	if specialHandled {
+		header = adaptedHeader
+		body = adaptedBody
+	}
+	if c.DryRun {
+		plan := c.buildDryRunPlan(method, path, query, header, body, specialHandled)
+		c.tracePlan(method, path, query, header, body, plan)
+		return plan, nil
+	}
 	resp, err := c.DoRaw(method, path, query, header, body)
 	if err != nil {
 		return nil, err
 	}
+	if out, handled, err := decodeSpecialIOResponse(meta, state, resp); handled {
+		return out, err
+	}
 	return decodeResponse(resp)
+}
+
+func (c *Context) buildDryRunPlan(method, path string, query map[string]string, header map[string]string, body []byte, specialHandled bool) map[string]any {
+	checks := make([]map[string]any, 0, 4)
+	valid := true
+	if err := c.ResolveProfile(); err != nil {
+		checks = append(checks, map[string]any{
+			"name":   "profile",
+			"ok":     false,
+			"detail": err.Error(),
+		})
+		valid = false
+	} else {
+		checks = append(checks, map[string]any{
+			"name":   "endpoint",
+			"ok":     strings.TrimSpace(c.profile.Endpoint) != "",
+			"detail": strings.TrimSpace(c.profile.Endpoint),
+		})
+		if strings.TrimSpace(c.profile.Endpoint) == "" {
+			valid = false
+		}
+		checks = append(checks, map[string]any{
+			"name":   "region",
+			"ok":     strings.TrimSpace(c.profile.Region) != "",
+			"detail": strings.TrimSpace(c.profile.Region),
+		})
+		if strings.TrimSpace(c.profile.Region) == "" {
+			valid = false
+		}
+	}
+	if len(bytesTrimSpaceLocal(body)) > 0 && string(bytesTrimSpaceLocal(body)) != "{}" {
+		if specialHandled {
+			checks = append(checks, map[string]any{
+				"name": "body_codec",
+				"ok":   true,
+			})
+		} else {
+			if _, err := util.UnmarshalJSON(body); err != nil {
+				checks = append(checks, map[string]any{
+					"name":   "body_json",
+					"ok":     false,
+					"detail": err.Error(),
+				})
+				valid = false
+			} else {
+				checks = append(checks, map[string]any{
+					"name": "body_json",
+					"ok":   true,
+				})
+			}
+		}
+	}
+
+	queryKeys := make([]string, 0, len(query))
+	for k := range query {
+		queryKeys = append(queryKeys, strings.TrimSpace(k))
+	}
+	sort.Strings(queryKeys)
+	headers := redactedHeaderKeys(header)
+	plan := map[string]any{
+		"type":             "plan",
+		"method":           strings.ToUpper(strings.TrimSpace(method)),
+		"path":             strings.TrimSpace(path),
+		"query_keys":       queryKeys,
+		"headers_redacted": headers,
+		"body_sha256":      sha256Hex(body),
+		"checks":           checks,
+		"valid":            valid,
+	}
+	return plan
+}
+
+func redactedHeaderKeys(header map[string]string) []string {
+	seen := map[string]struct{}{
+		"Authorization":    {},
+		"X-Security-Token": {},
+	}
+	for k := range header {
+		kk := strings.TrimSpace(k)
+		if kk == "" {
+			continue
+		}
+		seen[kk] = struct{}{}
+	}
+	keys := make([]string, 0, len(seen))
+	for k := range seen {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func bytesTrimSpaceLocal(b []byte) []byte {
+	i := 0
+	j := len(b)
+	for i < j {
+		if b[i] == ' ' || b[i] == '\n' || b[i] == '\r' || b[i] == '\t' {
+			i++
+			continue
+		}
+		break
+	}
+	for j > i {
+		if b[j-1] == ' ' || b[j-1] == '\n' || b[j-1] == '\r' || b[j-1] == '\t' {
+			j--
+			continue
+		}
+		break
+	}
+	return b[i:j]
+}
+
+func (c *Context) validateDryRunScope(group string) error {
+	if !c.DryRun {
+		return nil
+	}
+	if strings.TrimSpace(group) != "api" {
+		return errors.New("--dry-run currently supports api group only")
+	}
+	return nil
 }
 
 func (c *Context) Close() {

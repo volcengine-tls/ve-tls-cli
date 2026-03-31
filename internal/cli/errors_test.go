@@ -22,6 +22,23 @@ func TestClassifyError_DecodeFilterError(t *testing.T) {
 	}
 }
 
+func TestClassifyError_UsageUnknownActionOrGroup(t *testing.T) {
+	cases := []string{
+		"unknown api group: log",
+		"action not found: search-logs",
+		"group not found: log",
+	}
+	for _, msg := range cases {
+		p, code := classifyError(errString(msg), "", 0)
+		if code != 1 {
+			t.Fatalf("%q unexpected code: %d", msg, code)
+		}
+		if p.Kind != "usage" {
+			t.Fatalf("%q unexpected kind: %q", msg, p.Kind)
+		}
+	}
+}
+
 type errString string
 
 func (e errString) Error() string { return string(e) }

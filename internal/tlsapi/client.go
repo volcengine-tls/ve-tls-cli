@@ -10,11 +10,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
-	"volclog/internal/signv4"
 	"volclog/internal/version"
+
+	"github.com/volcengine/volc-sdk-golang/base"
 )
 
 type Client struct {
@@ -22,7 +24,7 @@ type Client struct {
 	Region   string
 	Service  string
 	Timeout  time.Duration
-	Creds    signv4.Credentials
+	Creds    base.Credentials
 	HTTP     *http.Client
 }
 
@@ -32,7 +34,7 @@ type Response struct {
 	Body       []byte
 }
 
-func New(endpoint, region, ak, sk, token string, timeout time.Duration) (*Client, error) {
+func New(endpoint, region, sdkProfile, ak, sk, token string, timeout time.Duration) (*Client, error) {
 	ep := strings.TrimSpace(endpoint)
 	if ep == "" {
 		return nil, errors.New("empty endpoint")
@@ -44,22 +46,26 @@ func New(endpoint, region, ak, sk, token string, timeout time.Duration) (*Client
 	if err != nil {
 		return nil, err
 	}
+	r := strings.TrimSpace(region)
+	if r == "" {
+		return nil, errors.New("empty region")
+	}
 	if timeout <= 0 {
 		timeout = 60 * time.Second
 	}
+	service := "TLS"
+	_ = strings.TrimSpace(sdkProfile)
+	creds, err := resolveSigningCredentials(r, service, ak, sk, token)
+	if err != nil {
+		return nil, err
+	}
 	c := &Client{
 		Endpoint: strings.TrimRight(ep, "/"),
-		Region:   strings.TrimSpace(region),
-		Service:  "TLS",
+		Region:   r,
+		Service:  service,
 		Timeout:  timeout,
-		Creds: signv4.Credentials{
-			AccessKeyID:     strings.TrimSpace(ak),
-			SecretAccessKey: strings.TrimSpace(sk),
-			SecurityToken:   strings.TrimSpace(token),
-			Region:          strings.TrimSpace(region),
-			Service:         "TLS",
-		},
-		HTTP: &http.Client{Timeout: timeout},
+		Creds:    creds,
+		HTTP:     &http.Client{Timeout: timeout},
 	}
 	return c, nil
 }
@@ -99,8 +105,9 @@ func (c *Client) Do(ctx context.Context, method, path string, query map[string]s
 		req.Header.Set(k, v)
 	}
 
-	if err := signv4.Sign(req, c.Creds, time.Now()); err != nil {
-		return Response{}, err
+	req = c.Creds.Sign(req)
+	if strings.TrimSpace(req.Header.Get("Authorization")) == "" {
+		return Response{}, errors.New("signing failed: missing Authorization header")
 	}
 
 	resp, err := c.HTTP.Do(req)
@@ -122,4 +129,34 @@ func (c *Client) Do(ctx context.Context, method, path string, query map[string]s
 		return Response{}, err
 	}
 	return Response{StatusCode: resp.StatusCode, Header: resp.Header, Body: b}, nil
+}
+
+func resolveSigningCredentials(region string, service string, ak string, sk string, token string) (base.Credentials, error) {
+	accessKeyID := strings.TrimSpace(ak)
+	secretAccessKey := strings.TrimSpace(sk)
+	sessionToken := strings.TrimSpace(token)
+	if accessKeyID == "" || secretAccessKey == "" {
+		envAK := strings.TrimSpace(os.Getenv("VOLCENGINE_ACCESS_KEY_ID"))
+		envSK := strings.TrimSpace(os.Getenv("VOLCENGINE_ACCESS_KEY_SECRET"))
+		envToken := strings.TrimSpace(os.Getenv("VOLCENGINE_TOKEN"))
+		if accessKeyID == "" {
+			accessKeyID = envAK
+		}
+		if secretAccessKey == "" {
+			secretAccessKey = envSK
+		}
+		if sessionToken == "" {
+			sessionToken = envToken
+		}
+	}
+	if accessKeyID == "" || secretAccessKey == "" {
+		return base.Credentials{}, errors.New("missing access key id or secret access key")
+	}
+	return base.Credentials{
+		AccessKeyID:     accessKeyID,
+		SecretAccessKey: secretAccessKey,
+		SessionToken:    sessionToken,
+		Region:          strings.TrimSpace(region),
+		Service:         strings.TrimSpace(service),
+	}, nil
 }

@@ -18,6 +18,7 @@ func TestCompletionZshIncludesGroupsFlagsAndSubcommands(t *testing.T) {
 	for _, want := range []string{
 		"#compdef volclog",
 		"--output-mode",
+		"--dry-run",
 		"--cred-ref",
 		"groups=(",
 		"log",

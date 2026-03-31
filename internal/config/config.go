@@ -193,9 +193,6 @@ func normalize(p Profile) (Profile, error) {
 	if p.TimeoutSeconds <= 0 {
 		p.TimeoutSeconds = 60
 	}
-	if p.AccessKeyID == "" || p.SecretAccessKey == "" {
-		return Profile{}, errors.New("missing access key id/secret access key")
-	}
 	if p.Region == "" {
 		return Profile{}, errors.New("missing region")
 	}

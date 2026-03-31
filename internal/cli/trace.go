@@ -72,7 +72,7 @@ func (c *Context) traceRequest(method, path string, query map[string]string, bod
 		Method:          method,
 		Path:            path,
 		QueryKeys:       keys,
-		HeadersRedacted: []string{"Authorization", "X-Security-Token"},
+		HeadersRedacted: redactedHeaderKeys(nil),
 		BodySHA256:      sha256Hex(body),
 	}
 	_ = c.writeTrace(evt)
@@ -109,6 +109,36 @@ func (c *Context) writeTrace(evt traceEvent) error {
 	}
 	_, err = c.traceW.Write(append(b, '\n'))
 	return err
+}
+
+func (c *Context) tracePlan(method, path string, query map[string]string, header map[string]string, body []byte, plan map[string]any) {
+	if strings.TrimSpace(c.TraceDir) == "" {
+		return
+	}
+	if err := c.initTrace(); err != nil {
+		return
+	}
+	queryKeys := make([]string, 0, len(query))
+	for k := range query {
+		kk := strings.TrimSpace(k)
+		if kk != "" {
+			queryKeys = append(queryKeys, kk)
+		}
+	}
+	sort.Strings(queryKeys)
+	evt := traceEvent{
+		TS:              time.Now().UTC().Format(time.RFC3339Nano),
+		Type:            "plan",
+		Method:          method,
+		Path:            path,
+		QueryKeys:       queryKeys,
+		HeadersRedacted: redactedHeaderKeys(header),
+		BodySHA256:      sha256Hex(body),
+	}
+	if valid, ok := plan["valid"].(bool); ok && !valid {
+		evt.ErrorMessage = "dry-run local checks failed"
+	}
+	_ = c.writeTrace(evt)
 }
 
 func sha256Hex(b []byte) string {

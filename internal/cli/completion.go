@@ -30,6 +30,8 @@ func runCompletion(ctx *Context, args []string) (any, int, error) {
 func completionGroups() []string {
 	return []string{
 		"configure",
+		"capabilities",
+		"commands",
 		"api",
 		"project",
 		"topic",
@@ -52,6 +54,7 @@ func completionGlobalFlags() []string {
 		"--trace-dir",
 		"--trace-redact",
 		"--secrets-file",
+		"--dry-run",
 		"--debug",
 		"--help",
 		"-h",
@@ -82,7 +85,7 @@ _volclog_complete() {
       --profile|--output|--output-mode|--output-file|--jmes-filter|--trace-dir|--trace-redact|--secrets-file)
         i=$((i+2))
         ;;
-      --debug|--help|-h|--version)
+      --dry-run|--debug|--help|-h|--version)
         i=$((i+1))
         ;;
       *)
@@ -150,7 +153,7 @@ _volclog() {
   local group cmd i w
 
   groups=(` + groups + `)
-  global_flags=(--profile --output --output-mode --output-file --jmes-filter --trace-dir --trace-redact --secrets-file --debug --help -h --version)
+  global_flags=(--profile --output --output-mode --output-file --jmes-filter --trace-dir --trace-redact --secrets-file --dry-run --debug --help -h --version)
 
   configure_cmds=(set use show list delete)
   api_cmds=(call)
@@ -176,7 +179,7 @@ _volclog() {
       (--profile|--output|--output-mode|--output-file|--jmes-filter|--trace-dir|--trace-redact|--secrets-file)
         (( i += 2 ))
         ;;
-      (--debug|--help|-h|--version)
+      (--dry-run|--debug|--help|-h|--version)
         (( i += 1 ))
         ;;
       (-*)
@@ -216,6 +219,7 @@ _volclog() {
     '--trace-dir[trace artifact dir]:dir:_files -/'
     '--trace-redact[trace redact mode]:mode:(strict default)'
     '--secrets-file[dotenv file]:file:_files'
+    '--dry-run[dry-run (api group only)]'
     '--debug[enable debug]'
     '--version[show version]'
     '1:group:->group'
@@ -233,6 +237,7 @@ _volclog() {
       '--trace-dir[trace artifact dir]:dir:_files -/'
       '--trace-redact[trace redact mode]:mode:(strict default)'
       '--secrets-file[dotenv file]:file:_files'
+      '--dry-run[dry-run (api group only)]'
       '--debug[enable debug]'
       '--version[show version]'
       '--method[HTTP method]:method:(GET POST PUT DELETE)'
@@ -256,6 +261,7 @@ _volclog() {
       '--trace-dir[trace artifact dir]:dir:_files -/'
       '--trace-redact[trace redact mode]:mode:(strict default)'
       '--secrets-file[dotenv file]:file:_files'
+      '--dry-run[dry-run (api group only)]'
       '--debug[enable debug]'
       '--version[show version]'
       '--cred-ref[credential name (reuse AK/SK)]:name:'
@@ -281,6 +287,7 @@ _volclog() {
       '--trace-dir[trace artifact dir]:dir:_files -/'
       '--trace-redact[trace redact mode]:mode:(strict default)'
       '--secrets-file[dotenv file]:file:_files'
+      '--dry-run[dry-run (api group only)]'
       '--debug[enable debug]'
       '--version[show version]'
       '1:group:->group'
@@ -364,7 +371,7 @@ Register-ArgumentCompleter -Native -CommandName volclog -ScriptBlock {
 
   $groups = @('` + groups + `')
   $globalFlagsWithValue = @('--profile','--output','--output-mode','--output-file','--jmes-filter','--trace-dir','--trace-redact','--secrets-file')
-  $globalFlagsBare = @('--debug','--help','-h','--version')
+  $globalFlagsBare = @('--dry-run','--debug','--help','-h','--version')
   $apiCallFlags = @('--method','--path','--query','--header','--body')
   $httpMethods = @('GET','POST','PUT','DELETE')
   $apiPaths = @('/DescribeProjects','/DescribeProject','/CreateProject','/ModifyProject','/DeleteProject','/DescribeTopics','/DescribeTopic','/CreateTopic','/ModifyTopic','/DeleteTopic','/DescribeIndex','/CreateIndex','/ModifyIndex','/SearchLogs')

@@ -49,6 +49,15 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	if strings.TrimSpace(gf.TraceRedact) == "" && strings.TrimSpace(projectCfg.TraceRedact) != "" {
 		gf.TraceRedact = projectCfg.TraceRedact
 	}
+	if g == "capabilities" && !hasFlagWithValue(rest, "--hints-file") {
+		hintsFile := strings.TrimSpace(os.Getenv("VOLCLOG_HINTS_FILE"))
+		if hintsFile == "" {
+			hintsFile = strings.TrimSpace(projectCfg.HintsFile)
+		}
+		if hintsFile != "" {
+			rest = append(rest, "--hints-file", hintsFile)
+		}
+	}
 	if g == "log" && len(rest) > 0 && rest[0] == "export-analysis" && !outputExplicit {
 		gf.Output = "jsonl"
 	}
@@ -68,9 +77,16 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	outputMode := strings.ToLower(strings.TrimSpace(gf.OutputMode))
+	if outputMode == "" {
+		outputMode = "stdout"
+	}
+
 	ctx := newContext(stdout, stderr, format, gf.Profile, gf.Filter, gf.Debug)
+	ctx.OutputMode = outputMode
 	ctx.TraceDir = gf.TraceDir
 	ctx.TraceRedact = gf.TraceRedact
+	ctx.DryRun = gf.DryRun
 	ctx.SetProfileDefaults(config.ProfileDefaults{
 		Region:         projectCfg.Region,
 		Endpoint:       projectCfg.Endpoint,
@@ -78,12 +94,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	})
 	defer ctx.Close()
 
-	outputMode := strings.ToLower(strings.TrimSpace(gf.OutputMode))
-	if outputMode == "" {
-		outputMode = "stdout"
-	}
 	if outputMode != "stdout" && outputMode != "file" {
 		writeCLIError(stderr, errors.New("unsupported output-mode: "+gf.OutputMode), "", 0, "usage", "invalid --output-mode")
+		return 1
+	}
+	if err := ctx.validateDryRunScope(g); err != nil {
+		writeCLIError(stderr, err, "", 0, "usage", "invalid --dry-run scope")
 		return 1
 	}
 
@@ -92,6 +108,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	switch g {
 	case "configure":
 		out, err = runConfigure(ctx, rest)
+	case "capabilities":
+		out, err = runCapabilities(ctx, rest)
+	case "commands":
+		out, err = runCommands(ctx, rest)
 	case "api":
 		out, err = runAPI(ctx, rest)
 	case "project":
@@ -130,7 +150,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			return 3
 		}
 	}
-	if g == "completion" {
+	if g == "completion" || g == "commands" || g == "api" {
 		if s, ok := out.(string); ok {
 			if outputMode == "file" {
 				p, err := writeTextFile(gf.OutputFile, g, s)
@@ -147,9 +167,21 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 	if strings.TrimSpace(ctx.TraceDir) != "" {
 		_ = ctx.initTrace()
-		if strings.TrimSpace(ctx.TracePath) != "" {
+		if strings.TrimSpace(ctx.TracePath) != "" && !isAPIEnvelopeCandidate(g, out) {
 			out = attachMeta(out, ctx.TracePath)
 		}
+	}
+	if isAPIEnvelopeCandidate(g, out) {
+		env, err := buildAPIEnvelope(ctx, out, outputMode, gf.OutputFile, format)
+		if err != nil {
+			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
+			return 3
+		}
+		if err := output.Write(stdout, env, output.FormatJSON); err != nil {
+			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
+			return 3
+		}
+		return exitCode
 	}
 	if outputMode == "file" {
 		p, err := writeOutputFile(gf.OutputFile, g, out, format)
@@ -169,10 +201,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 func usageText() string {
 	return `Usage:
-  volclog [--profile <name>] [--output json|jsonl] [--output-mode stdout|file] [--output-file <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--debug] <group> <command> [args]
+  volclog [--profile <name>] [--output json|jsonl] [--output-mode stdout|file] [--output-file <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--dry-run] [--debug] <group> <command> [args]
 
 Groups:
   configure   Manage local profiles
+  capabilities Output CLI capability contract
+  commands    List supported API commands (human-friendly)
   api         Call TLS OpenAPI directly
   project     Project operations (ID-first)
   topic       Topic operations (ID-first)
@@ -192,6 +226,7 @@ Global Flags:
   --trace-dir <path>
   --trace-redact <strict|default>
   --secrets-file <path>
+  --dry-run
   --debug
   --help
   --version
@@ -207,6 +242,15 @@ Agent Tips:
   - Use --trace-dir to generate redacted trace artifacts for debugging
   - On failure, parse stderr JSON (errorCode/errorMessage/requestId/statusCode/kind/hint)
 `
+}
+
+func hasFlagWithValue(args []string, flag string) bool {
+	for i := 0; i < len(args); i++ {
+		if args[i] == flag {
+			return true
+		}
+	}
+	return false
 }
 
 func init() {

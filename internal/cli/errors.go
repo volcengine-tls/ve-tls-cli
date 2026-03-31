@@ -55,7 +55,12 @@ func classifyError(err error, requestID string, statusCode int) (errPayload, int
 	if ue, ok := asUsageError(err); ok {
 		return errPayload{Kind: "usage"}, ue.ExitCode
 	}
-	if strings.HasPrefix(msg, "missing --") || strings.HasPrefix(msg, "unknown flag:") || strings.Contains(msg, "unknown ") && strings.Contains(msg, " command:") {
+	if strings.HasPrefix(msg, "missing --") ||
+		strings.HasPrefix(msg, "unknown flag:") ||
+		strings.HasPrefix(msg, "unknown api group:") ||
+		strings.HasPrefix(msg, "action not found:") ||
+		strings.HasPrefix(msg, "group not found:") ||
+		(strings.Contains(msg, "unknown ") && strings.Contains(msg, " command:")) {
 		return errPayload{
 			RequestID:  requestID,
 			StatusCode: statusCode,
