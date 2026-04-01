@@ -50,6 +50,55 @@ func buildAPIEnvelope(ctx *Context, out any, outputMode string, outputFile strin
 	return env, nil
 }
 
+func buildAPIErrorEnvelope(ctx *Context, err error, outputMode string) map[string]any {
+	requestID := strings.TrimSpace(ctx.RequestID)
+	statusCode := ctx.StatusCode
+	kind := "unknown"
+	hint := ""
+	if err != nil {
+		p, _ := classifyError(err, ctx.RequestID, ctx.StatusCode)
+		if strings.TrimSpace(p.RequestID) != "" {
+			requestID = strings.TrimSpace(p.RequestID)
+		}
+		if p.StatusCode != 0 {
+			statusCode = p.StatusCode
+		}
+		if strings.TrimSpace(p.Kind) != "" {
+			kind = strings.TrimSpace(p.Kind)
+		}
+		if strings.TrimSpace(p.Hint) != "" {
+			hint = strings.TrimSpace(p.Hint)
+		}
+	}
+	summary := map[string]any{
+		"outputMode": outputMode,
+		"dryRun":     ctx.DryRun,
+	}
+	if strings.TrimSpace(ctx.TracePath) != "" {
+		summary["tracePath"] = ctx.TracePath
+	}
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	}
+	return map[string]any{
+		"status":    "failed",
+		"action":    normalizeAPIAction(ctx.Action),
+		"requestId": requestID,
+		"summary":   summary,
+		"artifacts": []map[string]any{},
+		"data":      nil,
+		"error": map[string]any{
+			"errorCode":    "CLIError",
+			"errorMessage": errMsg,
+			"requestId":    requestID,
+			"statusCode":   statusCode,
+			"kind":         kind,
+			"hint":         hint,
+		},
+	}
+}
+
 func normalizeAPIAction(action string) string {
 	a := strings.TrimSpace(action)
 	if a == "" {

@@ -12,7 +12,6 @@ type GlobalFlags struct {
 	TraceRedact string
 	SecretsFile string
 	DryRun      bool
-	Debug       bool
 	ShowHelp    bool
 	ShowVersion bool
 }
@@ -74,9 +73,6 @@ func parseGlobal(args []string) (group string, rest []string, flags GlobalFlags,
 			args = args[2:]
 		case "--dry-run":
 			flags.DryRun = true
-			args = args[1:]
-		case "--debug":
-			flags.Debug = true
 			args = args[1:]
 		case "--help", "-h":
 			flags.ShowHelp = true

@@ -37,6 +37,9 @@ git push origin volclog-v0.0.2
 ### 2) 等待工作流完成
 - workflow：`.github/workflows/release-volclog.yml`
 - 输出：Release assets（不同 OS/Arch 的 tar.gz/zip 与 sha256）
+- Release 构建参数：
+  - `go build -trimpath -ldflags "-s -w -X volclog/internal/version.Version=${GITHUB_REF_NAME}" -o <out> ./cmd/volclog`
+  - 目的：减少二进制中的路径与调试符号，降低 release 产物体积
 
 ### 3) 验证安装（建议）
 

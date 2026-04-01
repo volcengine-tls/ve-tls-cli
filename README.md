@@ -1,28 +1,116 @@
 # volclog（火山引擎 TLS 日志服务 CLI）
 
-`volclog` 用于通过命令行管理 TLS 日志服务资源（Project/Topic/Index/MetricTopic）并进行日志/指标查询与导出。面向自动化场景（CI、批处理、Agent）默认输出结构化 JSON/JSONL，便于二次处理。
+`volclog` 用于管理 TLS 日志服务资源（Project/Topic/Index/MetricTopic），并执行日志检索、分析导出、指标查询与 Prometheus 兼容接口调用。它以自动化为优先：默认输出结构化 JSON/JSONL，适合 CI、批处理、平台接入与 Agent 编排。
 
-更详细的逐命令参数手册与示例文件见：
+优先阅读：
 - 中文完整指南：[README_CN.md](./README_CN.md)
 - 示例文件目录：[examples](./examples/README.md)
 - CLI 参数最佳实践：[docs/cli-best-practices.md](./docs/cli-best-practices.md)
+- 版本变更记录：[CHANGELOG.md](./CHANGELOG.md)
 
-## 目录
-- 安装
-- 配置
-- 快速上手
-- 输入与输出约定
-- 自动化与诊断
-- 常用命令
-- 进一步阅读
+## Contents
+
+- [架构速览](#架构速览)
+- [Agent Integration](#agent-integration)
+- [安装](#安装)
+- [配置](#配置)
+- [快速上手](#快速上手)
+- [输入与输出](#输入与输出)
+- [常用命令](#常用命令)
+- [进一步阅读](#进一步阅读)
+
+## 架构速览
+
+当前仓库的 CLI 执行入口是一个很薄的封装：`cmd/volclog/main.go` 调用 `internal/cli.Run`，整体链路是：
+- 全局参数解析：`--profile`、`--output`、`--output-mode`、`--trace-dir`、`--dry-run` 等先于 group 生效
+- 运行时上下文：统一加载环境变量、profile、本地项目默认值 `./.volclog/cli.config.json`
+- 命令分组：`configure`、`capabilities`、`api`、`project`、`topic`、`metric-topic`、`index`、`log`、`assistant`、`doctor`、`completion`
+- 输出路径：stdout / file 两种模式；失败时 stderr 输出结构化 JSON
+- Agent 能力：`capabilities` 负责能力发现，`capabilities --view text` 提供人类可读清单，`api --describe` / `--print-request-template` 负责约束与模板，`--dry-run` / `--trace-dir` / `--output-mode file` 负责执行前校验与工件化
+
+## Agent Integration
+
+### 建议工作流
+
+1. 用 `volclog capabilities --view text` 或 `volclog capabilities` 发现命令空间  
+2. 用 `volclog api <group> <action> --describe` 读取机器可消费的参数约束  
+3. 用 `--print-request-template=required|full` 生成请求模板  
+4. 用 `volclog --dry-run api ...` 做本地校验  
+5. 用 `--output-mode file` 承接大结果，用 `--trace-dir` 保留脱敏工件  
+6. 失败时解析 stderr JSON，必要时再执行 `doctor` / `doctor --online`
+
+### 能力发现
+
+```bash
+volclog capabilities --view text --group log
+volclog capabilities --group log --action SearchLogs
+volclog capabilities --group log --action SearchLogs --view full
+```
+
+`capabilities` 会输出：
+- schema / contract 元信息
+- action 的 method / path / summary
+- 参数约束、请求体文档与风险提示
+- `supports_dry_run`、`output_mode_hint`、`risk_level`、`idempotency`
+- `--view text` 可输出人类可读的 action 清单，适合作为人类浏览入口
+
+### API 自解释与模板
+
+```bash
+volclog api log SearchLogs --describe
+volclog api log SearchLogs --print-request-template=required
+volclog api log SearchLogs --print-request-template=full
+```
+
+### Dry Run、Envelope 与 Trace
+
+`--dry-run` 当前只支持 `api` group，会返回一个可供 Agent 直接消费的 envelope：
+
+```bash
+volclog --dry-run api call --method GET --path /DescribeProjects
+volclog --dry-run --output-mode file api log SearchLogs --request file://./examples/search_logs.json
+volclog --dry-run --trace-dir ./.volclog/traces api log SearchLogs --request file://./examples/search_logs.json
+```
+
+要点：
+- `summary.dryRun=true` 表示未真正发出请求
+- `summary.tracePath` 指向脱敏 trace 工件
+- `artifacts[].path` 指向落盘结果
+- API 组在成功时默认返回 envelope，便于工作流系统稳定解析
+
+### 运行时诊断
+
+```bash
+volclog doctor
+volclog doctor --online
+```
+
+`doctor` 会聚合：
+- 当前生效 profile
+- endpoint / region 来源
+- 凭证是否齐备
+- timeout 来源
+- 在线链路检查与时钟偏移
+
+### Assistant 命令
+
+当前 `assistant` 组已实现的命令是：
+
+```bash
+volclog assistant describe-session-answer --topic-id <tid> --question 'What happened?'
+```
+
+它会自动处理：
+- 通过 `TLS_AI_ASSISTANT_INSTANCE_ID` 复用实例
+- 缺少实例时根据 `--account-id` 或 `LOG_SERVICE_ACCOUNT_ID` 查找 / 创建实例
+- 创建会话并通过 SSE 聚合 `DescribeSessionAnswer` 的流式结果
 
 ## 安装
 
-### 方式 A：GitHub Release 预编译包（无需 Go）
+### 方式 A：GitHub Release 预编译包
 
-macOS/Linux 依赖：`bash`、`curl`、`tar`、（可选）`shasum` 或 `sha256sum`
+macOS/Linux：
 
-安装最新 release：
 ```bash
 VOLCLOG_BASE_URL="https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download" \
 bash scripts/install-binary.sh
@@ -30,173 +118,195 @@ bash scripts/install-binary.sh
 ~/.local/bin/volclog --help
 ```
 
-固定安装某个版本（推荐用于生产/CI）：
+固定版本：
+
 ```bash
 VOLCLOG_BASE_URL="https://github.com/volcengine-tls/ve-tls-cli/releases/download/volclog-v0.0.2" \
 bash scripts/install-binary.sh
 ```
 
-Windows 依赖：PowerShell 5+（或 PowerShell 7+）
+Windows：
 
-安装最新 release：
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
-固定安装某个版本：
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -BaseUrl "https://github.com/volcengine-tls/ve-tls-cli/releases/download/volclog-v0.0.2"
-```
+### 方式 B：本地编译安装
 
-### 方式 B：本地编译安装（需要 Go）
+Go 1.22+ 环境可直接在仓库根目录安装：
 
-依赖：`bash`、`go 1.22+`
-
-一键安装到 `~/.local/bin/volclog`：
 ```bash
 bash scripts/install-local.sh
 ~/.local/bin/volclog --help
 ```
 
-### 方式 C：Docker（无需本机 Go）
+或手工构建：
 
-依赖：`docker`
+```bash
+go build -o ./volclog ./cmd/volclog
+./volclog --help
+```
+
+### 方式 C：Docker
 
 ```bash
 docker build -t volclog:local .
 docker run --rm volclog:local --help
 ```
 
-## 配置
+### 方式 D：源码验证
 
-### 环境变量（优先级最高，适合 CI/容器）
-- `VOLCENGINE_ACCESS_KEY_ID`
-- `VOLCENGINE_ACCESS_KEY_SECRET`
-- `VOLCENGINE_TOKEN`（可选）
-- `VOLCENGINE_ENDPOINT`（例如 `https://tls-cn-beijing.volces.com`）
-- `VOLCENGINE_REGION`（可选；当 endpoint 形如 `tls-<region>.volces.com` 时可从 endpoint 推导）
+阅读或修改代码后，建议先执行：
 
-### 本地 Profile（默认 `~/.volclog/config.json`）
 ```bash
-volclog configure set --profile default --ak "$VOLCENGINE_ACCESS_KEY_ID" --sk "$VOLCENGINE_ACCESS_KEY_SECRET" --endpoint https://tls-cn-beijing.volces.com
-volclog configure show --profile default
-volclog configure use default
+go test ./...
 ```
 
-多账号/多 region 场景建议使用多个 profile，并在单次命令上使用 `--profile <name>` 选择；跨多个 region/endpoint 复用同一 AK/SK 时，推荐使用 `--cred-ref`（详见 README_CN.md 的“多租户 / 多账号 / 多 Region 组合配置”）。
+## 配置
 
-## 安全建议
+### 环境变量
 
-- 建议通过环境变量或 CI Secret 注入 AK/SK，避免在命令行参数或脚本中明文写入。
-- 如使用本地 Profile，请妥善保护 `~/.volclog/config.json`（包含敏感凭证），并避免将其纳入版本控制。
-- 建议在共享终端/日志环境中谨慎开启调试输出（如后续版本增加更多调试信息）。
-- 请求失败时可使用 stderr 中的 `requestId` 协助排障，避免在 issue/工单中粘贴完整密钥。
+环境变量优先级最高，适合 CI、容器、一次性任务：
+- `VOLCENGINE_ACCESS_KEY_ID`
+- `VOLCENGINE_ACCESS_KEY_SECRET`
+- `VOLCENGINE_TOKEN`
+- `VOLCENGINE_ENDPOINT`
+- `VOLCENGINE_REGION`
+
+若 endpoint 形如 `https://tls-<region>.volces.com`，region 可从 endpoint 自动推导。
+
+### Profile
+
+本地配置文件默认位于 `~/.volclog/config.json`：
+
+```bash
+volclog configure set --profile default --ak "$VOLCENGINE_ACCESS_KEY_ID" --sk "$VOLCENGINE_ACCESS_KEY_SECRET" --endpoint https://tls-cn-beijing.volces.com
+volclog configure use default
+volclog configure show --profile default
+```
+
+多账号 / 多地域推荐：
+- 为不同业务环境维护多个 profile
+- 用 `--profile <name>` 显式切换
+- 复用同一套 AK/SK 时优先用 `--cred-ref`
+
+### 项目级默认值
+
+在工作目录放置 `./.volclog/cli.config.json` 可注入非敏感默认值，例如：
+
+```json
+{
+  "region": "cn-beijing",
+  "endpoint": "https://tls-cn-beijing.volces.com",
+  "timeout_seconds": 60,
+  "output": "json",
+  "output_mode": "stdout",
+  "trace_redact": "strict",
+  "hints_file": "./capability-hints.json"
+}
+```
+
+该文件禁止包含凭证字段。
 
 ## 快速上手
 
-查看命令入口：
+### 查看命令入口
+
 ```bash
 volclog --help
 volclog project -h
 volclog topic -h
 volclog metric-topic -h
 volclog log -h
+volclog api -h
 ```
 
-资源管理（建议 ID 优先）：
+### 资源管理
+
 ```bash
 volclog project list
 volclog project create --project-name demo --description test
-volclog project get --project-id <pid>
-
-volclog topic list --project-id <pid>
 volclog topic create --project-id <pid> --topic-name demo-topic --ttl 30 --shard-count 2 --auto-split --max-split-shard 10
-volclog topic get --topic-id <tid>
-
-volclog index create --topic-id <tid> --body file://./index.json
+volclog index create --topic-id <tid> --body file://./examples/index.json
 ```
 
-日志查询与导出：
+### 日志检索与导出
+
 ```bash
 volclog log search --topic-id <tid> --query "*" --from "2026-03-14 00:00:00" --to "2026-03-14 01:00:00"
 volclog --output jsonl log export --topic-id <tid> --query "*" --from 1710374400000 --to 1710378000000 --max-pages 10
+volclog log export-analysis --topic-id <tid> --query "*|select count(*) as cnt group by __time__ limit 100" --from 1710374400000 --to 1710378000000
 ```
 
-指标主题与 Prom API：
+### 指标主题与 Prom API
+
 ```bash
 volclog metric-topic list --project-id <pid>
-volclog metric-topic prom -h
 volclog metric-topic prom query --topic-id <metric_tid> --query 'up' --time 1710374400000
 volclog metric-topic prom query-range --topic-id <metric_tid> --query 'rate(up[5m])' --start 1710374400000 --end 1710378000000 --step 15
 ```
 
-## 输入与输出约定
+## 输入与输出
 
-### file:// 文件输入
-参数值以 `file://` 开头时会从文件读取内容。例如：
-```bash
-volclog index create --topic-id <tid> --body file://./index.json
-```
+### file:// 与 stdin
 
-### stdin 输入（-）
-部分参数支持使用 `-` 从 stdin 读取内容（便于与管道组合）。例如：
+支持把参数值从文件或 stdin 注入：
+
 ```bash
+volclog index create --topic-id <tid> --body file://./examples/index.json
 cat ./examples/create_topic.json | volclog topic create --request -
 ```
 
-### --request file://... 覆盖完整请求体
-部分命令支持 `--request file://...` 直接传入 JSON 请求体，以覆盖更多服务端参数（以 swagger 为准）：
+### 完整请求体覆盖
+
+对复杂接口，优先使用 `--request`：
+
 ```bash
 volclog topic create --request file://./examples/create_topic.json
 volclog log search --request file://./examples/search_logs.json
 ```
 
 ### 输出格式
-- `--output json`：默认，适合资源管理与查询
-- `--output jsonl`：每行一条 JSON，适合日志导出/流式处理
 
-### 错误输出
-请求失败时在 stderr 输出结构化 JSON（包含 `errorCode/errorMessage/requestId/statusCode/kind/hint`），便于自动化系统识别与告警。
+- `--output json`：默认，适合对象型结果
+- `--output jsonl`：适合导出、流式处理、管道消费
+- `--output-mode file`：stdout 只返回文件路径，实际内容写入 `./.volclog/output/`
 
-## 自动化与诊断
+### 错误结构
 
-### doctor
-快速检查当前环境与配置是否满足请求条件：
-```bash
-volclog doctor
-```
+请求失败时 stderr 输出结构化 JSON，包含：
+- `errorCode`
+- `errorMessage`
+- `requestId`
+- `statusCode`
+- `kind`
+- `hint`
 
-### trace（工件化复盘）
-为任意命令生成 trace 工件（脱敏 JSONL），并在输出中返回 trace 路径：
-```bash
-volclog --trace-dir ./.volclog/traces log search --topic-id <tid> --query "*" --from 1710374400000 --to 1710378000000
-```
-
-### 输出落盘（stdout/file）
-将命令输出写入文件并在 stdout 返回输出路径（适合 CI/Agent 降低 stdout 体积）：
-```bash
-volclog --output-mode file log search --topic-id <tid> --query "*" --from 1710374400000 --to 1710378000000
-```
-
-### 项目级默认配置
-在仓库根目录放置 `./.volclog/cli.config.json` 可为该项目提供非敏感默认值（如 region/endpoint/timeout/output/output_mode/trace_redact）。
-
-### secrets file（dotenv）
-通过 `--secrets-file` 从 dotenv 文件加载环境变量（不会覆盖当前已存在的环境变量）：
-```bash
-volclog --secrets-file ./.env project list
-```
+退出码约定：
+- `0`：成功
+- `1`：用法或参数错误
+- `2`：请求 / 运行时失败
+- `3`：输出 / 解码失败
 
 ## 常用命令
 
-### OpenAPI 兜底调用
-当某个接口 CLI 尚未封装时，可用 `api call` 直接调用：
 ```bash
-volclog api call --method GET --path /DescribeProject --query ProjectId=<pid>
-volclog api call --method POST --path /SearchLogs --body file://./examples/search_logs.json
+volclog configure -h
+volclog capabilities -h
+volclog capabilities --view text
+volclog api -h
+volclog project -h
+volclog topic -h
+volclog metric-topic -h
+volclog index -h
+volclog log -h
+volclog assistant -h
+volclog doctor -h
+volclog completion zsh
 ```
 
 ## 进一步阅读
-- 中文逐命令参数手册：[README_CN.md](./README_CN.md)
-- 示例文件（请求体、PromQL、match 等）：[examples](./examples/README.md)
+
+- 中文完整手册：[README_CN.md](./README_CN.md)
+- 示例文件目录：[examples](./examples/README.md)
 - 版本变更记录：[CHANGELOG.md](./CHANGELOG.md)

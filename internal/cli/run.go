@@ -82,7 +82,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		outputMode = "stdout"
 	}
 
-	ctx := newContext(stdout, stderr, format, gf.Profile, gf.Filter, gf.Debug)
+	ctx := newContext(stdout, stderr, format, gf.Profile, gf.Filter)
 	ctx.OutputMode = outputMode
 	ctx.TraceDir = gf.TraceDir
 	ctx.TraceRedact = gf.TraceRedact
@@ -110,8 +110,6 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		out, err = runConfigure(ctx, rest)
 	case "capabilities":
 		out, err = runCapabilities(ctx, rest)
-	case "commands":
-		out, err = runCommands(ctx, rest)
 	case "api":
 		out, err = runAPI(ctx, rest)
 	case "project":
@@ -140,17 +138,39 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			return ue.ExitCode
 		}
 		payload, code := classifyError(err, ctx.RequestID, ctx.StatusCode)
+		if strings.TrimSpace(g) == "api" {
+			if strings.TrimSpace(ctx.TraceDir) != "" {
+				_ = ctx.initTrace()
+			}
+			env := buildAPIErrorEnvelope(ctx, err, outputMode)
+			if err2 := output.Write(stdout, env, output.FormatJSON); err2 != nil {
+				writeCLIError(stderr, err2, payload.RequestID, payload.StatusCode, "decode", "output write failed")
+				return 3
+			}
+			return code
+		}
 		writeCLIError(stderr, err, payload.RequestID, payload.StatusCode, payload.Kind, payload.Hint)
 		return code
 	}
 	if ctx.Filter != "" {
 		out, err = output.ApplyFilter(out, ctx.Filter)
 		if err != nil {
+			if strings.TrimSpace(g) == "api" {
+				if strings.TrimSpace(ctx.TraceDir) != "" {
+					_ = ctx.initTrace()
+				}
+				env := buildAPIErrorEnvelope(ctx, err, outputMode)
+				if err2 := output.Write(stdout, env, output.FormatJSON); err2 != nil {
+					writeCLIError(stderr, err2, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
+					return 3
+				}
+				return 3
+			}
 			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "invalid --jmes-filter")
 			return 3
 		}
 	}
-	if g == "completion" || g == "commands" || g == "api" {
+	if g == "completion" || g == "capabilities" || g == "api" {
 		if s, ok := out.(string); ok {
 			if outputMode == "file" {
 				p, err := writeTextFile(gf.OutputFile, g, s)
@@ -200,36 +220,47 @@ func Run(args []string, stdout, stderr io.Writer) int {
 }
 
 func usageText() string {
-	return `Usage:
-  volclog [--profile <name>] [--output json|jsonl] [--output-mode stdout|file] [--output-file <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--dry-run] [--debug] <group> <command> [args]
-
-Groups:
-  configure   Manage local profiles
-  capabilities Output CLI capability contract
-  commands    List supported API commands (human-friendly)
-  api         Call TLS OpenAPI directly
-  project     Project operations (ID-first)
-  topic       Topic operations (ID-first)
-  metric-topic Metric topic operations (ID-first)
-  index       Index operations (ID-first)
-  log         Log search/export
-  assistant   AI assistant operations
-  doctor      Diagnose config and environment
-  completion  Generate shell completion
-
-Global Flags:
-  --profile <name>
-  --output <json|jsonl>
-  --output-mode <stdout|file>
-  --output-file <path>
-  --jmes-filter <expr>
-  --trace-dir <path>
-  --trace-redact <strict|default>
-  --secrets-file <path>
-  --dry-run
-  --debug
-  --help
-  --version
+	var b strings.Builder
+	b.WriteString("Usage:\n")
+	b.WriteString("  volclog [--profile <name>] [--output json|jsonl] [--output-mode stdout|file] [--output-file <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
+	b.WriteString("Groups:\n")
+	for _, group := range cliGroups() {
+		b.WriteString("  ")
+		b.WriteString(group.Name)
+		if len(group.Name) < 12 {
+			b.WriteString(strings.Repeat(" ", 12-len(group.Name)))
+		} else {
+			b.WriteString(" ")
+		}
+		b.WriteString(group.Description)
+		b.WriteString("\n")
+	}
+	b.WriteString("\nGlobal Flags:\n")
+	maxUsageLen := 0
+	for _, flag := range cliGlobalFlagSpecs() {
+		if flag.Name == "-h" {
+			continue
+		}
+		if len(flag.Usage) > maxUsageLen {
+			maxUsageLen = len(flag.Usage)
+		}
+	}
+	for _, flag := range cliGlobalFlagSpecs() {
+		if flag.Name == "-h" {
+			continue
+		}
+		b.WriteString("  ")
+		b.WriteString(flag.Usage)
+		if flag.Description != "" {
+			if len(flag.Usage) < maxUsageLen {
+				b.WriteString(strings.Repeat(" ", maxUsageLen-len(flag.Usage)))
+			}
+			b.WriteString("  ")
+			b.WriteString(flag.Description)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString(`
 
 Exit Code:
   0 success
@@ -241,7 +272,8 @@ Agent Tips:
   - Prefer --output-mode file for large output (stdout returns a file path)
   - Use --trace-dir to generate redacted trace artifacts for debugging
   - On failure, parse stderr JSON (errorCode/errorMessage/requestId/statusCode/kind/hint)
-`
+`)
+	return b.String()
 }
 
 func hasFlagWithValue(args []string, flag string) bool {

@@ -42,7 +42,7 @@ func runCapabilities(ctx *Context, args []string) (any, error) {
 				return nil, errors.New("missing --view value")
 			}
 			view = strings.ToLower(strings.TrimSpace(args[1]))
-			if view != "compact" && view != "full" {
+			if view != "compact" && view != "full" && view != "text" {
 				return nil, errors.New("invalid --view: " + args[1])
 			}
 			args = args[2:]
@@ -63,7 +63,47 @@ func runCapabilities(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if view == "text" {
+		return renderCapabilitiesText(doc), nil
+	}
 	return applyCapabilitiesView(doc, view), nil
+}
+
+func renderCapabilitiesText(doc apiCapabilitiesDoc) string {
+	if len(doc.Commands) == 0 {
+		return "No commands matched.\n"
+	}
+	grouped := map[string][]apiCapabilityCommand{}
+	for _, c := range doc.Commands {
+		g := normalizeToken(c.Group)
+		grouped[g] = append(grouped[g], c)
+	}
+	groups := make([]string, 0, len(grouped))
+	for g := range grouped {
+		groups = append(groups, g)
+	}
+	sort.Strings(groups)
+	var b strings.Builder
+	for _, g := range groups {
+		b.WriteString(g)
+		b.WriteString(":\n")
+		cmds := grouped[g]
+		sortCapabilities(cmds)
+		for _, c := range cmds {
+			b.WriteString("  - ")
+			b.WriteString(c.Action)
+			b.WriteString("  ")
+			b.WriteString(strings.ToUpper(strings.TrimSpace(c.Method)))
+			b.WriteString(" ")
+			b.WriteString(strings.TrimSpace(c.Path))
+			if s := strings.TrimSpace(c.Summary); s != "" {
+				b.WriteString("  # ")
+				b.WriteString(s)
+			}
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
 }
 
 func filterCapabilities(doc apiCapabilitiesDoc, group string, action string) (apiCapabilitiesDoc, error) {

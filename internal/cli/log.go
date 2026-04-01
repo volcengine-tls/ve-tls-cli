@@ -32,25 +32,18 @@ func isAnalysisQuery(cmd string) bool {
 }
 
 func runLog(ctx *Context, args []string) (any, error) {
-	if len(args) == 0 {
-		return nil, &usageError{Text: usageLog(), ExitCode: 1}
-	}
-	if args[0] == "-h" || args[0] == "--help" {
-		return nil, &usageError{Text: usageLog(), ExitCode: 0}
-	}
-	if hasHelp(args[1:]) {
-		return nil, &usageError{Text: usageLog(), ExitCode: 0}
-	}
-	switch args[0] {
-	case "search":
-		return logSearch(ctx, args[1:])
-	case "export":
-		return logExport(ctx, args[1:])
-	case "export-analysis":
-		return logExportAnalysis(ctx, args[1:])
-	default:
-		return nil, errors.New("unknown log command: " + args[0])
-	}
+	return runSubcommandGroup(args, usageLog(), nil, func(command string, commandArgs []string) (any, error) {
+		switch command {
+		case "search":
+			return logSearch(ctx, commandArgs)
+		case "export":
+			return logExport(ctx, commandArgs)
+		case "export-analysis":
+			return logExportAnalysis(ctx, commandArgs)
+		default:
+			return nil, errors.New("unknown log command: " + command)
+		}
+	})
 }
 
 func logSearch(ctx *Context, args []string) (any, error) {

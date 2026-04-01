@@ -8,25 +8,18 @@ import (
 )
 
 func runIndex(ctx *Context, args []string) (any, error) {
-	if len(args) == 0 {
-		return nil, &usageError{Text: usageIndex(), ExitCode: 1}
-	}
-	if args[0] == "-h" || args[0] == "--help" {
-		return nil, &usageError{Text: usageIndex(), ExitCode: 0}
-	}
-	if hasHelp(args[1:]) {
-		return nil, &usageError{Text: usageIndex(), ExitCode: 0}
-	}
-	switch args[0] {
-	case "get":
-		return indexGet(ctx, args[1:])
-	case "create":
-		return indexCreate(ctx, args[1:])
-	case "modify":
-		return indexModify(ctx, args[1:])
-	default:
-		return nil, errors.New("unknown index command: " + args[0])
-	}
+	return runSubcommandGroup(args, usageIndex(), nil, func(command string, commandArgs []string) (any, error) {
+		switch command {
+		case "get":
+			return indexGet(ctx, commandArgs)
+		case "create":
+			return indexCreate(ctx, commandArgs)
+		case "modify":
+			return indexModify(ctx, commandArgs)
+		default:
+			return nil, errors.New("unknown index command: " + command)
+		}
+	})
 }
 
 func indexGet(ctx *Context, args []string) (any, error) {

@@ -28,43 +28,63 @@ func runCompletion(ctx *Context, args []string) (any, int, error) {
 }
 
 func completionGroups() []string {
-	return []string{
-		"configure",
-		"capabilities",
-		"commands",
-		"api",
-		"project",
-		"topic",
-		"metric-topic",
-		"index",
-		"log",
-		"assistant",
-		"doctor",
-		"completion",
-	}
+	return cliGroupNames()
 }
 
 func completionGlobalFlags() []string {
-	return []string{
-		"--profile",
-		"--output",
-		"--output-mode",
-		"--output-file",
-		"--jmes-filter",
-		"--trace-dir",
-		"--trace-redact",
-		"--secrets-file",
-		"--dry-run",
-		"--debug",
-		"--help",
-		"-h",
-		"--version",
+	return cliGlobalFlags()
+}
+
+func completionBashCaseList(flags []string) string {
+	return strings.Join(flags, "|")
+}
+
+func completionPowerShellArray(values []string) string {
+	if len(values) == 0 {
+		return ""
 	}
+	quoted := make([]string, 0, len(values))
+	for _, value := range values {
+		quoted = append(quoted, "'"+value+"'")
+	}
+	return strings.Join(quoted, ",")
+}
+
+func completionZshGlobalArgspec() []string {
+	specs := cliGlobalFlagSpecs()
+	lines := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		switch spec.Name {
+		case "--help", "-h":
+			continue
+		case "--profile":
+			lines = append(lines, "'--profile[profile name]:profile:'")
+		case "--output":
+			lines = append(lines, "'--output[output format]:format:(json jsonl)'")
+		case "--output-mode":
+			lines = append(lines, "'--output-mode[output destination]:mode:(stdout file)'")
+		case "--output-file":
+			lines = append(lines, "'--output-file[output file path]:file:_files'")
+		case "--jmes-filter":
+			lines = append(lines, "'--jmes-filter[output filter expr]:expr:'")
+		case "--trace-dir":
+			lines = append(lines, "'--trace-dir[trace artifact dir]:dir:_files -/'")
+		case "--trace-redact":
+			lines = append(lines, "'--trace-redact[trace redact mode]:mode:(strict default)'")
+		case "--secrets-file":
+			lines = append(lines, "'--secrets-file[dotenv file]:file:_files'")
+		default:
+			lines = append(lines, "'"+spec.Name+"["+spec.Description+"]'")
+		}
+	}
+	return lines
 }
 
 func completionBash() string {
 	groups := strings.Join(completionGroups(), " ")
 	flags := strings.Join(completionGlobalFlags(), " ")
+	flagsWithValue := completionBashCaseList(cliGlobalFlagsWithValue())
+	bareFlags := completionBashCaseList(cliGlobalBareFlags())
 	return `# bash completion for volclog
 _volclog_complete() {
   local cur prev
@@ -82,10 +102,10 @@ _volclog_complete() {
       break
     fi
     case "$w" in
-      --profile|--output|--output-mode|--output-file|--jmes-filter|--trace-dir|--trace-redact|--secrets-file)
+      ` + flagsWithValue + `)
         i=$((i+2))
         ;;
-      --dry-run|--debug|--help|-h|--version)
+      ` + bareFlags + `)
         i=$((i+1))
         ;;
       *)
@@ -144,6 +164,10 @@ complete -F _volclog_complete volclog
 
 func completionZsh() string {
 	groups := strings.Join(completionGroups(), " ")
+	globalFlags := strings.Join(completionGlobalFlags(), " ")
+	flagsWithValue := completionBashCaseList(cliGlobalFlagsWithValue())
+	bareFlags := completionBashCaseList(cliGlobalBareFlags())
+	zshGlobalArgspec := strings.Join(completionZshGlobalArgspec(), "\n    ")
 	return `#compdef volclog
 _volclog() {
   local -a groups global_flags
@@ -153,7 +177,7 @@ _volclog() {
   local group cmd i w
 
   groups=(` + groups + `)
-  global_flags=(--profile --output --output-mode --output-file --jmes-filter --trace-dir --trace-redact --secrets-file --dry-run --debug --help -h --version)
+  global_flags=(` + globalFlags + `)
 
   configure_cmds=(set use show list delete)
   api_cmds=(call)
@@ -176,10 +200,10 @@ _volclog() {
   while (( i <= $#words )); do
     w="$words[$i]"
     case "$w" in
-      (--profile|--output|--output-mode|--output-file|--jmes-filter|--trace-dir|--trace-redact|--secrets-file)
+      (` + flagsWithValue + `)
         (( i += 2 ))
         ;;
-      (--dry-run|--debug|--help|-h|--version)
+      (` + bareFlags + `)
         (( i += 1 ))
         ;;
       (-*)
@@ -211,17 +235,7 @@ _volclog() {
   local -a argspec
   argspec=(
     '(-h --help)'{-h,--help}'[show help]'
-    '--profile[profile name]:profile:'
-    '--output[output format]:format:(json jsonl)'
-    '--output-mode[output destination]:mode:(stdout file)'
-    '--output-file[output file path]:file:_files'
-    '--jmes-filter[output filter expr]:expr:'
-    '--trace-dir[trace artifact dir]:dir:_files -/'
-    '--trace-redact[trace redact mode]:mode:(strict default)'
-    '--secrets-file[dotenv file]:file:_files'
-    '--dry-run[dry-run (api group only)]'
-    '--debug[enable debug]'
-    '--version[show version]'
+    ` + zshGlobalArgspec + `
     '1:group:->group'
     '2:command:->cmd'
     '*::args:->args'
@@ -229,17 +243,7 @@ _volclog() {
   if [[ "$group" == "api" && "$cmd" == "call" ]]; then
     argspec=(
       '(-h --help)'{-h,--help}'[show help]'
-      '--profile[profile name]:profile:'
-      '--output[output format]:format:(json jsonl)'
-      '--output-mode[output destination]:mode:(stdout file)'
-      '--output-file[output file path]:file:_files'
-      '--jmes-filter[output filter expr]:expr:'
-      '--trace-dir[trace artifact dir]:dir:_files -/'
-      '--trace-redact[trace redact mode]:mode:(strict default)'
-      '--secrets-file[dotenv file]:file:_files'
-      '--dry-run[dry-run (api group only)]'
-      '--debug[enable debug]'
-      '--version[show version]'
+      ` + zshGlobalArgspec + `
       '--method[HTTP method]:method:(GET POST PUT DELETE)'
       '--path[API path (starts with "/")]:path:->apipath'
       '--query[query k=v (repeatable)]:query:'
@@ -253,17 +257,7 @@ _volclog() {
   if [[ "$group" == "configure" && "$cmd" == "set" ]]; then
     argspec=(
       '(-h --help)'{-h,--help}'[show help]'
-      '--profile[profile name]:profile:'
-      '--output[output format]:format:(json jsonl)'
-      '--output-mode[output destination]:mode:(stdout file)'
-      '--output-file[output file path]:file:_files'
-      '--jmes-filter[output filter expr]:expr:'
-      '--trace-dir[trace artifact dir]:dir:_files -/'
-      '--trace-redact[trace redact mode]:mode:(strict default)'
-      '--secrets-file[dotenv file]:file:_files'
-      '--dry-run[dry-run (api group only)]'
-      '--debug[enable debug]'
-      '--version[show version]'
+      ` + zshGlobalArgspec + `
       '--cred-ref[credential name (reuse AK/SK)]:name:'
       '--ak[access key id]:ak:'
       '--sk[secret access key]:sk:'
@@ -279,17 +273,7 @@ _volclog() {
   if [[ "$group" == "metric-topic" && "$cmd" == "prom" ]]; then
     argspec=(
       '(-h --help)'{-h,--help}'[show help]'
-      '--profile[profile name]:profile:'
-      '--output[output format]:format:(json jsonl)'
-      '--output-mode[output destination]:mode:(stdout file)'
-      '--output-file[output file path]:file:_files'
-      '--jmes-filter[output filter expr]:expr:'
-      '--trace-dir[trace artifact dir]:dir:_files -/'
-      '--trace-redact[trace redact mode]:mode:(strict default)'
-      '--secrets-file[dotenv file]:file:_files'
-      '--dry-run[dry-run (api group only)]'
-      '--debug[enable debug]'
-      '--version[show version]'
+      ` + zshGlobalArgspec + `
       '1:group:->group'
       '2:command:->cmd'
       '3:subcommand:->subcmd'
@@ -365,13 +349,15 @@ func completionFish() string {
 
 func completionPowerShell() string {
 	groups := strings.Join(completionGroups(), "', '")
+	globalFlagsWithValue := completionPowerShellArray(cliGlobalFlagsWithValue())
+	globalFlagsBare := completionPowerShellArray(cliGlobalBareFlags())
 	return `# PowerShell completion for volclog
 Register-ArgumentCompleter -Native -CommandName volclog -ScriptBlock {
   param($wordToComplete, $commandAst, $cursorPosition)
 
   $groups = @('` + groups + `')
-  $globalFlagsWithValue = @('--profile','--output','--output-mode','--output-file','--jmes-filter','--trace-dir','--trace-redact','--secrets-file')
-  $globalFlagsBare = @('--dry-run','--debug','--help','-h','--version')
+  $globalFlagsWithValue = @(` + globalFlagsWithValue + `)
+  $globalFlagsBare = @(` + globalFlagsBare + `)
   $apiCallFlags = @('--method','--path','--query','--header','--body')
   $httpMethods = @('GET','POST','PUT','DELETE')
   $apiPaths = @('/DescribeProjects','/DescribeProject','/CreateProject','/ModifyProject','/DeleteProject','/DescribeTopics','/DescribeTopic','/CreateTopic','/ModifyTopic','/DeleteTopic','/DescribeIndex','/CreateIndex','/ModifyIndex','/SearchLogs')

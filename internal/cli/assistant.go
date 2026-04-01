@@ -21,18 +21,14 @@ import (
 )
 
 func runAssistant(ctx *Context, args []string) (any, error) {
-	if len(args) == 0 {
-		return nil, &usageError{Text: usageAssistant(), ExitCode: 1}
-	}
-	if args[0] == "-h" || args[0] == "--help" {
-		return nil, &usageError{Text: usageAssistant(), ExitCode: 0}
-	}
-	switch args[0] {
-	case "describe-session-answer":
-		return assistantDescribeSessionAnswer(ctx, args[1:])
-	default:
-		return nil, errors.New("unknown assistant command: " + args[0])
-	}
+	return runSubcommandGroup(args, usageAssistant(), nil, func(command string, commandArgs []string) (any, error) {
+		switch command {
+		case "describe-session-answer":
+			return assistantDescribeSessionAnswer(ctx, commandArgs)
+		default:
+			return nil, errors.New("unknown assistant command: " + command)
+		}
+	})
 }
 
 func assistantDescribeSessionAnswer(ctx *Context, args []string) (any, error) {

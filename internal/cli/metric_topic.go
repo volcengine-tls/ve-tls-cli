@@ -10,129 +10,32 @@ import (
 )
 
 func runMetricTopic(ctx *Context, args []string) (any, error) {
-	if len(args) == 0 {
-		return nil, &usageError{Text: usageMetricTopic(), ExitCode: 1}
-	}
-	if args[0] == "-h" || args[0] == "--help" {
-		return nil, &usageError{Text: usageMetricTopic(), ExitCode: 0}
-	}
-	if args[0] != "prom" && hasHelp(args[1:]) {
-		return nil, &usageError{Text: usageMetricTopic(), ExitCode: 0}
-	}
-	switch args[0] {
-	case "list":
-		return metricTopicList(ctx, args[1:])
-	case "get":
-		return metricTopicGet(ctx, args[1:])
-	case "create":
-		return metricTopicCreate(ctx, args[1:])
-	case "modify":
-		return metricTopicModify(ctx, args[1:])
-	case "delete":
-		return metricTopicDelete(ctx, args[1:])
-	case "search":
-		return metricTopicSearch(ctx, args[1:])
-	case "prom":
-		return metricTopicProm(ctx, args[1:])
-	default:
-		return nil, errors.New("unknown metric-topic command: " + args[0])
-	}
+	return runSubcommandGroup(args, usageMetricTopic(), map[string]struct{}{"prom": {}}, func(command string, commandArgs []string) (any, error) {
+		switch command {
+		case "list":
+			return metricTopicList(ctx, commandArgs)
+		case "get":
+			return metricTopicGet(ctx, commandArgs)
+		case "create":
+			return metricTopicCreate(ctx, commandArgs)
+		case "modify":
+			return metricTopicModify(ctx, commandArgs)
+		case "delete":
+			return metricTopicDelete(ctx, commandArgs)
+		case "search":
+			return metricTopicSearch(ctx, commandArgs)
+		case "prom":
+			return metricTopicProm(ctx, commandArgs)
+		default:
+			return nil, errors.New("unknown metric-topic command: " + command)
+		}
+	})
 }
 
 func metricTopicList(ctx *Context, args []string) (any, error) {
-	query := map[string]string{}
-	for len(args) > 0 {
-		switch args[0] {
-		case "--page-number":
-			if len(args) < 2 {
-				return nil, errors.New("missing --page-number value")
-			}
-			query["PageNumber"] = args[1]
-			args = args[2:]
-		case "--page-size":
-			if len(args) < 2 {
-				return nil, errors.New("missing --page-size value")
-			}
-			query["PageSize"] = args[1]
-			args = args[2:]
-		case "--project-id":
-			if len(args) < 2 {
-				return nil, errors.New("missing --project-id value")
-			}
-			query["ProjectId"] = args[1]
-			args = args[2:]
-		case "--project-name":
-			if len(args) < 2 {
-				return nil, errors.New("missing --project-name value")
-			}
-			query["ProjectName"] = args[1]
-			args = args[2:]
-		case "--topic-name":
-			if len(args) < 2 {
-				return nil, errors.New("missing --topic-name value")
-			}
-			query["TopicName"] = args[1]
-			args = args[2:]
-		case "--topic-id":
-			if len(args) < 2 {
-				return nil, errors.New("missing --topic-id value")
-			}
-			query["TopicId"] = args[1]
-			args = args[2:]
-		case "--region":
-			if len(args) < 2 {
-				return nil, errors.New("missing --region value")
-			}
-			query["Region"] = args[1]
-			args = args[2:]
-		case "--fuzzy-search-key":
-			if len(args) < 2 {
-				return nil, errors.New("missing --fuzzy-search-key value")
-			}
-			query["FuzzySearchKey"] = args[1]
-			args = args[2:]
-		case "--description":
-			if len(args) < 2 {
-				return nil, errors.New("missing --description value")
-			}
-			query["Description"] = args[1]
-			args = args[2:]
-		case "--tags":
-			if len(args) < 2 {
-				return nil, errors.New("missing --tags value")
-			}
-			s, err := util.ReadStringMaybeFile(args[1])
-			if err != nil {
-				return nil, err
-			}
-			if strings.TrimSpace(s) != "" {
-				query["Tags"] = s
-			}
-			args = args[2:]
-		case "--is-full-name":
-			query["IsFullName"] = "true"
-			args = args[1:]
-		case "--no-is-full-name":
-			query["IsFullName"] = "false"
-			args = args[1:]
-		case "--favourite":
-			query["Favourite"] = "true"
-			args = args[1:]
-		case "--no-favourite":
-			query["Favourite"] = "false"
-			args = args[1:]
-		case "--order-by-project":
-			query["OrderByProject"] = "true"
-			args = args[1:]
-		case "--no-order-by-project":
-			query["OrderByProject"] = "false"
-			args = args[1:]
-		default:
-			return nil, errors.New("unknown flag: " + args[0])
-		}
-	}
-	if strings.TrimSpace(query["TopicName"]) != "" && strings.TrimSpace(query["TopicId"]) != "" {
-		return nil, errors.New("TopicName and TopicId cannot be provided together")
+	query, err := parseTopicListQuery(args, false)
+	if err != nil {
+		return nil, err
 	}
 	body, _ := util.MustJSON(map[string]any{})
 	return ctx.Do("GET", "/DescribeMetricTopics", query, nil, body)

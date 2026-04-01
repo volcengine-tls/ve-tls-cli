@@ -34,7 +34,7 @@ volclog api --output json call --method GET --path /DescribeProjects
 全局参数控制“这次命令的执行方式”，不改变业务语义：
 - 选用哪个身份/环境：`--profile`、`--secrets-file`
 - 输出怎么打印/怎么落盘：`--output`、`--output-mode`、`--output-file`、`--jmes-filter`
-- 出问题怎么排：`--trace-dir`、`--trace-redact`、`--debug`
+- 出问题怎么排：`doctor`、`--trace-dir`、`--trace-redact`
 
 业务语义参数属于具体命令，例如 `project list --page-size 10`、`log search --topic-id ...`。
 
@@ -214,10 +214,6 @@ volclog --secrets-file ./.env.tenant-b project list
 ```
 
 注意：如果当前 shell 已经设置了同名环境变量，dotenv 中的同名值不会覆盖它。
-
-## 7. Debug（--debug）
-
-`--debug` 用于打印更多调试信息（适合本地排障），但不建议在共享日志环境长期开启。
 
 ## 6. 多账号/多租户配置主路径（Profile + cred-ref）
 

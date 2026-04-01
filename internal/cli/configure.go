@@ -13,33 +13,26 @@ func runConfigure(ctx *Context, args []string) (any, error) {
 	if err := ctx.LoadConfig(); err != nil {
 		return nil, err
 	}
-	if len(args) == 0 {
-		return nil, &usageError{Text: usageConfigure(), ExitCode: 1}
-	}
-	if args[0] == "-h" || args[0] == "--help" {
-		return nil, &usageError{Text: usageConfigure(), ExitCode: 0}
-	}
-	if hasHelp(args[1:]) {
-		return nil, &usageError{Text: usageConfigure(), ExitCode: 0}
-	}
-	switch args[0] {
-	case "set":
-		return configureSet(ctx, args[1:])
-	case "use":
-		return configureUse(ctx, args[1:])
-	case "show":
-		return configureShow(ctx, args[1:])
-	case "list":
-		return configureList(ctx, args[1:])
-	case "delete":
-		return configureDelete(ctx, args[1:])
-	case "profile":
-		return runConfigureProfile(ctx, args[1:])
-	case "cred":
-		return runConfigureCred(ctx, args[1:])
-	default:
-		return nil, errors.New("unknown configure command: " + args[0])
-	}
+	return runSubcommandGroup(args, usageConfigure(), nil, func(command string, commandArgs []string) (any, error) {
+		switch command {
+		case "set":
+			return configureSet(ctx, commandArgs)
+		case "use":
+			return configureUse(ctx, commandArgs)
+		case "show":
+			return configureShow(ctx, commandArgs)
+		case "list":
+			return configureList(ctx, commandArgs)
+		case "delete":
+			return configureDelete(ctx, commandArgs)
+		case "profile":
+			return runConfigureProfile(ctx, commandArgs)
+		case "cred":
+			return runConfigureCred(ctx, commandArgs)
+		default:
+			return nil, errors.New("unknown configure command: " + command)
+		}
+	})
 }
 
 func runConfigureProfile(ctx *Context, args []string) (any, error) {

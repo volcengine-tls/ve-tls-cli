@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"volclog/internal/output"
 )
 
 func TestCompletionZshIncludesGroupsFlagsAndSubcommands(t *testing.T) {
-	out, code, err := runCompletion(newContext(nil, nil, "", "", "", false), []string{"zsh"})
+	out, code, err := runCompletion(newContext(nil, nil, output.Format(""), "", ""), []string{"zsh"})
 	if err != nil || code != 0 {
 		t.Fatalf("unexpected: code=%d err=%v", code, err)
 	}
@@ -41,8 +43,8 @@ func TestCompletionZshIncludesGroupsFlagsAndSubcommands(t *testing.T) {
 	}
 }
 
-func TestCompletionBashCanCompleteGroupsAfterGlobalFlags(t *testing.T) {
-	out, code, err := runCompletion(newContext(nil, nil, "", "", "", false), []string{"bash"})
+func TestCompletionBashIncludesGroupsFlagsAndCases(t *testing.T) {
+	out, code, err := runCompletion(newContext(nil, nil, output.Format(""), "", ""), []string{"bash"})
 	if err != nil || code != 0 {
 		t.Fatalf("unexpected: code=%d err=%v", code, err)
 	}
@@ -62,8 +64,8 @@ func TestCompletionBashCanCompleteGroupsAfterGlobalFlags(t *testing.T) {
 	}
 }
 
-func TestCompletionFishContainsApiCallCompletions(t *testing.T) {
-	out, code, err := runCompletion(newContext(nil, nil, "", "", "", false), []string{"fish"})
+func TestCompletionFishIncludesProjectSubcommands(t *testing.T) {
+	out, code, err := runCompletion(newContext(nil, nil, output.Format(""), "", ""), []string{"fish"})
 	if err != nil || code != 0 {
 		t.Fatalf("unexpected: code=%d err=%v", code, err)
 	}
@@ -84,8 +86,8 @@ func TestCompletionFishContainsApiCallCompletions(t *testing.T) {
 	}
 }
 
-func TestCompletionPowerShellContainsApiCallCompletions(t *testing.T) {
-	out, code, err := runCompletion(newContext(nil, nil, "", "", "", false), []string{"powershell"})
+func TestCompletionPowerShellNormalizesBoolFlagCompletions(t *testing.T) {
+	out, code, err := runCompletion(newContext(nil, nil, output.Format(""), "", ""), []string{"powershell"})
 	if err != nil || code != 0 {
 		t.Fatalf("unexpected: code=%d err=%v", code, err)
 	}
@@ -106,8 +108,8 @@ func TestCompletionPowerShellContainsApiCallCompletions(t *testing.T) {
 	}
 }
 
-func TestCompletionPowerShellContainsTopLevelCommands(t *testing.T) {
-	out, code, err := runCompletion(newContext(nil, nil, "", "", "", false), []string{"powershell"})
+func TestCompletionPowerShellIncludesGlobalFlagsAndSubcommands(t *testing.T) {
+	out, code, err := runCompletion(newContext(nil, nil, output.Format(""), "", ""), []string{"powershell"})
 	if err != nil || code != 0 {
 		t.Fatalf("unexpected: code=%d err=%v", code, err)
 	}

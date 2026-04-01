@@ -85,14 +85,15 @@ Agent:
 
 func usageCapabilities() string {
 	return u(`Usage:
-  tlsctl capabilities [--group <group>] [--action <action>] [--view <compact|full>] [--hints-file <path>]
+  tlsctl capabilities [--group <group>] [--action <action>] [--view <compact|full|text>] [--hints-file <path>]
 
 Description:
-  Output machine-readable API capability contract.
+  Output API capability contract.
   Includes metadata: contract_version/param_doc_source/supports_dry_run/output_mode_hint.
   Includes declarative hints: hints_mode/risk_level/idempotency (advisory only).
   view=compact (default) hides verbose params/request_params_doc for token saving.
   view=full returns complete parameter constraints and official doc intros.
+  view=text returns human-friendly command list text.
   Hints file resolution when --hints-file is omitted: VOLCLOG_HINTS_FILE > project .volclog/cli.config.json hints_file.
 
 Examples:
@@ -100,22 +101,9 @@ Examples:
   tlsctl capabilities --group log
   tlsctl capabilities --group log --action SearchLogs
   tlsctl capabilities --group log --action SearchLogs --view full
+  tlsctl capabilities --view text
   tlsctl capabilities --action create
   tlsctl capabilities --hints-file ./docs/agentic-stage1/capability-hints-overrides.example.json
-`)
-}
-
-func usageCommands() string {
-	return u(`Usage:
-  tlsctl commands [--group <group>] [--action <action>]
-
-Description:
-  List API commands in human-friendly text.
-
-Examples:
-  tlsctl commands
-  tlsctl commands --group project
-  tlsctl commands --group log --action SearchLogs
 `)
 }
 

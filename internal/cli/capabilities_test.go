@@ -118,6 +118,26 @@ func TestCapabilitiesFullViewIncludesParams(t *testing.T) {
 	}
 }
 
+func TestCapabilitiesTextViewReturnsHumanReadableText(t *testing.T) {
+	out, err := runCapabilities(nil, []string{"--group", "project", "--view", "text"})
+	if err != nil {
+		t.Fatalf("run capabilities error: %v", err)
+	}
+	s, ok := out.(string)
+	if !ok {
+		t.Fatalf("unexpected type: %T", out)
+	}
+	for _, want := range []string{
+		"project:\n",
+		"DescribeProject",
+		"GET /DescribeProject",
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("text view missing %q: %s", want, s)
+		}
+	}
+}
+
 func TestFilterCapabilitiesPreservesMeta(t *testing.T) {
 	doc := apiCapabilitiesDoc{
 		Version: "stage1",
@@ -343,5 +363,20 @@ func TestCapabilitiesHintsFlagOverridesEnvAndProject(t *testing.T) {
 	}
 	if doc.Commands[0].RiskLevel != "low" || doc.Commands[0].Idempotency != "idempotent" {
 		t.Fatalf("flag hints should win: risk=%q idempotency=%q", doc.Commands[0].RiskLevel, doc.Commands[0].Idempotency)
+	}
+}
+
+func TestRunCapabilitiesTextViewWritesPlainText(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"capabilities", "--group", "project", "--view", "text"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("unexpected code: %d, stderr=%s", code, stderr.String())
+	}
+	if strings.HasPrefix(stdout.String(), "\"") {
+		t.Fatalf("unexpected json-encoded string: %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "project:\n") {
+		t.Fatalf("unexpected output: %q", stdout.String())
 	}
 }

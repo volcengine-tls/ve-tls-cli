@@ -203,7 +203,7 @@ func TestTraceMetaInOutput(t *testing.T) {
 
 func TestTraceDoesNotIncludeBody(t *testing.T) {
 	dir := t.TempDir()
-	ctx := newContext(&bytes.Buffer{}, &bytes.Buffer{}, output.FormatJSON, "", "", false)
+	ctx := newContext(&bytes.Buffer{}, &bytes.Buffer{}, output.FormatJSON, "", "")
 	ctx.TraceDir = dir
 	ctx.traceRequest("POST", "/x", map[string]string{"a": "b"}, []byte("VOLCENGINE_ACCESS_KEY_SECRET=abc"))
 	if ctx.TracePath == "" {

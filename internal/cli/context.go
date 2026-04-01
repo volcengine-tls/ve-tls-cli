@@ -21,7 +21,6 @@ type Context struct {
 	OutputMode  string
 	Profile     string
 	Filter      string
-	Debug       bool
 	TraceDir    string
 	TraceRedact string
 	TracePath   string
@@ -39,14 +38,13 @@ type Context struct {
 	apiIOMeta apiIOMeta
 }
 
-func newContext(stdout, stderr io.Writer, format output.Format, profile, filter string, debug bool) *Context {
+func newContext(stdout, stderr io.Writer, format output.Format, profile, filter string) *Context {
 	return &Context{
 		Stdout:  stdout,
 		Stderr:  stderr,
 		Format:  format,
 		Profile: profile,
 		Filter:  filter,
-		Debug:   debug,
 	}
 }
 
