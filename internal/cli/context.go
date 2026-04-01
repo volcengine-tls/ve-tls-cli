@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"volclog/internal/config"
-	"volclog/internal/output"
-	"volclog/internal/tlsapi"
-	"volclog/internal/util"
+	"github.com/volcengine-tls/ve-tls-cli/internal/config"
+	"github.com/volcengine-tls/ve-tls-cli/internal/output"
+	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
+	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 type Context struct {
@@ -19,6 +19,7 @@ type Context struct {
 	Stderr      io.Writer
 	Format      output.Format
 	OutputMode  string
+	OutputDir   string
 	Profile     string
 	Filter      string
 	TraceDir    string

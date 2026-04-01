@@ -14,6 +14,7 @@ type ProjectConfig struct {
 	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
 	Output         string `json:"output,omitempty"`
 	OutputMode     string `json:"output_mode,omitempty"`
+	OutputDir      string `json:"output_dir,omitempty"`
 	TraceRedact    string `json:"trace_redact,omitempty"`
 	HintsFile      string `json:"hints_file,omitempty"`
 }
@@ -50,7 +51,21 @@ func LoadProjectConfig(wd string) (ProjectConfig, string, error) {
 	cfg.Endpoint = strings.TrimSpace(cfg.Endpoint)
 	cfg.Output = strings.TrimSpace(cfg.Output)
 	cfg.OutputMode = strings.TrimSpace(cfg.OutputMode)
+	cfg.OutputDir = strings.TrimSpace(cfg.OutputDir)
 	cfg.TraceRedact = strings.TrimSpace(cfg.TraceRedact)
 	cfg.HintsFile = strings.TrimSpace(cfg.HintsFile)
 	return cfg, p, nil
+}
+
+func SaveProjectConfigAt(path string, cfg ProjectConfig) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+	return os.WriteFile(path, b, 0o600)
 }

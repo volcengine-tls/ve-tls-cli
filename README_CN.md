@@ -35,7 +35,7 @@
   - [6.1 输入：普通参数 vs file:// 文件输入](#61-输入普通参数-vs-file-文件输入)
   - [6.2 时间格式（from/to/start/end/time）](#62-时间格式fromtostartendtime)
   - [6.3 输出：JSON / JSONL](#63-输出json--jsonl)
-  - [6.4 输出过滤：--jmes-filter（轻量路径选择）](#64-输出过滤--jmes-filter轻量路径选择)
+  - [6.4 输出过滤：--jmes-filter（JMESPath）](#64-输出过滤--jmes-filterjmespath)
   - [6.5 错误结构与退出码（给自动化集成用）](#65-错误结构与退出码给自动化集成用)
   - [6.6 自动化与诊断（Agent 推荐）](#66-自动化与诊断agent-推荐)
 - [7. 命令参考（按功能分组）](#7-命令参考按功能分组)
@@ -136,6 +136,13 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -BaseUrl "https://g
 ```bash
 bash scripts/install-local.sh
 ~/.local/bin/volclog --help
+```
+
+如果希望直接安装到 GOPATH/GOBIN，推荐使用：
+
+```bash
+go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
+volclog --help
 ```
 
 也可以手工构建：
@@ -467,7 +474,7 @@ volclog configure set --profile tenant-a-cn-private --ak <ak_a> --sk <sk_a> --re
 
 ##### 5.4.1.1 用 --cred-ref 复用 AK/SK（推荐）
 
-当一个 AK/SK 需要跨多个 region/endpoint 共用时，推荐用 `--cred-ref` 将 AK/SK 存为“用户级凭证”，多个 profile 只引用同一份 AK/SK（类似 SLS CLI 在配置文件中用 DEFAULT 变量复用密钥的做法）。
+当一个 AK/SK 需要跨多个 region/endpoint 共用时，推荐用 `--cred-ref` 将 AK/SK 存为“用户级凭证”，多个 profile 只引用同一份 AK/SK（可在配置中集中管理默认凭证以避免重复书写密钥）。
 
 首次创建凭证并绑定一个 profile：
 
@@ -616,15 +623,23 @@ volclog project list --output json
 volclog --output jsonl log export --topic-id <tid> --query "*" --from 1710374400000 --to 1710378000000
 ```
 
-### 6.4 输出过滤：--jmes-filter（轻量路径选择）
+### 6.4 输出过滤：--jmes-filter（JMESPath）
 
-当前 `--jmes-filter` 支持轻量路径选择（例如 `a.b[0].c`），用于从 JSON 结果中选取局部字段。
+当前 `--jmes-filter` 支持真实 JMESPath 表达式，可用于字段提取、数组投影、对象重组等场景。
 
 示例：
 
 ```bash
 volclog project list --jmes-filter "Projects[0].ProjectId"
+volclog project list --jmes-filter "Projects[].ProjectName"
+volclog project list --jmes-filter "Projects[].{ProjectId: ProjectId, ProjectName: ProjectName}"
 ```
+
+常见模式：
+
+- `Projects[0].ProjectId`：取第一条记录的单个字段
+- `Projects[].ProjectName`：投影出所有项目名
+- `Projects[].{ProjectId: ProjectId, ProjectName: ProjectName}`：重组成更适合脚本消费的对象数组
 
 ### 6.5 错误结构与退出码（给自动化集成用）
 
@@ -643,7 +658,7 @@ volclog project list --jmes-filter "Projects[0].ProjectId"
 
 - `1`：用法/参数错误（缺参、flag 值非法、stdin 为空或 JSON 非法等）
 - `2`：请求或运行时失败（鉴权/网络/服务端错误等）
-- `3`：输出/过滤/解码失败（例如 `--jmes-filter` 表达式错误、输出写入失败等）
+- `3`：输出/过滤/解码失败（例如 `--jmes-filter` 的 JMESPath 表达式错误、输出写入失败等）
 
 ### 6.6 自动化与诊断（Agent 推荐）
 
@@ -698,6 +713,13 @@ volclog --output-mode file log search --topic-id <tid> --query "*" --from 171037
 volclog --output-mode file --output-file ./out.json project list
 ```
 
+指定默认输出目录（当未提供 --output-file 时生效）：
+
+```bash
+export VOLCLOG_OUTPUT_DIR="$HOME/.volclog/output"
+volclog --output-mode file project list
+```
+
 补充说明：
 
 - 普通 group 在 `--output-mode file` 下，stdout 通常只返回路径
@@ -705,7 +727,7 @@ volclog --output-mode file --output-file ./out.json project list
 
 #### 6.6.4 项目级默认配置（.volclog/cli.config.json）
 
-在项目根目录放置 `./.volclog/cli.config.json`，用于提供非敏感默认值（例如 region/endpoint/timeout/output/output_mode/trace_redact/hints_file）：
+在项目根目录放置 `./.volclog/cli.config.json`，用于提供非敏感默认值（例如 region/endpoint/timeout/output/output_mode/output_dir/trace_redact/hints_file）：
 
 ```json
 {
@@ -833,7 +855,7 @@ volclog [--profile <name>] [--output json|jsonl] [--output-mode stdout|file] [--
 - `--output json|jsonl`：输出格式
 - `--output-mode stdout|file`：输出到 stdout 或落盘（file 模式 stdout 输出文件路径）
 - `--output-file <path>`：file 模式的输出文件路径（未提供则写入 `./.volclog/output/`）
-- `--jmes-filter <expr>`：输出过滤
+- `--jmes-filter <expr>`：JMESPath 输出过滤
 - `--trace-dir <path>`：生成 trace 工件（脱敏 JSONL）
 - `--trace-redact strict|default`：trace 脱敏级别（默认 strict）
 - `--secrets-file <path>`：从 dotenv 文件加载环境变量（不覆盖已存在 env）
@@ -943,7 +965,7 @@ volclog [--profile <name>] [--output json|jsonl] [--output-mode stdout|file] [--
 | `--output json\|jsonl` |  否 | 输出格式。资源管理建议 `json`；日志导出建议 `jsonl`                                 | `--output jsonl`                        |
 | `--output-mode`        |  否 | 输出到 stdout 或落盘（file 模式 stdout 输出文件路径）                             | `--output-mode file`                    |
 | `--output-file`        |  否 | file 模式的输出文件路径（未提供则写入 `./.volclog/output/`）                          | `--output-file ./out.json`             |
-| `--jmes-filter <expr>` |  否 | 输出过滤（当前为轻量路径选择，如 `a.b[0].c`）                                      | `--jmes-filter "Projects[0].ProjectId"` |
+| `--jmes-filter <expr>` |  否 | JMESPath 输出过滤，可做字段提取、投影与对象重组                                      | `--jmes-filter "Projects[].{ProjectId: ProjectId, ProjectName: ProjectName}"` |
 | `--trace-dir`          |  否 | 生成 trace 工件（脱敏 JSONL），输出中带 `meta.trace.path`                         | `--trace-dir ./.volclog/traces`         |
 | `--trace-redact`       |  否 | trace 脱敏级别（默认 strict）                                            | `--trace-redact strict`                 |
 | `--secrets-file`       |  否 | 从 dotenv 文件加载环境变量（不覆盖已存在 env）                                   | `--secrets-file ./.env`                 |
@@ -957,7 +979,7 @@ volclog [--profile <name>] [--output json|jsonl] [--output-mode stdout|file] [--
 - `--output json|jsonl`：资源管理（project/topic/index/metric-topic）优先用 `json`；日志/指标导出或大结果集优先用 `jsonl`，便于管道处理（`jq -c`、`awk`、`grep` 等）。
 - `--output-mode file`：当输出很大（日志导出、SearchLogs/Prom 查询返回大量数据）或在 Agent/CI 中需要控制 stdout 体积时使用；普通 group 的 stdout 通常只返回路径，`api` 组则返回带 `artifacts[].path` 的 envelope。
 - `--output-file`：配合 `--output-mode file` 使用，固定输出路径；未指定时会写入 `./.volclog/output/`。
-- `--jmes-filter <expr>`：用于“只取一个字段”或“取第一条记录”的轻量选择（当前为路径选择，不是完整 JMESPath 语法）；推荐在脚本里提取 `ProjectId/TopicId` 等字段。
+- `--jmes-filter <expr>`：用于在 CLI 侧先做字段提取、数组投影和对象重组；推荐在脚本里稳定提取 `ProjectId/TopicId` 或裁剪大对象输出。
 - `--trace-dir <path>`：排障推荐开启；会生成脱敏 trace 工件（JSONL）；非 `api` 组通常在 `meta.trace.path` 返回路径，`api` 组在 envelope 的 `summary.tracePath` 返回路径。
 - `--trace-redact strict|default`：默认 `strict`；排障中若需要更多上下文字段可切换为 `default`（仍会做脱敏，但信息更丰富）。
 - `--secrets-file <path>`：推荐用于 CI/本地隔离密钥场景（dotenv）；它会加载 env 但不会覆盖已存在 env。注意它不是 `configure` 的参数，通常只对实际发请求的命令有意义（project/topic/index/log/metric-topic/api/assistant 等）。

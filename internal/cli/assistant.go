@@ -15,9 +15,9 @@ import (
 	"strconv"
 	"strings"
 
-	"volclog/internal/tlsapi"
-	"volclog/internal/util"
-	"volclog/internal/version"
+	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
+	"github.com/volcengine-tls/ve-tls-cli/internal/util"
+	"github.com/volcengine-tls/ve-tls-cli/internal/version"
 )
 
 func runAssistant(ctx *Context, args []string) (any, error) {

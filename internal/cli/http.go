@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 
-	"volclog/internal/tlsapi"
-	"volclog/internal/util"
+	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
+	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 type httpError struct {

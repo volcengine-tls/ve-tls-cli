@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"volclog/internal/output"
+	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
 func TestDoctorExitCodeWhenMissingCreds(t *testing.T) {

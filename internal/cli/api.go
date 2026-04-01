@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"volclog/internal/util"
+	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 func runAPI(ctx *Context, args []string) (any, error) {

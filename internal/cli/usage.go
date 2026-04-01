@@ -15,6 +15,7 @@ func usageConfigure() string {
 
 Commands:
   set     Set a profile
+  project Manage project defaults (show/set)
   profile Alias commands: add/use/show/list/delete
   cred    Manage shared credentials (delete)
   use     Set default profile
@@ -31,6 +32,8 @@ Examples:
   tlsctl configure profile use tenant-a
   tlsctl configure use default
   tlsctl configure show --profile default
+  tlsctl configure project show
+  tlsctl configure project set --output json --output-mode file --output-dir ./out
   tlsctl --profile tenant-a-sg project list
   tlsctl configure list
   tlsctl configure delete tenant-a-sg

@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"volclog/internal/config"
-	"volclog/internal/output"
-	"volclog/internal/version"
+	"github.com/volcengine-tls/ve-tls-cli/internal/config"
+	"github.com/volcengine-tls/ve-tls-cli/internal/output"
+	"github.com/volcengine-tls/ve-tls-cli/internal/version"
 )
 
 func Run(args []string, stdout, stderr io.Writer) int {
@@ -45,6 +45,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 	if strings.TrimSpace(gf.OutputMode) == "" && strings.TrimSpace(projectCfg.OutputMode) != "" {
 		gf.OutputMode = projectCfg.OutputMode
+	}
+	// Resolve default output directory precedence:
+	// VOLCLOG_OUTPUT_DIR env > project config output_dir > default (.volclog/output)
+	defaultOutDir := strings.TrimSpace(os.Getenv("VOLCLOG_OUTPUT_DIR"))
+	if defaultOutDir == "" {
+		defaultOutDir = strings.TrimSpace(projectCfg.OutputDir)
 	}
 	if strings.TrimSpace(gf.TraceRedact) == "" && strings.TrimSpace(projectCfg.TraceRedact) != "" {
 		gf.TraceRedact = projectCfg.TraceRedact
@@ -84,6 +90,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 	ctx := newContext(stdout, stderr, format, gf.Profile, gf.Filter)
 	ctx.OutputMode = outputMode
+	ctx.OutputDir = defaultOutDir
 	ctx.TraceDir = gf.TraceDir
 	ctx.TraceRedact = gf.TraceRedact
 	ctx.DryRun = gf.DryRun
@@ -173,7 +180,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	if g == "completion" || g == "capabilities" || g == "api" {
 		if s, ok := out.(string); ok {
 			if outputMode == "file" {
-				p, err := writeTextFile(gf.OutputFile, g, s)
+				p, err := writeTextFileToDir(gf.OutputFile, ctx.OutputDir, g, s)
 				if err != nil {
 					writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
 					return 3
@@ -204,7 +211,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return exitCode
 	}
 	if outputMode == "file" {
-		p, err := writeOutputFile(gf.OutputFile, g, out, format)
+		p, err := writeOutputFileToDir(gf.OutputFile, ctx.OutputDir, g, out, format)
 		if err != nil {
 			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
 			return 3

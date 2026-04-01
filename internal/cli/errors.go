@@ -68,7 +68,7 @@ func classifyError(err error, requestID string, statusCode int) (errPayload, int
 			Hint:       "run --help for usage",
 		}, 1
 	}
-	if strings.HasPrefix(msg, "filter ") || msg == "empty filter" || strings.HasPrefix(msg, "invalid --jmes-filter") {
+	if strings.HasPrefix(msg, "filter ") || msg == "empty filter" || strings.HasPrefix(msg, "invalid --jmes-filter") || strings.HasPrefix(msg, "invalid jmes-filter expression:") {
 		return errPayload{
 			RequestID:  requestID,
 			StatusCode: statusCode,

@@ -140,6 +140,13 @@ bash scripts/install-local.sh
 ~/.local/bin/volclog --help
 ```
 
+或直接用 go install（推荐用于装到 GOPATH/GOBIN）：
+
+```bash
+go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
+volclog --help
+```
+
 或手工构建：
 
 ```bash
@@ -270,7 +277,22 @@ volclog log search --request file://./examples/search_logs.json
 
 - `--output json`：默认，适合对象型结果
 - `--output jsonl`：适合导出、流式处理、管道消费
-- `--output-mode file`：stdout 只返回文件路径，实际内容写入 `./.volclog/output/`
+- `--output-mode file`：stdout 只返回文件路径，内容落盘
+- `--output-file <path>`：指定落盘文件（未指定则默认目录为 `./.volclog/output`；也可通过 `VOLCLOG_OUTPUT_DIR` 或项目级 `./.volclog/cli.config.json` 中的 `output_dir` 指定默认目录）
+
+### JMESPath 过滤
+
+`--jmes-filter` 现在支持真实 JMESPath 表达式，适合在 CLI 侧先做字段裁剪、投影和重组。
+
+```bash
+volclog --jmes-filter "Projects[].{ProjectId: ProjectId, ProjectName: ProjectName}" project list --project-name volclog
+volclog --jmes-filter "Projects[0].ProjectId" project list --project-name volclog
+```
+
+常见用法：
+- `Projects[0].ProjectId`：取第一条记录的单个字段
+- `Projects[].ProjectName`：投影出所有名称
+- `Projects[].{ProjectId: ProjectId, ProjectName: ProjectName}`：重组成更适合脚本消费的对象数组
 
 ### 错误结构
 

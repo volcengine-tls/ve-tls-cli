@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"volclog/internal/util"
+	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 func runMetricTopic(ctx *Context, args []string) (any, error) {

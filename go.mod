@@ -1,8 +1,9 @@
-module volclog
+module github.com/volcengine-tls/ve-tls-cli
 
 go 1.22.0
 
 require (
+	github.com/jmespath/go-jmespath v0.4.0
 	github.com/swaggo/swag v1.16.4
 	github.com/volcengine/volc-sdk-golang v1.0.240
 )

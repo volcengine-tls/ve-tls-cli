@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"volclog/internal/config"
-	"volclog/internal/tlsapi"
-	"volclog/internal/util"
+	"github.com/volcengine-tls/ve-tls-cli/internal/config"
+	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
+	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 func runDoctor(ctx *Context, args []string) (any, int, error) {

@@ -9,9 +9,9 @@ import (
 	tlssdk "github.com/volcengine/volc-sdk-golang/service/tls"
 	tlspb "github.com/volcengine/volc-sdk-golang/service/tls/pb"
 
-	"volclog/internal/output"
-	"volclog/internal/tlsapi"
-	"volclog/internal/util"
+	"github.com/volcengine-tls/ve-tls-cli/internal/output"
+	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
+	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 type requestFormat string

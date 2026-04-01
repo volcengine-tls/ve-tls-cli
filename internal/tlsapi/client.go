@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"volclog/internal/version"
+	"github.com/volcengine-tls/ve-tls-cli/internal/version"
 
 	"github.com/volcengine/volc-sdk-golang/base"
 )

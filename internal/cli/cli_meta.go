@@ -43,7 +43,7 @@ func cliGlobalFlagSpecs() []cliGlobalFlagSpec {
 		{Name: "--output", Usage: "--output <json|jsonl>", Description: "output format", TakesValue: true},
 		{Name: "--output-mode", Usage: "--output-mode <stdout|file>", Description: "output destination", TakesValue: true},
 		{Name: "--output-file", Usage: "--output-file <path>", Description: "output file path", TakesValue: true},
-		{Name: "--jmes-filter", Usage: "--jmes-filter <expr>", Description: "output filter expr", TakesValue: true},
+		{Name: "--jmes-filter", Usage: "--jmes-filter <expr>", Description: "JMESPath output filter", TakesValue: true},
 		{Name: "--trace-dir", Usage: "--trace-dir <path>", Description: "trace artifact dir", TakesValue: true},
 		{Name: "--trace-redact", Usage: "--trace-redact <strict|default>", Description: "trace redact mode", TakesValue: true},
 		{Name: "--secrets-file", Usage: "--secrets-file <path>", Description: "dotenv file", TakesValue: true},

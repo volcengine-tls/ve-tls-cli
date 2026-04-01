@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"volclog/internal/output"
+	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
 func TestCompletionZshIncludesGroupsFlagsAndSubcommands(t *testing.T) {

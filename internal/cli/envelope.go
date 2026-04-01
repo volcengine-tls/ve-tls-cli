@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"volclog/internal/output"
+	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
 func isAPIEnvelopeCandidate(group string, out any) bool {
@@ -32,7 +32,7 @@ func buildAPIEnvelope(ctx *Context, out any, outputMode string, outputFile strin
 		"error":     nil,
 	}
 	if outputMode == "file" {
-		p, err := writeOutputFile(outputFile, "api", out, format)
+		p, err := writeOutputFileToDir(outputFile, ctx.OutputDir, "api", out, format)
 		if err != nil {
 			return nil, err
 		}

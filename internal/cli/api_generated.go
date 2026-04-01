@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"volclog/internal/util"
+	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 type apiCapabilitiesDoc struct {

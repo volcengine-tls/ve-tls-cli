@@ -17,7 +17,7 @@ func TestBuildCapabilities_FallsBackToRawSwaggerTagForGroup(t *testing.T) {
 		},
 	}
 	groupKeys := map[string]string{
-		"账号管理": "account",
+		"账号管理":    "account",
 		"Account": "account",
 	}
 

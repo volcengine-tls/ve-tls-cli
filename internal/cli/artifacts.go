@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"volclog/internal/output"
+	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
 func attachMeta(out any, tracePath string) any {
@@ -29,12 +29,12 @@ func attachMeta(out any, tracePath string) any {
 	}
 }
 
-func writeOutputFile(outputFile string, group string, out any, format output.Format) (string, error) {
+func writeOutputFileToDir(outputFile string, baseDir string, group string, out any, format output.Format) (string, error) {
 	if raw, ok := out.(rawBinaryOutput); ok {
 		p := strings.TrimSpace(outputFile)
 		if p == "" {
 			var err error
-			p, err = defaultBinaryOutputFile(group, raw.Ext)
+			p, err = defaultBinaryOutputFile(baseDir, group, raw.Ext)
 			if err != nil {
 				return "", err
 			}
@@ -51,7 +51,7 @@ func writeOutputFile(outputFile string, group string, out any, format output.For
 	p := strings.TrimSpace(outputFile)
 	if p == "" {
 		var err error
-		p, err = defaultOutputFile(group, format)
+		p, err = defaultOutputFile(baseDir, group, format)
 		if err != nil {
 			return "", err
 		}
@@ -71,11 +71,11 @@ func writeOutputFile(outputFile string, group string, out any, format output.For
 	return p, nil
 }
 
-func writeTextFile(outputFile string, group string, s string) (string, error) {
+func writeTextFileToDir(outputFile string, baseDir string, group string, s string) (string, error) {
 	p := strings.TrimSpace(outputFile)
 	if p == "" {
 		var err error
-		p, err = defaultOutputFile(group, output.FormatJSON)
+		p, err = defaultOutputFile(baseDir, group, output.FormatJSON)
 		if err != nil {
 			return "", err
 		}
@@ -95,12 +95,17 @@ func writeTextFile(outputFile string, group string, s string) (string, error) {
 	return p, nil
 }
 
-func defaultOutputFile(group string, format output.Format) (string, error) {
+func defaultOutputFile(baseDir string, group string, format output.Format) (string, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(wd, ".volclog", "output")
+	dir := strings.TrimSpace(baseDir)
+	if dir == "" {
+		dir = filepath.Join(wd, ".volclog", "output")
+	} else if !filepath.IsAbs(dir) {
+		dir = filepath.Join(wd, dir)
+	}
 	ext := "json"
 	if format == output.FormatJSONL {
 		ext = "jsonl"
@@ -113,12 +118,17 @@ func defaultOutputFile(group string, format output.Format) (string, error) {
 	return filepath.Join(dir, name), nil
 }
 
-func defaultBinaryOutputFile(group string, ext string) (string, error) {
+func defaultBinaryOutputFile(baseDir string, group string, ext string) (string, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(wd, ".volclog", "output")
+	dir := strings.TrimSpace(baseDir)
+	if dir == "" {
+		dir = filepath.Join(wd, ".volclog", "output")
+	} else if !filepath.IsAbs(dir) {
+		dir = filepath.Join(wd, dir)
+	}
 	g := strings.TrimSpace(group)
 	if g == "" {
 		return "", errors.New("empty group")
