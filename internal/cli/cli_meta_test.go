@@ -25,6 +25,22 @@ func TestUsageTextIncludesAllCliGroupsAndGlobalFlags(t *testing.T) {
 	}
 }
 
+func TestUsageTextPrioritizesPrimaryGroupsForAgents(t *testing.T) {
+	text := usageText()
+	if !strings.Contains(text, "主入口（Agent / 自动化优先）:") {
+		t.Fatalf("missing primary groups section: %q", text)
+	}
+	if !strings.Contains(text, "次级入口（仅在你已明确目标资源时使用）:") {
+		t.Fatalf("missing secondary groups section: %q", text)
+	}
+	if !strings.Contains(text, "1) 发现能力: volclog capabilities --view groups") {
+		t.Fatalf("missing agent bootstrap guidance: %q", text)
+	}
+	if strings.Index(text, "capabilities") > strings.Index(text, "project") {
+		t.Fatalf("expected capabilities to appear before project in top-level usage: %q", text)
+	}
+}
+
 func TestCliGroupsNoLongerExposeCommandsGroup(t *testing.T) {
 	for _, group := range cliGroups() {
 		if group.Name == "commands" {

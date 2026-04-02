@@ -230,8 +230,13 @@ func usageText() string {
 	var b strings.Builder
 	b.WriteString("Usage:\n")
 	b.WriteString("  volclog [--profile <name>] [--output json|jsonl] [--output-mode stdout|file] [--output-file <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
-	b.WriteString("Groups:\n")
+	b.WriteString("主入口（Agent / 自动化优先）:\n")
+	b.WriteString("  这是面向 Agent 与自动化程序的统一执行入口。\n")
+	b.WriteString("  优先服务智能体、CI/CD、运维脚本、RPA、服务端任务及各类非人工交互场景。\n\n")
 	for _, group := range cliGroups() {
+		if !group.Primary {
+			continue
+		}
 		b.WriteString("  ")
 		b.WriteString(group.Name)
 		if len(group.Name) < 12 {
@@ -242,7 +247,32 @@ func usageText() string {
 		b.WriteString(group.Description)
 		b.WriteString("\n")
 	}
-	b.WriteString("\nGlobal Flags:\n")
+	b.WriteString(`
+
+推荐流程:
+  1) 发现能力: volclog capabilities --view groups
+  2) 缩小范围: volclog capabilities --group <group> --view text
+  3) 查看约束: volclog api <group> <action> --describe
+  4) 请求校验: volclog --dry-run api <group> <action> --request file://req.json
+  5) 正式执行: volclog api <group> <action> --request file://req.json
+
+次级入口（仅在你已明确目标资源时使用）:
+`)
+	for _, group := range cliGroups() {
+		if group.Primary {
+			continue
+		}
+		b.WriteString("  ")
+		b.WriteString(group.Name)
+		if len(group.Name) < 12 {
+			b.WriteString(strings.Repeat(" ", 12-len(group.Name)))
+		} else {
+			b.WriteString(" ")
+		}
+		b.WriteString(group.Description)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n全局参数:\n")
 	maxUsageLen := 0
 	for _, flag := range cliGlobalFlagSpecs() {
 		if flag.Name == "-h" {
@@ -269,16 +299,16 @@ func usageText() string {
 	}
 	b.WriteString(`
 
-Exit Code:
-  0 success
-  1 usage / invalid args
-  2 request/runtime failure
-  3 output/decode failure
+退出码:
+  0 成功
+  1 用法错误 / 参数非法
+  2 请求或运行时失败
+  3 输出或解码失败
 
-Agent Tips:
-  - Prefer --output-mode file for large output (stdout returns a file path)
-  - Use --trace-dir to generate redacted trace artifacts for debugging
-  - On failure, parse stderr JSON (errorCode/errorMessage/requestId/statusCode/kind/hint)
+补充说明:
+  - 大结果优先使用 --output-mode file
+  - 需要排查请求时优先使用 --trace-dir
+  - 失败时优先解析 stderr JSON 中的 errorCode/errorMessage/requestId/statusCode/kind/hint
 `)
 	return b.String()
 }

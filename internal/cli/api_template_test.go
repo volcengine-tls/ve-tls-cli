@@ -34,12 +34,17 @@ func TestDescribeOperationOutput(t *testing.T) {
 	ops := []apiActionOp{
 		{
 			Cmd: apiCapabilityCommand{
-				Group:      "project",
-				Action:     "CreateProject",
-				GroupTitle: "日志项目管理",
-				Summary:    "CreateProject",
-				Method:     "POST",
-				Path:       "/CreateProject",
+				Group:       "project",
+				Action:      "CreateProject",
+				GroupTitle:  "日志项目管理",
+				Summary:     "CreateProject",
+				Description: "创建日志项目请求",
+				Method:      "POST",
+				Path:        "/CreateProject",
+				InputMode:   "body via --request; query/path via flags",
+				RequiredFlags: []string{
+					"--query ProjectName",
+				},
 				Params: []apiCapParam{
 					{Name: "data", In: "body", Required: true, Ref: "#/definitions/project.CreateProjectReq"},
 					{Name: "ProjectName", In: "query", Required: true, Type: "string", MinLength: intPtr(1)},
@@ -47,6 +52,9 @@ func TestDescribeOperationOutput(t *testing.T) {
 				RequestParamsDoc: []apiCapDocParam{
 					{Name: "ProjectName", In: "body", Type: "String", RequiredText: "是", Description: "日志项目名称"},
 				},
+			},
+			ParamFlags: map[string]apiCapParam{
+				"--project-name": {Name: "ProjectName", In: "query", Required: true, Type: "string", MinLength: intPtr(1)},
 			},
 		},
 	}
@@ -64,12 +72,16 @@ func TestDescribeOperationOutput(t *testing.T) {
 		`"group": "project"`,
 		`"group_title": "日志项目管理"`,
 		`"action": "CreateProject"`,
+		`"description":`,
 		`"method": "POST"`,
+		`"input_mode":`,
+		`"required_flags":`,
 		`"request_body"`,
 		`"request_params_doc"`,
 		`"template_required"`,
 		`"template_full"`,
 		`"min_length": 1`,
+		`"cli_flag": "--project-name"`,
 		`"guidance"`,
 	} {
 		if !strings.Contains(s, want) {
@@ -77,6 +89,8 @@ func TestDescribeOperationOutput(t *testing.T) {
 		}
 	}
 	for _, notWant := range []string{
+		`"name": "data"`,
+		`"summary":`,
 		`"swagger_tag"`,
 		`"doc_path"`,
 		`"ref": "#/definitions/project.CreateProjectReq"`,
@@ -84,6 +98,32 @@ func TestDescribeOperationOutput(t *testing.T) {
 		if strings.Contains(s, notWant) {
 			t.Fatalf("describe output should not include %q: %s", notWant, s)
 		}
+	}
+}
+
+func TestParseGeneratedCallArgsAcceptsRawAPIParamStyleFlags(t *testing.T) {
+	ops := []apiActionOp{
+		{
+			Cmd: apiCapabilityCommand{
+				Method: "GET",
+				Path:   "/DescribeHostGroups",
+				Params: []apiCapParam{
+					{Name: "PageNumber", In: "query", Type: "integer"},
+					{Name: "PageSize", In: "query", Type: "integer"},
+				},
+			},
+			ParamFlags: map[string]apiCapParam{
+				"--page-number": {Name: "PageNumber", In: "query", Type: "integer"},
+				"--page-size":   {Name: "PageSize", In: "query", Type: "integer"},
+			},
+		},
+	}
+	_, _, query, _, _, _, err := parseGeneratedCallArgs([]string{"--PageNumber", "1", "--PageSize", "100"}, ops)
+	if err != nil {
+		t.Fatalf("parse generated args error: %v", err)
+	}
+	if query["PageNumber"] != "1" || query["PageSize"] != "100" {
+		t.Fatalf("unexpected query: %#v", query)
 	}
 }
 
@@ -121,13 +161,19 @@ func TestDescribeOperationOutputStableFieldOrder(t *testing.T) {
 	ops := []apiActionOp{
 		{
 			Cmd: apiCapabilityCommand{
-				Group:   "project",
-				Action:  "CreateProject",
-				Summary: "CreateProject",
-				Method:  "POST",
-				Path:    "/CreateProject",
+				Group:       "project",
+				Action:      "CreateProject",
+				Summary:     "CreateProject",
+				Description: "创建日志项目请求",
+				Method:      "POST",
+				Path:        "/CreateProject",
+				InputMode:   "body via --request",
+				RequiredFlags: []string{
+					"--query ProjectName",
+				},
 				Params: []apiCapParam{
 					{Name: "data", In: "body", Required: true},
+					{Name: "ProjectName", In: "query", Required: true, Type: "string"},
 				},
 			},
 		},
@@ -140,9 +186,11 @@ func TestDescribeOperationOutputStableFieldOrder(t *testing.T) {
 		`"group":`,
 		`"group_title":`,
 		`"action":`,
-		`"summary":`,
+		`"description":`,
 		`"method":`,
 		`"path":`,
+		`"input_mode":`,
+		`"required_flags":`,
 		`"params":`,
 		`"request_body":`,
 		`"guidance":`,

@@ -61,11 +61,15 @@ func classifyError(err error, requestID string, statusCode int) (errPayload, int
 		strings.HasPrefix(msg, "action not found:") ||
 		strings.HasPrefix(msg, "group not found:") ||
 		(strings.Contains(msg, "unknown ") && strings.Contains(msg, " command:")) {
+		hint := "start with 'volclog capabilities --view text' or inspect 'volclog api <group> <action> --describe'"
+		if strings.HasPrefix(msg, "missing --") || strings.HasPrefix(msg, "unknown flag:") {
+			hint = "inspect constraints with 'volclog api <group> <action> --describe' or run --help"
+		}
 		return errPayload{
 			RequestID:  requestID,
 			StatusCode: statusCode,
 			Kind:       "usage",
-			Hint:       "run --help for usage",
+			Hint:       hint,
 		}, 1
 	}
 	if strings.HasPrefix(msg, "filter ") || msg == "empty filter" || strings.HasPrefix(msg, "invalid --jmes-filter") || strings.HasPrefix(msg, "invalid jmes-filter expression:") {

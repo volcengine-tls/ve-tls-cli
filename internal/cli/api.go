@@ -39,7 +39,7 @@ func runAPI(ctx *Context, args []string) (any, error) {
 
 func apiCall(ctx *Context, args []string) (any, error) {
 	if hasHelp(args) {
-		return nil, &usageError{Text: usageAPI(), ExitCode: 0}
+		return nil, &usageError{Text: usageAPICall(), ExitCode: 0}
 	}
 	method := "GET"
 	path := ""
@@ -139,6 +139,9 @@ func apiGenerated(ctx *Context, args []string) (any, error) {
 	if len(args) == 1 {
 		return listGroupActions(group, groupTitleFromActions(actions), actions), nil
 	}
+	if args[1] == "-h" || args[1] == "--help" {
+		return nil, &usageError{Text: usageAPIGroup(group, groupTitleFromActions(actions), actions), ExitCode: 0}
+	}
 
 	action := normalizeActionToken(args[1])
 	if action == "" {
@@ -190,20 +193,58 @@ func apiGenerated(ctx *Context, args []string) (any, error) {
 	return ctx.Do(method, path, query, header, body)
 }
 
+func usageAPIGroup(group string, groupTitle string, actions map[string][]apiActionOp) string {
+	var b strings.Builder
+	b.WriteString("Usage:\n")
+	b.WriteString("  volclog api " + group + "\n")
+	b.WriteString("  volclog api " + group + " <action> [flags]\n\n")
+	b.WriteString("概览:\n")
+	b.WriteString("  先在这个 group 内选择 action，再用 --describe / --print-request-template / --dry-run 下钻。\n")
+	if strings.TrimSpace(groupTitle) != "" {
+		b.WriteString("  当前 group: " + group + " (" + strings.TrimSpace(groupTitle) + ")\n")
+	} else {
+		b.WriteString("  当前 group: " + group + "\n")
+	}
+	b.WriteString("\n推荐流程:\n")
+	b.WriteString("  1. 查看本组 action 列表\n")
+	b.WriteString("  2. 选择目标 action 后运行: volclog api " + group + " <action> --describe\n")
+	b.WriteString("  3. 如有 body，再运行: volclog api " + group + " <action> --print-request-template=full\n")
+	b.WriteString("  4. 执行前先使用: volclog --dry-run api " + group + " <action> ...\n\n")
+	b.WriteString(listGroupActions(group, groupTitle, actions))
+	return b.String()
+}
+
 func usageAPIGenerated(group string, action string, ops []apiActionOp) string {
 	if len(ops) == 0 {
 		return usageAPI()
 	}
 	op := ops[0]
+	displayAction := strings.TrimSpace(op.Cmd.Action)
+	if displayAction == "" {
+		displayAction = strings.TrimSpace(action)
+	}
 	var b strings.Builder
 	b.WriteString("Usage:\n")
-	b.WriteString("  volclog api " + group + " " + action + " [flags]\n\n")
-	b.WriteString("Operation:\n")
-	if strings.TrimSpace(op.Cmd.Summary) != "" {
+	b.WriteString("  volclog api " + group + " " + displayAction + " [flags]\n\n")
+	b.WriteString("概览:\n")
+	if summary := strings.TrimSpace(op.Cmd.Summary); summary != "" && !strings.EqualFold(summary, displayAction) {
 		b.WriteString("  " + strings.TrimSpace(op.Cmd.Summary) + "\n")
 	}
-	b.WriteString("  " + strings.TrimSpace(op.Cmd.Method) + " " + strings.TrimSpace(op.Cmd.Path) + "\n\n")
-	b.WriteString("Common Flags:\n")
+	if desc := strings.TrimSpace(op.Cmd.Description); desc != "" {
+		b.WriteString("  " + desc + "\n")
+	}
+	b.WriteString("  接口协议: " + strings.TrimSpace(op.Cmd.Method) + " " + strings.TrimSpace(op.Cmd.Path) + "\n\n")
+	b.WriteString("调用输入:\n")
+	if input := strings.TrimSpace(op.Cmd.InputMode); input != "" {
+		b.WriteString("  " + humanizeInputMode(input) + "\n")
+	}
+	if len(op.Cmd.RequiredFlags) > 0 {
+		b.WriteString("  必填 flags: " + strings.Join(op.Cmd.RequiredFlags, ", ") + "\n")
+	}
+	if op.Cmd.BodyRequired {
+		b.WriteString("  请求体: 通过 --request 传入（必填）\n")
+	}
+	b.WriteString("\n关键参数:\n")
 	b.WriteString("  --request <json|file://...|->\n")
 	b.WriteString("  --request-format <json|jsonl>\n")
 	b.WriteString("  --query k=v\n")
@@ -231,11 +272,39 @@ func usageAPIGenerated(group string, action string, ops []apiActionOp) string {
 		}
 		b.WriteString("  " + f + " <value>" + req + desc + "\n")
 	}
-	b.WriteString("\nAgent Guidance:\n")
-	b.WriteString("  1) Use --describe for machine-readable constraints\n")
-	b.WriteString("  2) Use --print-request-template=full for full body template\n")
-	b.WriteString("  3) Use --dry-run before execution\n")
+	b.WriteString("\n推荐流程:\n")
+	b.WriteString("  1) 先用 --describe 查看机器可读约束\n")
+	b.WriteString("  2) 如有 body，用 --print-request-template=full 生成模板\n")
+	b.WriteString("  3) query/path 用 flags，body 用 --request\n")
+	b.WriteString("  4) 执行前先使用 --dry-run\n")
+	b.WriteString("  5) 大结果优先使用 --output-mode file\n")
+	b.WriteString("\n下一步命令:\n")
+	b.WriteString("  volclog api " + group + " " + displayAction + " --describe\n")
+	if op.Cmd.BodyRequired {
+		b.WriteString("  volclog api " + group + " " + displayAction + " --print-request-template=full\n")
+		b.WriteString("  volclog --dry-run api " + group + " " + displayAction + " --request file://req.json\n")
+		b.WriteString("  volclog api " + group + " " + displayAction + " --request file://req.json\n")
+	}
 	return b.String()
+}
+
+func humanizeInputMode(input string) string {
+	switch strings.TrimSpace(input) {
+	case "body via --request":
+		return "body 通过 --request 传入"
+	case "optional body via --request":
+		return "可选 body 通过 --request 传入"
+	case "query/path via flags":
+		return "query/path 参数通过 flags 传入"
+	case "body via --request; query/path via flags":
+		return "body 通过 --request 传入；query/path 参数通过 flags 传入"
+	case "optional body via --request; query/path via flags":
+		return "可选 body 通过 --request 传入；query/path 参数通过 flags 传入"
+	case "no required request body; optional flags only":
+		return "无必填请求体；如有需要可补充 flags"
+	default:
+		return input
+	}
 }
 
 func firstBodyParam(params []apiCapParam) (apiCapParam, bool) {
@@ -344,12 +413,11 @@ type generatedMetaArgs struct {
 }
 
 type apiDescribeGuidance struct {
-	Discover  string `json:"discover"`
-	Template  string `json:"template"`
-	DryRun    string `json:"dry_run"`
-	Execute   string `json:"execute"`
-	Note      string `json:"note"`
-	InputMode string `json:"inputMode"`
+	ListGroup string `json:"list_group"`
+	Template  string `json:"template,omitempty"`
+	Describe  string `json:"describe"`
+	DryRun    string `json:"dry_run,omitempty"`
+	Execute   string `json:"execute,omitempty"`
 }
 
 type apiDescribeRequestBody struct {
@@ -362,9 +430,11 @@ type apiDescribeOutput struct {
 	Group            string                  `json:"group"`
 	GroupTitle       string                  `json:"group_title"`
 	Action           string                  `json:"action"`
-	Summary          string                  `json:"summary"`
+	Description      string                  `json:"description,omitempty"`
 	Method           string                  `json:"method"`
 	Path             string                  `json:"path"`
+	InputMode        string                  `json:"input_mode,omitempty"`
+	RequiredFlags    []string                `json:"required_flags,omitempty"`
 	Params           []apiCapParam           `json:"params,omitempty"`
 	RequestBody      *apiDescribeRequestBody `json:"request_body,omitempty"`
 	RequestParamsDoc []apiCapDocParam        `json:"request_params_doc,omitempty"`
@@ -420,22 +490,23 @@ func describeOperationOutput(group string, action string, ops []apiActionOp, req
 		Group:            group,
 		GroupTitle:       strings.TrimSpace(op.Cmd.GroupTitle),
 		Action:           actionName,
-		Summary:          strings.TrimSpace(op.Cmd.Summary),
+		Description:      strings.TrimSpace(op.Cmd.Description),
 		Method:           strings.ToUpper(strings.TrimSpace(op.Cmd.Method)),
 		Path:             strings.TrimSpace(op.Cmd.Path),
-		Params:           sanitizeParamsForOutput(op.Cmd.Params),
+		InputMode:        strings.TrimSpace(op.Cmd.InputMode),
+		RequiredFlags:    append([]string(nil), op.Cmd.RequiredFlags...),
+		Params:           sanitizeParamsForOutput(op.Cmd.Params, op.ParamFlags),
 		RequestParamsDoc: sanitizeRequestParamsDocForOutput(op.Cmd.RequestParamsDoc),
 		Guidance: apiDescribeGuidance{
-			Discover:  "volclog capabilities --group " + group + " --action " + actionName,
-			Template:  "volclog api " + group + " " + actionName + " --print-request-template=full",
-			DryRun:    "volclog --dry-run api " + group + " " + actionName + " --request file://req.json",
-			Execute:   "volclog api " + group + " " + actionName + " --request file://req.json",
-			Note:      "Prefer --describe for machine-readable constraints.",
-			InputMode: "body via --request, query/path via flags",
+			ListGroup: "volclog api " + group,
+			Describe:  "volclog api " + group + " " + actionName + " --describe",
 		},
 	}
 	if body, ok := firstBodyParam(op.Cmd.Params); ok {
 		req := &apiDescribeRequestBody{Required: body.Required}
+		out.Guidance.Template = "volclog api " + group + " " + actionName + " --print-request-template=full"
+		out.Guidance.DryRun = "volclog --dry-run api " + group + " " + actionName + " --request file://req.json"
+		out.Guidance.Execute = "volclog api " + group + " " + actionName + " --request file://req.json"
 		if tpl := strings.TrimSpace(requestTemplateOutput(ops, "required", required, full)); tpl != "" {
 			if v, err := util.UnmarshalJSON([]byte(tpl)); err == nil && hasMeaningfulTemplate(v) {
 				req.TemplateRequired = v
@@ -554,21 +625,27 @@ func sanitizeRequestParamsDocForOutput(params []apiCapDocParam) []apiCapDocParam
 	return out
 }
 
-func sanitizeParamsForOutput(params []apiCapParam) []apiCapParam {
+func sanitizeParamsForOutput(params []apiCapParam, paramFlags map[string]apiCapParam) []apiCapParam {
 	if len(params) == 0 {
 		return nil
+	}
+	flagByName := map[string]string{}
+	for flag, p := range paramFlags {
+		key := strings.ToLower(strings.TrimSpace(p.In)) + "\x00" + strings.TrimSpace(p.Name)
+		if _, exists := flagByName[key]; exists {
+			continue
+		}
+		flagByName[key] = flag
 	}
 	out := make([]apiCapParam, 0, len(params))
 	for _, p := range params {
 		in := strings.ToLower(strings.TrimSpace(p.In))
-		if in != "body" && in != "query" && in != "path" && in != "header" {
+		if in != "query" && in != "path" && in != "header" {
 			continue
 		}
 		cp := p
 		cp.In = in
-		if in == "body" {
-			cp.Ref = ""
-		}
+		cp.CLIFlag = flagByName[in+"\x00"+strings.TrimSpace(p.Name)]
 		out = append(out, cp)
 	}
 	if len(out) == 0 {

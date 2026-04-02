@@ -56,7 +56,26 @@ func usageAPI() string {
   tlsctl api <group> <action> [flags]
   tlsctl api call --method <GET|POST|PUT|DELETE> --path <path> [--query k=v] [--header k=v] [--body <json|file://...|->] [--request-format <json|jsonl>]
 
-Key Flags (generated action):
+概览:
+  面向 agent 与自动化程序的统一执行入口。
+  优先服务智能体、CI/CD、运维脚本、RPA、服务端任务及各类非人工交互场景。
+  帮助调用方以低探索成本完成日志服务操作。
+
+推荐流程:
+  1. 先发现 group 或 action： tlsctl capabilities --view groups
+  2. 再缩小到具体 action：  tlsctl capabilities --group <group> --view text
+  3. 查看调用约束：         tlsctl api <group> <action> --describe
+  4. 生成请求模板：         tlsctl api <group> <action> --print-request-template=full
+  5. 先 dry-run 校验：      tlsctl --dry-run api <group> <action> --request file://req.json
+  6. 确认后正式执行：       tlsctl api <group> <action> --request file://req.json
+
+调用方式:
+  - query/path 参数通过 flags 传入
+  - body 通过 --request 传入
+  - --request 支持 inline JSON、file://...、-、裸文件路径
+  - 特殊 IO 接口对外仍使用 json/jsonl，内部 protobuf/压缩由 CLI 自动处理
+
+关键参数:
   --request <json|file://...|->
   --request-format <json|jsonl>
   --print-request-template[=required|full]
@@ -73,39 +92,82 @@ Examples:
   tlsctl --dry-run api log SearchLogs --request file://./req.json
   tlsctl api log SearchLogs --request file://./req.json
 
-Exit Code:
-  0 success
-  1 usage / invalid args
-  2 request/runtime failure
-  3 output/decode failure
+退出码:
+  0 成功
+  1 用法错误 / 参数非法
+  2 请求或运行时失败
+  3 输出或解码失败
+`)
+}
 
-Agent:
-  - Discover: tlsctl capabilities --group <group> --action <action>
-  - Constraints: tlsctl api <group> <action> --describe
-  - Validate first: tlsctl --dry-run api <group> <action> --request file://req.json
+func usageAPICall() string {
+	return u(`Usage:
+  tlsctl api call --method <GET|POST|PUT|DELETE> --path <path> [--query k=v] [--header k=v] [--body <json|file://...|->] [--request-format <json|jsonl>]
+
+概览:
+  底层直调入口，适合已明确 HTTP method/path/header/query/body 的场景。
+  如果你还不确定该调用哪个接口，先回到 capabilities / api <group> <action> 这条主链路。
+
+推荐场景:
+  - 调试尚未封装到 generated action 的接口
+  - 验证 method/path/header/body 的原始组合
+  - 对比 generated action 与底层直调的请求差异
+
+关键参数:
+  --method <GET|POST|PUT|DELETE>
+  --path <path>
+  --query k=v
+  --header k=v
+  --body <json|file://...|->
+  --request-format <json|jsonl>
+
+调用方式:
+  - path 必须是以 / 开头的 OpenAPI 路径
+  - body 支持 inline JSON、file://...、-、裸文件路径
+  - 特殊 IO 接口如需 protobuf/压缩适配，优先使用 generated action
+
+Examples:
+  tlsctl api call --method GET --path /DescribeProjects
+  tlsctl api call --method POST --path /CreateProject --body file://./req.json
+  tlsctl api call --method POST --path /SearchLogs --query TopicId=xxx --body file://./body.json
 `)
 }
 
 func usageCapabilities() string {
 	return u(`Usage:
-  tlsctl capabilities [--group <group>] [--action <action>] [--view <compact|full|text>] [--hints-file <path>]
+  tlsctl capabilities [--group <group>] [--action <action>] [--view <compact|full|text|groups>] [--hints-file <path>]
 
-Description:
-  Output API capability contract.
-  Includes metadata: contract_version/param_doc_source/supports_dry_run/output_mode_hint.
-  Includes declarative hints: hints_mode/risk_level/idempotency (advisory only).
-  view=compact (default) hides verbose params/request_params_doc for token saving.
-  view=full returns complete parameter constraints and official doc intros.
-  view=text returns human-friendly command list text.
-  Hints file resolution when --hints-file is omitted: VOLCLOG_HINTS_FILE > project .volclog/cli.config.json hints_file.
+概览:
+  面向 agent 与自动化程序的统一能力发现入口。
+  适合先做 group 粗分类，再做 action 筛选。
+  帮助调用方以低探索成本定位可执行接口。
+
+推荐流程:
+  1. 粗分类: tlsctl capabilities --view groups
+  2. 看全量 group + action 列表: tlsctl capabilities --view text
+  3. 看组内动作: tlsctl capabilities --group <group> --view text
+  4. 查动作细节: tlsctl capabilities --group <group> --action <action> --view full
+  5. 执行前确认: tlsctl api <group> <action> --describe
+
+视图说明:
+  - groups: group 总览，一行展示 group、中文名称与能力摘要
+  - text:   全量 group + action 轻量视图，只展示 action + 描述，适合第一次选接口
+  - compact: 默认语义视图，突出 action 含义、调用方式、必需输入
+  - full:   完整约束视图，包含参数限制、官方文档参数说明、协议细节
+
+补充说明:
+  - 输出包含 meta 信息：contract_version / param_doc_source / supports_dry_run / output_mode_hint
+  - 输出包含 hints 信息：hints_mode / risk_level
+  - 未指定 --hints-file 时，加载顺序为：VOLCLOG_HINTS_FILE > 项目 .volclog/cli.config.json hints_file
 
 Examples:
   tlsctl capabilities
+  tlsctl capabilities --view groups
   tlsctl capabilities --group log
   tlsctl capabilities --group log --action SearchLogs
   tlsctl capabilities --group log --action SearchLogs --view full
   tlsctl capabilities --view text
-  tlsctl capabilities --action create
+  tlsctl capabilities --action CreateProject
   tlsctl capabilities --hints-file ./docs/agentic-stage1/capability-hints-overrides.example.json
 `)
 }
@@ -113,6 +175,12 @@ Examples:
 func usageProject() string {
 	return u(`Usage:
   tlsctl project <command> [args]
+
+Agent First:
+  - Do not start here for discovery.
+  - Start with: tlsctl capabilities --view text
+  - Then inspect: tlsctl api project <action> --describe
+  - Prefer api/capabilities unless you intentionally want the shortcut command
 
 Commands:
   list     List projects
@@ -144,6 +212,12 @@ Agent:
 func usageTopic() string {
 	return u(`Usage:
   tlsctl topic <command> [args]
+
+Agent First:
+  - Do not start here for discovery.
+  - Start with: tlsctl capabilities --view text
+  - Then inspect: tlsctl api topic <action> --describe
+  - Prefer api/capabilities unless you intentionally want the shortcut command
 
 Commands:
   list     List topics
@@ -182,6 +256,12 @@ Agent:
 func usageMetricTopic() string {
 	return u(`Usage:
   tlsctl metric-topic <command> [args]
+
+Agent First:
+  - Do not start here for discovery.
+  - Start with: tlsctl capabilities --view text
+  - Then inspect: tlsctl api metric-topic <action> --describe
+  - Prefer api/capabilities unless you intentionally want the shortcut command
 
 Commands:
   list     List metric topics
@@ -255,6 +335,12 @@ func usageIndex() string {
 	return u(`Usage:
   tlsctl index <command> [args]
 
+Agent First:
+  - Do not start here for discovery.
+  - Start with: tlsctl capabilities --view text
+  - Then inspect: tlsctl api index <action> --describe
+  - Prefer api/capabilities unless you intentionally want the shortcut command
+
 Commands:
   get      Get index by topic id
   create   Create index with JSON body
@@ -278,6 +364,12 @@ Exit Code:
 func usageLog() string {
 	return u(`Usage:
   tlsctl log <command> [args]
+
+Agent First:
+  - Do not start here for discovery.
+  - Start with: tlsctl capabilities --view text
+  - Then inspect: tlsctl api log <action> --describe
+  - Prefer api/capabilities unless you intentionally want the shortcut command
 
 Commands:
   search   Search logs via /SearchLogs
@@ -316,6 +408,12 @@ Agent:
 func usageAssistant() string {
 	return u(`Usage:
   tlsctl assistant <command> [args]
+
+Agent First:
+  - Do not start here for discovery.
+  - Start with: tlsctl capabilities --view text
+  - Then inspect: tlsctl api assistant <action> --describe
+  - Prefer api/capabilities unless you intentionally want the shortcut command
 
 Commands:
   describe-session-answer   Ask AI Assistant for a topic

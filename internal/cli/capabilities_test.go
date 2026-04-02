@@ -62,7 +62,6 @@ func TestRunCapabilitiesIncludesV3MetaHints(t *testing.T) {
 		`"supports_dry_run":true`,
 		`"output_mode_hint":"envelope"`,
 		`"risk_level":"high"`,
-		`"idempotency":"unknown"`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in capabilities output", want)
@@ -86,6 +85,16 @@ func TestCapabilitiesDefaultViewCompactHidesParams(t *testing.T) {
 	}
 	s := string(b)
 	for _, notWant := range []string{`"params":`, `"request_params_doc":`} {
+		if strings.Contains(s, notWant) {
+			t.Fatalf("compact view should hide %s: %s", notWant, s)
+		}
+	}
+	for _, want := range []string{`"description":`, `"input_mode":`} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("compact view should include %s: %s", want, s)
+		}
+	}
+	for _, notWant := range []string{`"method":`, `"path":`} {
 		if strings.Contains(s, notWant) {
 			t.Fatalf("compact view should hide %s: %s", notWant, s)
 		}
@@ -128,12 +137,52 @@ func TestCapabilitiesTextViewReturnsHumanReadableText(t *testing.T) {
 		t.Fatalf("unexpected type: %T", out)
 	}
 	for _, want := range []string{
-		"project:\n",
+		"project (日志项目管理):\n",
 		"DescribeProject",
-		"GET /DescribeProject",
+		":",
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("text view missing %q: %s", want, s)
+		}
+	}
+	for _, notWant := range []string{"input:", "required flags:"} {
+		if strings.Contains(s, notWant) {
+			t.Fatalf("text view should stay concise and hide %q: %s", notWant, s)
+		}
+	}
+}
+
+func TestCapabilitiesGroupsViewReturnsGroupOverview(t *testing.T) {
+	out, err := runCapabilities(nil, []string{"--view", "groups"})
+	if err != nil {
+		t.Fatalf("run capabilities error: %v", err)
+	}
+	s, ok := out.(string)
+	if !ok {
+		t.Fatalf("unexpected type: %T", out)
+	}
+	for _, want := range []string{
+		"account (账号管理):",
+		"账号管理相关接口",
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("groups view missing %q: %s", want, s)
+		}
+	}
+	if strings.Contains(s, "标签：") {
+		t.Fatalf("groups view should stay concise and hide tags: %s", s)
+	}
+}
+
+func TestUsageCapabilitiesDescribesDiscoveryEntryForAgents(t *testing.T) {
+	text := usageCapabilities()
+	for _, want := range []string{
+		"面向 agent 与自动化程序的统一能力发现入口",
+		"适合先做 group 粗分类，再做 action 筛选",
+		"帮助调用方以低探索成本定位可执行接口",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q in capabilities usage: %s", want, text)
 		}
 	}
 }
@@ -158,7 +207,6 @@ func TestFilterCapabilitiesPreservesMeta(t *testing.T) {
 				SupportsDryRun: true,
 				OutputModeHint: "envelope",
 				RiskLevel:      "low",
-				Idempotency:    "idempotent",
 			},
 		},
 	}
@@ -172,7 +220,7 @@ func TestFilterCapabilitiesPreservesMeta(t *testing.T) {
 	if len(got.Commands) != 1 {
 		t.Fatalf("commands=%d", len(got.Commands))
 	}
-	if !got.Commands[0].SupportsDryRun || got.Commands[0].OutputModeHint != "envelope" || got.Commands[0].RiskLevel != "low" || got.Commands[0].Idempotency != "idempotent" {
+	if !got.Commands[0].SupportsDryRun || got.Commands[0].OutputModeHint != "envelope" || got.Commands[0].RiskLevel != "low" {
 		t.Fatalf("unexpected command hints: %+v", got.Commands[0])
 	}
 }
@@ -185,8 +233,7 @@ func TestRunCapabilitiesWithHintsFileOverride(t *testing.T) {
     {
       "group": "log",
       "action": "SearchLogs",
-      "risk_level": "high",
-      "idempotency": "unknown"
+      "risk_level": "high"
     }
   ]
 }`
@@ -206,8 +253,8 @@ func TestRunCapabilitiesWithHintsFileOverride(t *testing.T) {
 		t.Fatalf("expected 1 command, got %d", len(doc.Commands))
 	}
 	cmd := doc.Commands[0]
-	if cmd.RiskLevel != "high" || cmd.Idempotency != "unknown" {
-		t.Fatalf("override not applied: risk=%q idempotency=%q", cmd.RiskLevel, cmd.Idempotency)
+	if cmd.RiskLevel != "high" {
+		t.Fatalf("override not applied: risk=%q", cmd.RiskLevel)
 	}
 }
 
@@ -222,8 +269,7 @@ func TestCapabilitiesAutoLoadsHintsFileFromProjectConfig(t *testing.T) {
     {
       "group": "log",
       "action": "SearchLogs",
-      "risk_level": "high",
-      "idempotency": "unknown"
+      "risk_level": "high"
     }
   ]
 }`
@@ -260,8 +306,8 @@ func TestCapabilitiesAutoLoadsHintsFileFromProjectConfig(t *testing.T) {
 	if len(doc.Commands) != 1 {
 		t.Fatalf("commands=%d", len(doc.Commands))
 	}
-	if doc.Commands[0].RiskLevel != "high" || doc.Commands[0].Idempotency != "unknown" {
-		t.Fatalf("auto hints not applied: risk=%q idempotency=%q", doc.Commands[0].RiskLevel, doc.Commands[0].Idempotency)
+	if doc.Commands[0].RiskLevel != "high" {
+		t.Fatalf("auto hints not applied: risk=%q", doc.Commands[0].RiskLevel)
 	}
 }
 
@@ -273,8 +319,7 @@ func TestCapabilitiesAutoLoadsHintsFileFromEnv(t *testing.T) {
     {
       "group": "log",
       "action": "SearchLogs",
-      "risk_level": "high",
-      "idempotency": "unknown"
+      "risk_level": "high"
     }
   ]
 }`
@@ -307,8 +352,8 @@ func TestCapabilitiesAutoLoadsHintsFileFromEnv(t *testing.T) {
 	if len(doc.Commands) != 1 {
 		t.Fatalf("commands=%d", len(doc.Commands))
 	}
-	if doc.Commands[0].RiskLevel != "high" || doc.Commands[0].Idempotency != "unknown" {
-		t.Fatalf("env hints not applied: risk=%q idempotency=%q", doc.Commands[0].RiskLevel, doc.Commands[0].Idempotency)
+	if doc.Commands[0].RiskLevel != "high" {
+		t.Fatalf("env hints not applied: risk=%q", doc.Commands[0].RiskLevel)
 	}
 }
 
@@ -322,9 +367,9 @@ func TestCapabilitiesHintsFlagOverridesEnvAndProject(t *testing.T) {
 	envHintsPath := filepath.Join(tmp, "hints_env.json")
 	flagHintsPath := filepath.Join(tmp, "hints_flag.json")
 	for p, body := range map[string]string{
-		projectHintsPath: `{"rules":[{"group":"log","action":"SearchLogs","risk_level":"high","idempotency":"unknown"}]}`,
-		envHintsPath:     `{"rules":[{"group":"log","action":"SearchLogs","risk_level":"high","idempotency":"unknown"}]}`,
-		flagHintsPath:    `{"rules":[{"group":"log","action":"SearchLogs","risk_level":"low","idempotency":"idempotent"}]}`,
+		projectHintsPath: `{"rules":[{"group":"log","action":"SearchLogs","risk_level":"high"}]}`,
+		envHintsPath:     `{"rules":[{"group":"log","action":"SearchLogs","risk_level":"high"}]}`,
+		flagHintsPath:    `{"rules":[{"group":"log","action":"SearchLogs","risk_level":"low"}]}`,
 	} {
 		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
 			t.Fatalf("write hints file failed: %v", err)
@@ -361,8 +406,8 @@ func TestCapabilitiesHintsFlagOverridesEnvAndProject(t *testing.T) {
 	if len(doc.Commands) != 1 {
 		t.Fatalf("commands=%d", len(doc.Commands))
 	}
-	if doc.Commands[0].RiskLevel != "low" || doc.Commands[0].Idempotency != "idempotent" {
-		t.Fatalf("flag hints should win: risk=%q idempotency=%q", doc.Commands[0].RiskLevel, doc.Commands[0].Idempotency)
+	if doc.Commands[0].RiskLevel != "low" {
+		t.Fatalf("flag hints should win: risk=%q", doc.Commands[0].RiskLevel)
 	}
 }
 
@@ -376,7 +421,7 @@ func TestRunCapabilitiesTextViewWritesPlainText(t *testing.T) {
 	if strings.HasPrefix(stdout.String(), "\"") {
 		t.Fatalf("unexpected json-encoded string: %q", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "project:\n") {
+	if !strings.Contains(stdout.String(), "project (日志项目管理):\n") {
 		t.Fatalf("unexpected output: %q", stdout.String())
 	}
 }

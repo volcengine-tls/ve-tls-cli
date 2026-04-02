@@ -132,6 +132,18 @@ func TestCompletionPowerShellIncludesGlobalFlagsAndSubcommands(t *testing.T) {
 	}
 }
 
+func TestCompletionGroupsPrioritizeAgentFirstOrder(t *testing.T) {
+	groups := completionGroups()
+	got := strings.Join(groups[:4], ",")
+	want := "configure,capabilities,api,doctor"
+	if got != want {
+		t.Fatalf("unexpected leading completion groups: got=%q want=%q", got, want)
+	}
+	if strings.Index(strings.Join(groups, ","), "project") < strings.Index(strings.Join(groups, ","), "doctor") {
+		t.Fatalf("expected manual groups after primary agent groups: %v", groups)
+	}
+}
+
 func TestRunCompletionWritesPlainText(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

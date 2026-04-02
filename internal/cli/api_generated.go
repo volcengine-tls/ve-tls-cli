@@ -30,18 +30,22 @@ type apiCapabilityCommand struct {
 	GroupTitle       string           `json:"group_title,omitempty"`
 	Action           string           `json:"action"`
 	Summary          string           `json:"summary,omitempty"`
-	Method           string           `json:"method"`
-	Path             string           `json:"path"`
+	Description      string           `json:"description,omitempty"`
+	Method           string           `json:"method,omitempty"`
+	Path             string           `json:"path,omitempty"`
 	Params           []apiCapParam    `json:"params,omitempty"`
 	RequestParamsDoc []apiCapDocParam `json:"request_params_doc,omitempty"`
+	InputMode        string           `json:"input_mode,omitempty"`
+	RequiredFlags    []string         `json:"required_flags,omitempty"`
+	BodyRequired     bool             `json:"body_required,omitempty"`
 	SupportsDryRun   bool             `json:"supports_dry_run,omitempty"`
 	OutputModeHint   string           `json:"output_mode_hint,omitempty"`
 	RiskLevel        string           `json:"risk_level,omitempty"`
-	Idempotency      string           `json:"idempotency,omitempty"`
 }
 
 type apiCapParam struct {
 	Name         string   `json:"name"`
+	CLIFlag      string   `json:"cli_flag,omitempty"`
 	In           string   `json:"in"`
 	Required     bool     `json:"required,omitempty"`
 	RequiredText string   `json:"required_text,omitempty"`
@@ -102,6 +106,7 @@ func normalizeLoadedAPICapabilities(doc apiCapabilitiesDoc) apiCapabilitiesDoc {
 		if summary := strings.TrimSpace(doc.Commands[i].Summary); summary != "" {
 			doc.Commands[i].Action = summary
 		}
+		enrichCapabilitySemantics(&doc.Commands[i])
 	}
 	return doc
 }
@@ -209,13 +214,9 @@ func listGroupActions(group string, groupTitle string, actions map[string][]apiA
 			actionName = a
 		}
 		b.WriteString(actionName)
-		b.WriteString("  ")
-		b.WriteString(strings.ToUpper(strings.TrimSpace(op.Cmd.Method)))
-		b.WriteString(" ")
-		b.WriteString(strings.TrimSpace(op.Cmd.Path))
-		if s := strings.TrimSpace(op.Cmd.Summary); s != "" {
-			b.WriteString("  # ")
-			b.WriteString(s)
+		if desc := strings.TrimSpace(op.Cmd.Description); desc != "" {
+			b.WriteString(": ")
+			b.WriteString(desc)
 		}
 		b.WriteString("\n")
 	}
@@ -305,6 +306,11 @@ func parseGeneratedCallArgs(args []string, ops []apiActionOp) (string, string, m
 				return "", "", nil, nil, nil, "", errors.New("unknown arg: " + a)
 			}
 			p, ok := selected.ParamFlags[a]
+			if !ok {
+				if canonical := canonicalGeneratedFlag(a); canonical != "" && canonical != a {
+					p, ok = selected.ParamFlags[canonical]
+				}
+			}
 			if !ok {
 				return "", "", nil, nil, nil, "", errors.New("unknown flag: " + a)
 			}
@@ -411,6 +417,17 @@ func toKebab(s string) string {
 		out = strings.ReplaceAll(out, "--", "-")
 	}
 	return out
+}
+
+func canonicalGeneratedFlag(s string) string {
+	if !strings.HasPrefix(strings.TrimSpace(s), "--") {
+		return ""
+	}
+	name := strings.TrimPrefix(strings.TrimSpace(s), "--")
+	if name == "" {
+		return ""
+	}
+	return "--" + toKebab(name)
 }
 
 func shouldInsertDashBeforeUpper(runes []rune, i int) bool {

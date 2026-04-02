@@ -24,15 +24,15 @@
 当前仓库的 CLI 执行入口是一个很薄的封装：`cmd/volclog/main.go` 调用 `internal/cli.Run`，整体链路是：
 - 全局参数解析：`--profile`、`--output`、`--output-mode`、`--trace-dir`、`--dry-run` 等先于 group 生效
 - 运行时上下文：统一加载环境变量、profile、本地项目默认值 `./.volclog/cli.config.json`
-- 命令分组：`configure`、`capabilities`、`api`、`project`、`topic`、`metric-topic`、`index`、`log`、`assistant`、`doctor`、`completion`
+- 命令分组：`configure`、`capabilities`、`commands`、`api`、`project`、`topic`、`metric-topic`、`index`、`log`、`assistant`、`doctor`、`completion`
 - 输出路径：stdout / file 两种模式；失败时 stderr 输出结构化 JSON
-- Agent 能力：`capabilities` 负责能力发现，`capabilities --view text` 提供人类可读清单，`api --describe` / `--print-request-template` 负责约束与模板，`--dry-run` / `--trace-dir` / `--output-mode file` 负责执行前校验与工件化
+- Agent 能力：`commands` + `capabilities` 负责发现能力，`api --describe` / `--print-request-template` 负责约束与模板，`--dry-run` / `--trace-dir` / `--output-mode file` 负责执行前校验与工件化
 
 ## Agent Integration
 
 ### 建议工作流
 
-1. 用 `volclog capabilities --view text` 或 `volclog capabilities` 发现命令空间  
+1. 用 `volclog commands` 或 `volclog capabilities` 发现命令空间  
 2. 用 `volclog api <group> <action> --describe` 读取机器可消费的参数约束  
 3. 用 `--print-request-template=required|full` 生成请求模板  
 4. 用 `volclog --dry-run api ...` 做本地校验  
@@ -42,7 +42,7 @@
 ### 能力发现
 
 ```bash
-volclog capabilities --view text --group log
+volclog commands --group log
 volclog capabilities --group log --action SearchLogs
 volclog capabilities --group log --action SearchLogs --view full
 ```
@@ -52,7 +52,6 @@ volclog capabilities --group log --action SearchLogs --view full
 - action 的 method / path / summary
 - 参数约束、请求体文档与风险提示
 - `supports_dry_run`、`output_mode_hint`、`risk_level`、`idempotency`
-- `--view text` 可输出人类可读的 action 清单，适合作为人类浏览入口
 
 ### API 自解释与模板
 
@@ -138,13 +137,6 @@ Go 1.22+ 环境可直接在仓库根目录安装：
 ```bash
 bash scripts/install-local.sh
 ~/.local/bin/volclog --help
-```
-
-或直接用 go install（推荐用于装到 GOPATH/GOBIN）：
-
-```bash
-go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
-volclog --help
 ```
 
 或手工构建：
@@ -277,22 +269,7 @@ volclog log search --request file://./examples/search_logs.json
 
 - `--output json`：默认，适合对象型结果
 - `--output jsonl`：适合导出、流式处理、管道消费
-- `--output-mode file`：stdout 只返回文件路径，内容落盘
-- `--output-file <path>`：指定落盘文件（未指定则默认目录为 `./.volclog/output`；也可通过 `VOLCLOG_OUTPUT_DIR` 或项目级 `./.volclog/cli.config.json` 中的 `output_dir` 指定默认目录）
-
-### JMESPath 过滤
-
-`--jmes-filter` 现在支持真实 JMESPath 表达式，适合在 CLI 侧先做字段裁剪、投影和重组。
-
-```bash
-volclog --jmes-filter "Projects[].{ProjectId: ProjectId, ProjectName: ProjectName}" project list --project-name volclog
-volclog --jmes-filter "Projects[0].ProjectId" project list --project-name volclog
-```
-
-常见用法：
-- `Projects[0].ProjectId`：取第一条记录的单个字段
-- `Projects[].ProjectName`：投影出所有名称
-- `Projects[].{ProjectId: ProjectId, ProjectName: ProjectName}`：重组成更适合脚本消费的对象数组
+- `--output-mode file`：stdout 只返回文件路径，实际内容写入 `./.volclog/output/`
 
 ### 错误结构
 
@@ -315,7 +292,7 @@ volclog --jmes-filter "Projects[0].ProjectId" project list --project-name volclo
 ```bash
 volclog configure -h
 volclog capabilities -h
-volclog capabilities --view text
+volclog commands -h
 volclog api -h
 volclog project -h
 volclog topic -h
