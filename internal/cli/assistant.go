@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
@@ -22,6 +21,10 @@ import (
 
 func runAssistant(ctx *Context, args []string) (any, error) {
 	return runSubcommandGroup(args, usageAssistant(), nil, func(command string, commandArgs []string) (any, error) {
+		ctx.Action = "assistant." + strings.TrimSpace(command)
+		if out, handled, err := maybeHandleShortcutMeta("assistant", command, commandArgs); handled {
+			return out, err
+		}
 		switch command {
 		case "describe-session-answer":
 			return assistantDescribeSessionAnswer(ctx, commandArgs)
@@ -238,9 +241,15 @@ func assistantStreamAnswer(ctx *Context, instanceID, topicID, sessionID, questio
 		return "", err
 	}
 	defer resp.Body.Close()
+	ctx.RequestID = resp.Header.Get("x-tls-requestid")
+	ctx.StatusCode = resp.StatusCode
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
-		return "", errors.New("DescribeSessionAnswer failed: status=" + strconv.Itoa(resp.StatusCode) + " body=" + strings.TrimSpace(string(b)))
+		return "", &httpError{
+			statusCode: resp.StatusCode,
+			body:       b,
+			requestID:  resp.Header.Get("x-tls-requestid"),
+		}
 	}
 
 	var sb strings.Builder

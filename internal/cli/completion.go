@@ -60,7 +60,7 @@ func completionZshGlobalArgspec() []string {
 		case "--profile":
 			lines = append(lines, "'--profile[profile name]:profile:'")
 		case "--output":
-			lines = append(lines, "'--output[output format]:format:(json jsonl)'")
+			lines = append(lines, "'--output[output format]:format:(json jsonl table)'")
 		case "--output-mode":
 			lines = append(lines, "'--output-mode[output destination]:mode:(stdout file)'")
 		case "--output-file":
@@ -134,8 +134,32 @@ _volclog_complete() {
         COMPREPLY=( $(compgen -W "call" -- "${cur}") )
         return 0
         ;;
-      assistant)
-        COMPREPLY=( $(compgen -W "describe-session-answer" -- "${cur}") )
+      project)
+        COMPREPLY=( $(compgen -W "list get create modify delete" -- "${cur}") )
+        return 0
+        ;;
+      topic)
+        COMPREPLY=( $(compgen -W "list get create modify delete" -- "${cur}") )
+        return 0
+        ;;
+      metric-topic)
+        COMPREPLY=( $(compgen -W "list get create modify delete search prom" -- "${cur}") )
+        return 0
+        ;;
+      index)
+        COMPREPLY=( $(compgen -W "get create modify" -- "${cur}") )
+        return 0
+        ;;
+      log)
+        COMPREPLY=( $(compgen -W "search histogram context put export export-analysis" -- "${cur}") )
+        return 0
+        ;;
+      host-group)
+        COMPREPLY=( $(compgen -W "list get bind-rules unbind-rules delete-host create modify delete" -- "${cur}") )
+        return 0
+        ;;
+      collector)
+        COMPREPLY=( $(compgen -W "list get bind-host-groups unbind-host-groups create modify delete" -- "${cur}") )
         return 0
         ;;
       completion)
@@ -171,7 +195,7 @@ func completionZsh() string {
 	return `#compdef volclog
 _volclog() {
   local -a groups global_flags
-  local -a configure_cmds api_cmds project_cmds topic_cmds metric_topic_cmds index_cmds log_cmds assistant_cmds completion_args prom_cmds
+  local -a configure_cmds skill_cmds api_cmds project_cmds topic_cmds metric_topic_cmds index_cmds log_cmds host_group_cmds collector_cmds completion_args prom_cmds
   local -a api_call_flags http_methods common_api_paths
   local -a configure_set_flags
   local group cmd i w
@@ -180,14 +204,16 @@ _volclog() {
   global_flags=(` + globalFlags + `)
 
   configure_cmds=(set use show list delete)
+  skill_cmds=(list install)
   api_cmds=(call)
   project_cmds=(list get create modify delete)
   topic_cmds=(list get create modify delete)
   metric_topic_cmds=(list get create modify delete search prom)
   prom_cmds=(query query-range series labels label-values)
   index_cmds=(get create modify)
-  log_cmds=(search export export-analysis)
-  assistant_cmds=(describe-session-answer)
+  log_cmds=(search histogram context put export export-analysis)
+  host_group_cmds=(list get bind-rules unbind-rules delete-host create modify delete)
+  collector_cmds=(list get bind-host-groups unbind-host-groups create modify delete)
   completion_args=(bash zsh fish powershell)
   api_call_flags=(--method --path --query --header --body)
   http_methods=(GET POST PUT DELETE)
@@ -289,13 +315,15 @@ _volclog() {
     (cmd)
       case $group in
         (configure) _describe 'command' configure_cmds ;;
+        (skill) _describe 'command' skill_cmds ;;
         (api) _describe 'command' api_cmds ;;
         (project) _describe 'command' project_cmds ;;
         (topic) _describe 'command' topic_cmds ;;
         (metric-topic) _describe 'command' metric_topic_cmds ;;
         (index) _describe 'command' index_cmds ;;
         (log) _describe 'command' log_cmds ;;
-        (assistant) _describe 'command' assistant_cmds ;;
+        (host-group) _describe 'command' host_group_cmds ;;
+        (collector) _describe 'command' collector_cmds ;;
         (completion) _describe 'shell' completion_args ;;
       esac
       ;;
@@ -344,6 +372,13 @@ func completionFish() string {
 	b.WriteString("complete -c volclog -l query -n '__fish_seen_subcommand_from api; and __fish_seen_subcommand_from call'\n")
 	b.WriteString("complete -c volclog -l header -n '__fish_seen_subcommand_from api; and __fish_seen_subcommand_from call'\n")
 	b.WriteString("complete -c volclog -l body -n '__fish_seen_subcommand_from api; and __fish_seen_subcommand_from call'\n")
+	b.WriteString("complete -c volclog -f -n '__fish_seen_subcommand_from project; and __fish_use_subcommand' -a 'list get create modify delete'\n")
+	b.WriteString("complete -c volclog -f -n '__fish_seen_subcommand_from topic; and __fish_use_subcommand' -a 'list get create modify delete'\n")
+	b.WriteString("complete -c volclog -f -n '__fish_seen_subcommand_from metric-topic; and __fish_use_subcommand' -a 'list get create modify delete search prom'\n")
+	b.WriteString("complete -c volclog -f -n '__fish_seen_subcommand_from index; and __fish_use_subcommand' -a 'get create modify'\n")
+	b.WriteString("complete -c volclog -f -n '__fish_seen_subcommand_from log; and __fish_use_subcommand' -a 'search histogram context put export export-analysis'\n")
+	b.WriteString("complete -c volclog -f -n '__fish_seen_subcommand_from host-group; and __fish_use_subcommand' -a 'list get bind-rules unbind-rules delete-host create modify delete'\n")
+	b.WriteString("complete -c volclog -f -n '__fish_seen_subcommand_from collector; and __fish_use_subcommand' -a 'list get bind-host-groups unbind-host-groups create modify delete'\n")
 	return b.String()
 }
 
@@ -362,11 +397,14 @@ Register-ArgumentCompleter -Native -CommandName volclog -ScriptBlock {
   $httpMethods = @('GET','POST','PUT','DELETE')
   $apiPaths = @('/DescribeProjects','/DescribeProject','/CreateProject','/ModifyProject','/DeleteProject','/DescribeTopics','/DescribeTopic','/CreateTopic','/ModifyTopic','/DeleteTopic','/DescribeIndex','/CreateIndex','/ModifyIndex','/SearchLogs')
   $configureCmds = @('set','use','show','list','delete')
+  $skillCmds = @('list','install')
   $projectCmds = @('list','get','create','modify','delete')
   $topicCmds = @('list','get','create','modify','delete')
   $metricTopicCmds = @('list','get','create','modify','delete','search','prom')
   $indexCmds = @('get','create','modify')
-  $logCmds = @('search','export','export-analysis')
+  $logCmds = @('search','histogram','context','put','export','export-analysis')
+  $hostGroupCmds = @('list','get','bind-rules','unbind-rules','delete-host','create','modify','delete')
+  $collectorCmds = @('list','get','bind-host-groups','unbind-host-groups','create','modify','delete')
   $doctorCmds = @('--online')
   $promCmds = @('query','query-range','series','labels','label-values')
 
@@ -410,12 +448,14 @@ Register-ArgumentCompleter -Native -CommandName volclog -ScriptBlock {
       switch ($group) {
         'api' { $candidates = @('call') }
         'configure' { $candidates = $configureCmds }
+        'skill' { $candidates = $skillCmds }
         'project' { $candidates = $projectCmds }
         'topic' { $candidates = $topicCmds }
         'metric-topic' { $candidates = $metricTopicCmds }
         'index' { $candidates = $indexCmds }
         'log' { $candidates = $logCmds }
-        'assistant' { $candidates = @('describe-session-answer') }
+        'host-group' { $candidates = $hostGroupCmds }
+        'collector' { $candidates = $collectorCmds }
         'doctor' { $candidates = @() }
         'completion' { $candidates = @('bash','zsh','fish','powershell') }
       }

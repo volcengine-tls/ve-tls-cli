@@ -41,6 +41,9 @@ type apiCapabilityCommand struct {
 	SupportsDryRun   bool             `json:"supports_dry_run,omitempty"`
 	OutputModeHint   string           `json:"output_mode_hint,omitempty"`
 	RiskLevel        string           `json:"risk_level,omitempty"`
+	AgentEntrypoint  string           `json:"agent_entrypoint,omitempty"`
+	AgentNextStep    string           `json:"agent_next_step,omitempty"`
+	RelatedShortcuts []string         `json:"related_shortcuts,omitempty"`
 }
 
 type apiCapParam struct {
@@ -217,6 +220,11 @@ func listGroupActions(group string, groupTitle string, actions map[string][]apiA
 		if desc := strings.TrimSpace(op.Cmd.Description); desc != "" {
 			b.WriteString(": ")
 			b.WriteString(desc)
+		}
+		if shortcuts := relatedShortcutLabelsForAPI(group, actionName); len(shortcuts) > 0 {
+			b.WriteString(" [shortcut: ")
+			b.WriteString(strings.Join(shortcuts, ", "))
+			b.WriteString("]")
 		}
 		b.WriteString("\n")
 	}

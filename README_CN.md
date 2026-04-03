@@ -152,7 +152,31 @@ go build -o ./volclog ./cmd/volclog
 ./volclog --help
 ```
 
-### 2.3 Docker 运行
+### 2.3 npm / npx 安装
+
+如果你希望直接通过 Node 生态分发并调用内置的 skill 安装能力，可使用：
+
+一次性执行：
+
+```bash
+npx @volcengine/volclog skill install --dir /path/to/agent/skills
+```
+
+全局安装：
+
+```bash
+npm install -g @volcengine/volclog
+volclog --help
+volclog skill install --dir /path/to/agent/skills
+```
+
+说明：
+
+- npm 包会在 `postinstall` 阶段按当前 OS/Arch 下载对应的 release 二进制
+- 默认按 npm 包版本匹配 `volclog-vX.Y.Z` release；开发态可通过 `VOLCLOG_BASE_URL`、`VOLCLOG_DOWNLOAD_URL` 或 `VOLCLOG_VERSION` 覆盖
+- 如需跳过下载（例如本地调试 npm 包结构），可设置 `VOLCLOG_NPM_SKIP_DOWNLOAD=1`
+
+### 2.4 Docker 运行
 
 ```bash
 docker build -t volclog:local .
@@ -171,7 +195,7 @@ docker run --rm \
   volclog:local project list
 ```
 
-### 2.4 源码验证
+### 2.5 源码验证
 
 阅读、修改或二次集成代码时，建议先跑：
 
@@ -203,6 +227,24 @@ volclog capabilities --group log --action SearchLogs --view full
 - `capabilities` 适合给 Agent 提供机器可消费的契约
 - `capabilities --view text` 适合快速查看人类可读的命令清单
 - `capabilities --view full` 会带回更完整的参数约束、请求体说明与提示信息
+
+### 3.1.1 skills 触发词与默认配方
+
+如果你把 `volclog` 接到其他大模型 / agent，建议先把高频 skill 的触发词和默认首命令写死，避免模型先乱探索：
+
+| Skill | 典型触发词 | 默认首命令 |
+|---|---|---|
+| `volclog-topic` | `topic`、`topics`、`日志主题`、`创建主题` | `volclog topic create --describe` 或 `volclog topic list --project-id <ProjectId> --jmes-filter "Topics[].{TopicId: TopicId, TopicName: TopicName}"` |
+| `volclog-index` | `index`、`tokenizer`、`查看索引`、`修改索引` | `volclog index get --topic-id <TopicId>` 或 `volclog index create --print-request-template=full` |
+| `volclog-log` | `search logs`、`export logs`、`analysis query`、`检索日志`、`导出日志` | `volclog log search --describe`、`volclog --output-mode file log export --describe`、`volclog --output-mode file log export-analysis --describe` |
+
+建议规则：
+
+- group 已明确时，先留在该 group，不要先全局探索
+- shortcut 不够时，再走：
+  `volclog capabilities --group <group> --view text`
+  `volclog api <group> <action> --describe`
+- 大结果默认配合 `--output-mode file`
 
 ### 3.2 用 api 自解释能力生成请求约束
 

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -55,5 +56,22 @@ func TestLoadProjectConfigHintsFile(t *testing.T) {
 	}
 	if cfg.HintsFile != "./hints.json" {
 		t.Fatalf("unexpected hints_file: %q", cfg.HintsFile)
+	}
+}
+
+func TestSaveProjectConfigAtDoesNotEscapeAngleBrackets(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".volclog", "cli.config.json")
+	cfg := ProjectConfig{HintsFile: "./hints<prod>.json"}
+	if err := SaveProjectConfigAt(path, cfg); err != nil {
+		t.Fatalf("save project config error: %v", err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read error: %v", err)
+	}
+	out := string(b)
+	if strings.Contains(out, `\u003c`) || strings.Contains(out, `\u003e`) {
+		t.Fatalf("angle brackets should not be escaped: %q", out)
 	}
 }

@@ -77,12 +77,20 @@ func TestDescribeOperationOutput(t *testing.T) {
 		`"input_mode":`,
 		`"required_flags":`,
 		`"request_body"`,
+		`"template_guidance"`,
+		`"use_required_when":`,
+		`"use_full_when":`,
+		`"skip_when":`,
 		`"request_params_doc"`,
+		`"output_filter_scope"`,
+		`"output_filter_examples"`,
+		`"shell_quoting"`,
 		`"template_required"`,
 		`"template_full"`,
 		`"min_length": 1`,
 		`"cli_flag": "--project-name"`,
 		`"guidance"`,
+		`--jmes-filter \"keys(@)\"`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("describe output missing %q: %s", want, s)
@@ -106,7 +114,7 @@ func TestParseGeneratedCallArgsAcceptsRawAPIParamStyleFlags(t *testing.T) {
 		{
 			Cmd: apiCapabilityCommand{
 				Method: "GET",
-				Path:   "/DescribeHostGroups",
+				Path:   "/DescribeHostGroupsV2",
 				Params: []apiCapParam{
 					{Name: "PageNumber", In: "query", Type: "integer"},
 					{Name: "PageSize", In: "query", Type: "integer"},
@@ -193,6 +201,10 @@ func TestDescribeOperationOutputStableFieldOrder(t *testing.T) {
 		`"required_flags":`,
 		`"params":`,
 		`"request_body":`,
+		`"template_guidance":`,
+		`"output_filter_scope":`,
+		`"output_filter_examples":`,
+		`"shell_quoting":`,
 		`"guidance":`,
 	}
 	last := -1
@@ -210,6 +222,56 @@ func TestDescribeOperationOutputStableFieldOrder(t *testing.T) {
 		if idxGuide := strings.Index(s, `"guidance":`); idxReqDoc > idxGuide {
 			t.Fatalf("request_params_doc should appear before guidance: %s", s)
 		}
+	}
+}
+
+func TestGeneratedDescribeIncludesTemplateGuidance(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"api", "log", "SearchLogs", "--describe"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		`"template_guidance":`,
+		`"use_required_when":`,
+		`"use_full_when":`,
+		`"after_generate":`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in output: %s", want, out)
+		}
+	}
+}
+
+func TestGeneratedDescribePutLogsMentionsMillisecondTimestamp(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"api", "log", "PutLogs", "--describe"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		`"template_guidance":`,
+		`毫秒`,
+		`1710374400000`,
+		`不要填秒级`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in output: %s", want, out)
+		}
+	}
+}
+
+func TestGeneratedDescribeDoesNotEscapeAngleBrackets(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"api", "project", "CreateProject", "--describe"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	if strings.Contains(out, `\u003c`) || strings.Contains(out, `\u003e`) {
+		t.Fatalf("angle brackets should not be escaped: %q", out)
 	}
 }
 
@@ -267,6 +329,27 @@ func TestRequestTemplateOutputUsesExpandedPutLogsTemplate(t *testing.T) {
 	}
 }
 
+func TestRequestTemplateOutputUsesMillisecondPutLogsTimestamp(t *testing.T) {
+	ops := []apiActionOp{
+		{
+			Cmd: apiCapabilityCommand{
+				Group:  "log",
+				Action: "PutLogs",
+				Params: []apiCapParam{
+					{In: "body", Ref: "#/definitions/code_byted_org_storage_tls-lib_proto_pb.LogGroupList"},
+				},
+			},
+		},
+	}
+
+	for _, mode := range []string{"required", "full"} {
+		got := requestTemplateOutput(ops, mode, generatedRequestTemplates, generatedRequestTemplatesFull)
+		if !strings.Contains(got, `"Time": 1710374400000`) {
+			t.Fatalf("putlogs %s template should use a millisecond timestamp example: %s", mode, got)
+		}
+	}
+}
+
 func TestGeneratedDescribeIncludesRequestParamsDoc(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"api", "project", "CreateProject", "--describe"}, &stdout, &stderr)
@@ -281,6 +364,24 @@ func TestGeneratedDescribeIncludesRequestParamsDoc(t *testing.T) {
 		`"template_full":`,
 		`"ProjectName"`,
 		`"Region"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in output: %s", want, out)
+		}
+	}
+}
+
+func TestGeneratedDescribeLargeOutputIncludesFileHint(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"api", "log", "SearchLogs", "--describe"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		`"preferred_output_mode": "file"`,
+		`"recommended_global_flags": [`,
+		`"--output-mode file"`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in output: %s", want, out)

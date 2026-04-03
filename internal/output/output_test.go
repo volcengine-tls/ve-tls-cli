@@ -1,6 +1,7 @@
 package output
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -57,5 +58,59 @@ func TestApplyFilterInvalidJMESPath(t *testing.T) {
 	}
 	if !strings.HasPrefix(err.Error(), "invalid jmes-filter expression:") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestWriteTableFromCollection(t *testing.T) {
+	var buf bytes.Buffer
+	err := Write(&buf, map[string]any{
+		"Projects": []any{
+			map[string]any{"ProjectId": "p1", "ProjectName": "alpha", "Region": "cn-beijing"},
+			map[string]any{"ProjectId": "p2", "ProjectName": "beta", "Region": "cn-shanghai"},
+		},
+		"Total": 2,
+	}, FormatTable)
+	if err != nil {
+		t.Fatalf("write table error: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{"ProjectId", "ProjectName", "Region", "p1", "alpha", "cn-beijing"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in table: %q", want, out)
+		}
+	}
+}
+
+func TestWriteTableEmptyRows(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Write(&buf, map[string]any{"Projects": []any{}}, FormatTable); err != nil {
+		t.Fatalf("write table error: %v", err)
+	}
+	if got := buf.String(); got != "(no rows)\n" {
+		t.Fatalf("unexpected table output: %q", got)
+	}
+}
+
+func TestWriteJSONDoesNotEscapeAngleBrackets(t *testing.T) {
+	var buf bytes.Buffer
+	err := Write(&buf, map[string]any{"hint": "volclog api <group> <action> --describe"}, FormatJSON)
+	if err != nil {
+		t.Fatalf("write json error: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, `\u003c`) || strings.Contains(out, `\u003e`) {
+		t.Fatalf("angle brackets should not be escaped: %q", out)
+	}
+}
+
+func TestWriteJSONLDoesNotEscapeAngleBrackets(t *testing.T) {
+	var buf bytes.Buffer
+	err := Write(&buf, []any{map[string]any{"hint": "volclog api <group> <action> --describe"}}, FormatJSONL)
+	if err != nil {
+		t.Fatalf("write jsonl error: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, `\u003c`) || strings.Contains(out, `\u003e`) {
+		t.Fatalf("angle brackets should not be escaped: %q", out)
 	}
 }

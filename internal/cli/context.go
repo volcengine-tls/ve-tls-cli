@@ -134,6 +134,7 @@ func (c *Context) Do(method, path string, query map[string]string, header map[st
 	if meta.OutputMode == "" {
 		meta.OutputMode = c.OutputMode
 	}
+	previewBody := append([]byte(nil), body...)
 	adaptedHeader, adaptedBody, state, specialHandled, err := prepareSpecialIORequest(meta, header, body)
 	if err != nil {
 		return nil, err
@@ -143,7 +144,7 @@ func (c *Context) Do(method, path string, query map[string]string, header map[st
 		body = adaptedBody
 	}
 	if c.DryRun {
-		plan := c.buildDryRunPlan(method, path, query, header, body, specialHandled)
+		plan := c.buildDryRunPlan(method, path, query, header, body, originalRequestPreview(previewBody, body, specialHandled), meta.RequestFormat, specialHandled)
 		c.tracePlan(method, path, query, header, body, plan)
 		return plan, nil
 	}
@@ -157,7 +158,7 @@ func (c *Context) Do(method, path string, query map[string]string, header map[st
 	return decodeResponse(resp)
 }
 
-func (c *Context) buildDryRunPlan(method, path string, query map[string]string, header map[string]string, body []byte, specialHandled bool) map[string]any {
+func (c *Context) buildDryRunPlan(method, path string, query map[string]string, header map[string]string, body []byte, previewBody []byte, previewFormat requestFormat, specialHandled bool) map[string]any {
 	checks := make([]map[string]any, 0, 4)
 	valid := true
 	if err := c.ResolveProfile(); err != nil {
@@ -224,7 +225,47 @@ func (c *Context) buildDryRunPlan(method, path string, query map[string]string, 
 		"checks":           checks,
 		"valid":            valid,
 	}
+	plan["request_preview"] = buildDryRunRequestPreview(query, previewBody, previewFormat, specialHandled)
 	return plan
+}
+
+func originalRequestPreview(originalBody []byte, adaptedBody []byte, specialHandled bool) []byte {
+	if specialHandled {
+		return append([]byte(nil), originalBody...)
+	}
+	return append([]byte(nil), adaptedBody...)
+}
+
+func buildDryRunRequestPreview(query map[string]string, body []byte, format requestFormat, specialHandled bool) map[string]any {
+	preview := map[string]any{
+		"query": cloneStringMap(query),
+	}
+	if specialHandled {
+		preview["body_source"] = "input_before_special_io"
+	}
+	if v, ok := decodeDryRunPreviewBody(body, format); ok {
+		preview["body"] = v
+	}
+	return preview
+}
+
+func decodeDryRunPreviewBody(body []byte, format requestFormat) (any, bool) {
+	trimmed := bytesTrimSpaceLocal(body)
+	if len(trimmed) == 0 {
+		return map[string]any{}, true
+	}
+	if normalizeRequestFormat(format) == requestFormatJSONL {
+		rows, err := parseJSONLObjects(trimmed)
+		if err != nil {
+			return string(trimmed), true
+		}
+		return rows, true
+	}
+	v, err := util.UnmarshalJSON(trimmed)
+	if err != nil {
+		return string(trimmed), true
+	}
+	return v, true
 }
 
 func redactedHeaderKeys(header map[string]string) []string {

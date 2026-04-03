@@ -62,10 +62,9 @@ func SaveProjectConfigAt(path string, cfg ProjectConfig) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(cfg, "", "  ")
+	b, err := marshalIndentNoEscape(cfg)
 	if err != nil {
 		return err
 	}
-	b = append(b, '\n')
 	return os.WriteFile(path, b, 0o600)
 }

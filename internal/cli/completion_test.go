@@ -27,8 +27,16 @@ func TestCompletionZshIncludesGroupsFlagsAndSubcommands(t *testing.T) {
 		"search",
 		"export",
 		"export-analysis",
-		"assistant_cmds",
-		"describe-session-answer",
+		"put",
+		"context",
+		"histogram",
+		"host-group",
+		"bind-rules",
+		"unbind-rules",
+		"delete-host",
+		"collector",
+		"bind-host-groups",
+		"unbind-host-groups",
 		"topic",
 		"create",
 		"query-range",
@@ -39,6 +47,11 @@ func TestCompletionZshIncludesGroupsFlagsAndSubcommands(t *testing.T) {
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in completion script", want)
+		}
+	}
+	for _, notWant := range []string{"assistant_cmds", "describe-session-answer"} {
+		if strings.Contains(s, notWant) {
+			t.Fatalf("unexpected hidden assistant completion token %q in %q", notWant, s)
 		}
 	}
 }
@@ -57,10 +70,15 @@ func TestCompletionBashIncludesGroupsFlagsAndCases(t *testing.T) {
 		"--output-mode",
 		"call",
 		"GET POST PUT DELETE",
+		"bind-rules unbind-rules delete-host",
+		"bind-host-groups unbind-host-groups",
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in completion script", want)
 		}
+	}
+	if strings.Contains(s, "describe-session-answer") {
+		t.Fatalf("assistant shortcut should be hidden from bash completion: %q", s)
 	}
 }
 
@@ -79,10 +97,15 @@ func TestCompletionFishIncludesProjectSubcommands(t *testing.T) {
 		"GET POST PUT DELETE",
 		"-l path",
 		"/SearchLogs",
+		"bind-rules unbind-rules delete-host",
+		"bind-host-groups unbind-host-groups",
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in completion script", want)
 		}
+	}
+	if strings.Contains(s, "describe-session-answer") {
+		t.Fatalf("assistant shortcut should be hidden from fish completion: %q", s)
 	}
 }
 
@@ -125,10 +148,17 @@ func TestCompletionPowerShellIncludesGlobalFlagsAndSubcommands(t *testing.T) {
 		"$indexCmds",
 		"$logCmds",
 		"$promCmds",
+		"$hostGroupCmds",
+		"$collectorCmds",
+		"bind-rules",
+		"bind-host-groups",
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in completion script", want)
 		}
+	}
+	if strings.Contains(s, "describe-session-answer") {
+		t.Fatalf("assistant shortcut should be hidden from powershell completion: %q", s)
 	}
 }
 

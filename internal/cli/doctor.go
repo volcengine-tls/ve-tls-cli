@@ -57,48 +57,24 @@ func runDoctor(ctx *Context, args []string) (any, int, error) {
 		profileSource = "default"
 	}
 
-	envAK := strings.TrimSpace(os.Getenv("VOLCENGINE_ACCESS_KEY_ID"))
-	envSK := strings.TrimSpace(os.Getenv("VOLCENGINE_ACCESS_KEY_SECRET"))
-	envToken := strings.TrimSpace(os.Getenv("VOLCENGINE_TOKEN"))
 	envRegion := strings.TrimSpace(os.Getenv("VOLCENGINE_REGION"))
 	envEndpoint := strings.TrimSpace(os.Getenv("VOLCENGINE_ENDPOINT"))
 
-	credMode := ""
-	credSource := ""
-	credPresent := false
-	akPresent := false
-	skPresent := false
-	tokenPresent := false
-
-	if envAK != "" || envSK != "" {
-		credSource = "env"
-		akPresent = envAK != ""
-		skPresent = envSK != ""
-		tokenPresent = envToken != ""
-		credPresent = akPresent && skPresent
-		if tokenPresent {
-			credMode = "sts"
-		} else {
-			credMode = "aksk"
-		}
-	}
-
 	var p config.Profile
-	if !credPresent {
-		if pp, ok := cfg.GetProfile(profileName); ok {
-			p = pp
-		}
-		akPresent = strings.TrimSpace(p.AccessKeyID) != ""
-		skPresent = strings.TrimSpace(p.SecretAccessKey) != ""
-		tokenPresent = strings.TrimSpace(p.SecurityToken) != ""
-		credPresent = akPresent && skPresent
-		credSource = "profile"
-		if tokenPresent {
-			credMode = "sts"
-		} else {
-			credMode = "aksk"
-		}
+	if pp, ok := cfg.GetProfile(profileName); ok {
+		p = pp
 	}
+	profileCredStatus := config.ResolveProfileCredentialStatus(cfg, p)
+	credStatus := profileCredStatus
+	if envCredStatus := config.ResolveEnvCredentialStatus(); envCredStatus.Present {
+		credStatus = envCredStatus
+	}
+	credMode := credStatus.Mode
+	credSource := credStatus.Source
+	credPresent := credStatus.Present
+	akPresent := credStatus.AK
+	skPresent := credStatus.SK
+	tokenPresent := credStatus.Token
 
 	region := ""
 	regionSource := ""
@@ -233,16 +209,8 @@ func runDoctor(ctx *Context, args []string) (any, int, error) {
 		ok := false
 		detail := ""
 		if strings.TrimSpace(region) != "" && strings.TrimSpace(endpoint) != "" {
-			ak := envAK
-			sk := envSK
-			token := envToken
-			if credSource != "env" {
-				ak = strings.TrimSpace(p.AccessKeyID)
-				sk = strings.TrimSpace(p.SecretAccessKey)
-				token = strings.TrimSpace(p.SecurityToken)
-			}
 			timeout := time.Duration(timeoutSeconds) * time.Second
-			cl, err := tlsapi.New(endpoint, region, profileName, ak, sk, token, timeout)
+			cl, err := tlsapi.New(endpoint, region, profileName, credStatus.AccessKeyID, credStatus.SecretAccessKey, credStatus.SecurityToken, timeout)
 			if err != nil {
 				detail = err.Error()
 			} else {

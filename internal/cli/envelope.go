@@ -8,14 +8,27 @@ import (
 )
 
 func isAPIEnvelopeCandidate(group string, out any) bool {
-	if strings.TrimSpace(group) != "api" {
+	g := strings.TrimSpace(group)
+	if !isEnvelopeGroup(g) {
 		return false
 	}
-	_, isString := out.(string)
-	return !isString
+	if g == "api" {
+		_, isString := out.(string)
+		return !isString
+	}
+	return true
 }
 
-func buildAPIEnvelope(ctx *Context, out any, outputMode string, outputFile string, format output.Format) (map[string]any, error) {
+func isEnvelopeGroup(group string) bool {
+	switch strings.TrimSpace(group) {
+	case "api", "project", "topic", "metric-topic", "index", "log", "assistant":
+		return true
+	default:
+		return false
+	}
+}
+
+func buildAPIEnvelope(ctx *Context, group string, out any, outputMode string, outputFile string, format output.Format) (map[string]any, error) {
 	summary := map[string]any{
 		"outputMode": outputMode,
 		"dryRun":     ctx.DryRun,
@@ -25,14 +38,14 @@ func buildAPIEnvelope(ctx *Context, out any, outputMode string, outputFile strin
 	}
 	env := map[string]any{
 		"status":    "success",
-		"action":    normalizeAPIAction(ctx.Action),
+		"action":    normalizeAPIAction(ctx.Action, group),
 		"requestId": strings.TrimSpace(ctx.RequestID),
 		"summary":   summary,
 		"artifacts": []map[string]any{},
 		"error":     nil,
 	}
 	if outputMode == "file" {
-		p, err := writeOutputFileToDir(outputFile, ctx.OutputDir, "api", out, format)
+		p, err := writeOutputFileToDir(outputFile, ctx.OutputDir, group, out, format)
 		if err != nil {
 			return nil, err
 		}
@@ -50,13 +63,13 @@ func buildAPIEnvelope(ctx *Context, out any, outputMode string, outputFile strin
 	return env, nil
 }
 
-func buildAPIErrorEnvelope(ctx *Context, err error, outputMode string) map[string]any {
+func buildAPIErrorEnvelope(ctx *Context, group string, err error, outputMode string) map[string]any {
 	requestID := strings.TrimSpace(ctx.RequestID)
 	statusCode := ctx.StatusCode
 	kind := "unknown"
 	hint := ""
 	if err != nil {
-		p, _ := classifyError(err, ctx.RequestID, ctx.StatusCode)
+		p, _ := classifyError(err, ctx.RequestID, ctx.StatusCode, group)
 		if strings.TrimSpace(p.RequestID) != "" {
 			requestID = strings.TrimSpace(p.RequestID)
 		}
@@ -83,7 +96,7 @@ func buildAPIErrorEnvelope(ctx *Context, err error, outputMode string) map[strin
 	}
 	return map[string]any{
 		"status":    "failed",
-		"action":    normalizeAPIAction(ctx.Action),
+		"action":    normalizeAPIAction(ctx.Action, group),
 		"requestId": requestID,
 		"summary":   summary,
 		"artifacts": []map[string]any{},
@@ -99,10 +112,13 @@ func buildAPIErrorEnvelope(ctx *Context, err error, outputMode string) map[strin
 	}
 }
 
-func normalizeAPIAction(action string) string {
+func normalizeAPIAction(action string, group string) string {
 	a := strings.TrimSpace(action)
 	if a == "" {
-		return "api.call"
+		if strings.TrimSpace(group) == "" {
+			return "api.call"
+		}
+		return strings.TrimSpace(group)
 	}
 	return a
 }

@@ -9,6 +9,10 @@ import (
 
 func runIndex(ctx *Context, args []string) (any, error) {
 	return runSubcommandGroup(args, usageIndex(), nil, func(command string, commandArgs []string) (any, error) {
+		ctx.Action = "index." + strings.TrimSpace(command)
+		if out, handled, err := maybeHandleShortcutMeta("index", command, commandArgs); handled {
+			return out, err
+		}
 		switch command {
 		case "get":
 			return indexGet(ctx, commandArgs)
@@ -71,6 +75,12 @@ func indexUpsert(ctx *Context, path string, args []string) (any, error) {
 			}
 			bodyArg = args[1]
 			args = args[2:]
+		case "--request":
+			if len(args) < 2 {
+				return nil, errors.New("missing --request value")
+			}
+			bodyArg = args[1]
+			args = args[2:]
 		default:
 			return nil, errors.New("unknown flag: " + args[0])
 		}
@@ -95,6 +105,9 @@ func indexUpsert(ctx *Context, path string, args []string) (any, error) {
 		return nil, errors.New("index body must be JSON object")
 	}
 	m["TopicId"] = topicID
+	if err := validateIndexBody(path, m); err != nil {
+		return nil, err
+	}
 	body, err := util.MustJSON(m)
 	if err != nil {
 		return nil, err

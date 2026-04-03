@@ -11,6 +11,10 @@ import (
 
 func runMetricTopic(ctx *Context, args []string) (any, error) {
 	return runSubcommandGroup(args, usageMetricTopic(), map[string]struct{}{"prom": {}}, func(command string, commandArgs []string) (any, error) {
+		ctx.Action = "metric-topic." + strings.TrimSpace(command)
+		if out, handled, err := maybeHandleShortcutMeta("metric-topic", command, commandArgs); handled {
+			return out, err
+		}
 		switch command {
 		case "list":
 			return metricTopicList(ctx, commandArgs)
@@ -33,9 +37,13 @@ func runMetricTopic(ctx *Context, args []string) (any, error) {
 }
 
 func metricTopicList(ctx *Context, args []string) (any, error) {
+	args, all := extractBoolFlag(args, "--all")
 	query, err := parseTopicListQuery(args, false)
 	if err != nil {
 		return nil, err
+	}
+	if all {
+		return listAllByPageNumber(ctx, "/DescribeMetricTopics", query, "Topics")
 	}
 	body, _ := util.MustJSON(map[string]any{})
 	return ctx.Do("GET", "/DescribeMetricTopics", query, nil, body)
@@ -394,6 +402,7 @@ func metricTopicProm(ctx *Context, args []string) (any, error) {
 	if hasHelp(args[1:]) {
 		return nil, &usageError{Text: usageMetricTopicProm(), ExitCode: 0}
 	}
+	ctx.Action = "metric-topic.prom." + strings.TrimSpace(args[0])
 	switch args[0] {
 	case "query":
 		return metricTopicPromQuery(ctx, args[1:])

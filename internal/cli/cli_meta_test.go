@@ -49,6 +49,23 @@ func TestCliGroupsNoLongerExposeCommandsGroup(t *testing.T) {
 	}
 }
 
+func TestCliGroupsIncludeHostGroupAndCollector(t *testing.T) {
+	groups := cliGroupNames()
+	joined := strings.Join(groups, ",")
+	for _, want := range []string{"host-group", "collector"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("missing group %q in %q", want, joined)
+		}
+	}
+}
+
+func TestCliGroupsHideAssistantShortcutGroup(t *testing.T) {
+	groups := strings.Join(cliGroupNames(), ",")
+	if strings.Contains(groups, "assistant") {
+		t.Fatalf("assistant shortcut group should stay hidden from top-level cli groups: %q", groups)
+	}
+}
+
 func TestParseTopicListQueryRejectsConflictingTopicSelectors(t *testing.T) {
 	_, err := parseTopicListQuery([]string{"--topic-name", "demo", "--topic-id", "tid"}, false)
 	if err == nil || !strings.Contains(err.Error(), "TopicName and TopicId") {

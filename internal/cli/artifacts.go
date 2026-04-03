@@ -109,6 +109,8 @@ func defaultOutputFile(baseDir string, group string, format output.Format) (stri
 	ext := "json"
 	if format == output.FormatJSONL {
 		ext = "jsonl"
+	} else if format == output.FormatTable {
+		ext = "txt"
 	}
 	g := strings.TrimSpace(group)
 	if g == "" {

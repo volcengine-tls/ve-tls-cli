@@ -42,6 +42,9 @@ func runCapabilities(ctx *Context, args []string) (any, error) {
 				return nil, errors.New("missing --view value")
 			}
 			view = strings.ToLower(strings.TrimSpace(args[1]))
+			if view == "json" {
+				view = "compact"
+			}
 			if view != "compact" && view != "full" && view != "text" && view != "groups" {
 				return nil, errors.New("invalid --view: " + args[1])
 			}
@@ -96,6 +99,13 @@ func renderCapabilitiesText(doc apiCapabilitiesDoc) string {
 			b.WriteString(")")
 		}
 		b.WriteString(":\n")
+		if mode, entry := groupAgentEntry(g); entry != "" {
+			b.WriteString("  agent entry: ")
+			b.WriteString(mode)
+			b.WriteString(" -> ")
+			b.WriteString(entry)
+			b.WriteString("\n")
+		}
 		cmds := grouped[g]
 		sortCapabilities(cmds)
 		for _, c := range cmds {
@@ -105,10 +115,27 @@ func renderCapabilitiesText(doc apiCapabilitiesDoc) string {
 				b.WriteString(": ")
 				b.WriteString(s)
 			}
+			if next := capabilityActionNextStep(c); next != "" {
+				b.WriteString(" [next: ")
+				b.WriteString(next)
+				b.WriteString("]")
+			}
 			b.WriteString("\n")
 		}
 	}
 	return b.String()
+}
+
+func capabilityActionNextStep(cmd apiCapabilityCommand) string {
+	if step := strings.TrimSpace(cmd.AgentNextStep); step != "" {
+		return step
+	}
+	group := normalizeToken(cmd.Group)
+	action := strings.TrimSpace(cmd.Action)
+	if group == "" || action == "" {
+		return ""
+	}
+	return "volclog api " + group + " " + action + " --describe"
 }
 
 func renderCapabilitiesGroups(doc apiCapabilitiesDoc) string {
@@ -138,6 +165,12 @@ func renderCapabilitiesGroups(doc apiCapabilitiesDoc) string {
 		}
 		b.WriteString(": ")
 		b.WriteString(summarizeGroup(cmds))
+		if mode, entry := groupAgentEntry(g); entry != "" {
+			b.WriteString("; agent entry: ")
+			b.WriteString(mode)
+			b.WriteString(" -> ")
+			b.WriteString(entry)
+		}
 		b.WriteByte('\n')
 	}
 	return b.String()
@@ -221,9 +254,27 @@ func enrichCapabilitiesDoc(doc apiCapabilitiesDoc, overrides map[string]capabili
 			doc.Commands[i].OutputModeHint = doc.Meta.OutputModeHint
 		}
 		doc.Commands[i].RiskLevel = inferCapabilityRisk(doc.Commands[i])
+		applyCapabilityRoutingHints(&doc.Commands[i])
 		applyCapabilityHintOverride(&doc.Commands[i], overrides)
 	}
 	return doc
+}
+
+func applyCapabilityRoutingHints(cmd *apiCapabilityCommand) {
+	group := strings.TrimSpace(cmd.Group)
+	action := strings.TrimSpace(cmd.Action)
+	if shortcuts := relatedShortcutDescribesForAPI(group, action); len(shortcuts) > 0 {
+		cmd.AgentEntrypoint = "shortcut-first"
+		cmd.AgentNextStep = shortcuts[0]
+		cmd.RelatedShortcuts = shortcuts
+		return
+	}
+	group = normalizeToken(group)
+	if group == "" || action == "" {
+		return
+	}
+	cmd.AgentEntrypoint = "api-first"
+	cmd.AgentNextStep = "volclog api " + group + " " + action + " --describe"
 }
 
 func enrichCapabilitySemantics(cmd *apiCapabilityCommand) {

@@ -104,3 +104,50 @@ func TestAPIDryRunWithTraceAddsTracePathToEnvelope(t *testing.T) {
 		t.Fatalf("expected trace file: %v", err)
 	}
 }
+
+func TestAPIDryRunIncludesRequestPreviewBody(t *testing.T) {
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
+	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
+	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"--dry-run",
+		"api", "call",
+		"--method", "POST",
+		"--path", "/CreateProject",
+		"--query", "region=cn-beijing",
+		"--body", `{"ProjectName":"demo","Description":"preview"}`,
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v", err)
+	}
+	data, ok := out["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing data plan: %v", out)
+	}
+	preview, ok := data["request_preview"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing request_preview: %v", data)
+	}
+	body, ok := preview["body"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing preview body: %v", preview)
+	}
+	if body["ProjectName"] != "demo" {
+		t.Fatalf("unexpected preview body: %v", body)
+	}
+	query, ok := preview["query"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing preview query: %v", preview)
+	}
+	if query["region"] != "cn-beijing" {
+		t.Fatalf("unexpected preview query: %v", query)
+	}
+}

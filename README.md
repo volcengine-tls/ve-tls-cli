@@ -53,6 +53,21 @@ volclog capabilities --group log --action SearchLogs --view full
 - 参数约束、请求体文档与风险提示
 - `supports_dry_run`、`output_mode_hint`、`risk_level`、`idempotency`
 
+### Skill Hints
+
+If another model or agent is using the bundled skills, the safest first-step mapping for the most common domains is:
+
+| Skill | Trigger words | Default first command |
+|---|---|---|
+| `volclog-topic` | `topic`, `topics`, `log topic`, `创建主题` | `volclog topic create --describe` or `volclog topic list --project-id <ProjectId> --jmes-filter "Topics[].{TopicId: TopicId, TopicName: TopicName}"` |
+| `volclog-index` | `index`, `tokenizer`, `查看索引`, `修改索引` | `volclog index get --topic-id <TopicId>` or `volclog index create --print-request-template=full` |
+| `volclog-log` | `search logs`, `export logs`, `analysis query`, `检索日志`, `导出日志` | `volclog log search --describe`, `volclog --output-mode file log export --describe`, or `volclog --output-mode file log export-analysis --describe` |
+
+Practical rule:
+- If the group is already clear, stay in that group first.
+- If the shortcut is not enough, continue with `volclog capabilities --group <group> --view text` and then `volclog api <group> <action> --describe`.
+- Use `--output-mode file` for large results.
+
 ### API 自解释与模板
 
 ```bash
@@ -146,14 +161,35 @@ go build -o ./volclog ./cmd/volclog
 ./volclog --help
 ```
 
-### 方式 C：Docker
+### 方式 C：npm / npx
+
+If you want a Node-distributed entrypoint for the bundled skill installer, use:
+
+```bash
+npx @volcengine/volclog skill install --dir /path/to/agent/skills
+```
+
+Or install globally:
+
+```bash
+npm install -g @volcengine/volclog
+volclog --help
+volclog skill install --dir /path/to/agent/skills
+```
+
+Notes:
+- The npm package downloads the matching release binary for the current OS/Arch during `postinstall`
+- By default it maps the npm package version to `volclog-vX.Y.Z`; override with `VOLCLOG_BASE_URL`, `VOLCLOG_DOWNLOAD_URL`, or `VOLCLOG_VERSION` when needed
+- Set `VOLCLOG_NPM_SKIP_DOWNLOAD=1` to skip binary download while developing the npm wrapper
+
+### 方式 D：Docker
 
 ```bash
 docker build -t volclog:local .
 docker run --rm volclog:local --help
 ```
 
-### 方式 D：源码验证
+### 方式 E：源码验证
 
 阅读或修改代码后，建议先执行：
 

@@ -71,10 +71,23 @@ func TestAPIGroupHelpWorks(t *testing.T) {
 	for _, want := range []string{
 		"volclog api project",
 		"当前 group: project",
+		"场景速选:",
+		"模糊找项目",
+		"volclog project list --describe",
 		"CreateProject: 创建日志项目请求",
+		"下一步命令:",
+		"volclog api project <action> --describe",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in stdout: %q", want, out)
+		}
+	}
+	for _, notWant := range []string{
+		"执行前先使用:",
+		"如有 body，再运行:",
+	} {
+		if strings.Contains(out, notWant) {
+			t.Fatalf("group help should stay concise and hide %q: %q", notWant, out)
 		}
 	}
 }
@@ -93,11 +106,56 @@ func TestUsageTextDescribesPrimaryEntryAsAgentNative(t *testing.T) {
 	text := usageText()
 	for _, want := range []string{
 		"主入口（Agent / 自动化优先）",
-		"统一执行入口",
-		"优先服务智能体、CI/CD、运维脚本、RPA、服务端任务及各类非人工交互场景",
+		"用 capabilities 发现能力，用 api 查看约束并执行",
+		"1) 发现能力: volclog capabilities --view groups",
+		"默认全局参数写在 group 之前",
+		"输出类全局参数也可后置",
+		"大输出优先使用 --output-mode file",
+		"作用于原始命令/API 结果",
+		`zsh/bash 下建议写成 --jmes-filter "keys(@)"`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q in usage text: %q", want, text)
+		}
+	}
+	for _, notWant := range []string{
+		"优先服务智能体、CI/CD、运维脚本、RPA、服务端任务及各类非人工交互场景",
+		"补充说明:",
+	} {
+		if strings.Contains(text, notWant) {
+			t.Fatalf("unexpected verbose text %q in usage text: %q", notWant, text)
+		}
+	}
+}
+
+func TestUsageTextMentionsShortcutDescribeAndSkills(t *testing.T) {
+	text := usageText()
+	for _, want := range []string{
+		"高频 shortcut 也支持 --describe 与 --print-request-template",
+		"skills/ 与 skill-template/ 目录",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q in usage text: %q", want, text)
+		}
+	}
+}
+
+func TestAPISearchLogsHelpPrefersFileOutputExample(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"api", "log", "SearchLogs", "-h"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "volclog --output-mode file api log SearchLogs --request file://req.json") {
+		t.Fatalf("expected file output example in help: %q", out)
+	}
+	for _, want := range []string{
+		"例如取 Total 写 Total，不写 data.Total",
+		`zsh/bash: --jmes-filter "keys(@)"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in help: %q", want, out)
 		}
 	}
 }
@@ -110,12 +168,52 @@ func TestManualGroupHelpRedirectsAgentsToCapabilitiesAndDescribe(t *testing.T) {
 	}
 	out := stdout.String()
 	for _, want := range []string{
-		"Do not start here for discovery.",
-		"volclog capabilities --view text",
-		"volclog api project <action> --describe",
+		"High-frequency shortcut for both agents and humans.",
+		"volclog project create --describe",
+		"volclog project create --print-request-template=full",
+		"Fall back to capabilities/api when the shortcut does not cover the need.",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in stdout: %q", want, out)
+		}
+	}
+}
+
+func TestUsageGroupHelpIncludesScenarioRouting(t *testing.T) {
+	cases := []struct {
+		text string
+		want []string
+	}{
+		{
+			text: usageProject(),
+			want: []string{
+				"场景速选:",
+				"列项目/拿 ProjectId",
+				"模糊找项目",
+			},
+		},
+		{
+			text: usageLog(),
+			want: []string{
+				"场景速选:",
+				"普通日志检索",
+				"写日志/WebTracking",
+			},
+		},
+		{
+			text: usageIndex(),
+			want: []string{
+				"场景速选:",
+				"看当前索引",
+				"不确定 body 怎么写",
+			},
+		},
+	}
+	for _, tc := range cases {
+		for _, want := range tc.want {
+			if !strings.Contains(tc.text, want) {
+				t.Fatalf("missing %q in usage: %q", want, tc.text)
+			}
 		}
 	}
 }

@@ -1,0 +1,34 @@
+'use strict';
+
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+
+function resolveBinaryPath(options = {}) {
+  if (options.binaryPath) {
+    return options.binaryPath;
+  }
+  const packageRoot = options.packageRoot || path.resolve(__dirname, '..', '..');
+  const binaryName = (options.platform || process.platform) === 'win32' ? 'volclog.exe' : 'volclog';
+  return path.join(packageRoot, '.volclog', 'bin', binaryName);
+}
+
+function runCLI(options = {}) {
+  const argv = options.argv || process.argv.slice(2);
+  const binaryPath = resolveBinaryPath(options);
+  const spawnImpl = options.spawnImpl || spawnSync;
+  const existsImpl = options.existsImpl || fs.existsSync;
+  if (!existsImpl(binaryPath)) {
+    throw new Error(`volclog binary not found: ${binaryPath}. Reinstall package or run npm rebuild @volcengine/volclog.`);
+  }
+  const result = spawnImpl(binaryPath, argv, { stdio: 'inherit' });
+  if (result.error) {
+    throw result.error;
+  }
+  return typeof result.status === 'number' ? result.status : 1;
+}
+
+module.exports = {
+  resolveBinaryPath,
+  runCLI,
+};

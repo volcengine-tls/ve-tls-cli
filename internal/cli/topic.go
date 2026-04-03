@@ -10,6 +10,10 @@ import (
 
 func runTopic(ctx *Context, args []string) (any, error) {
 	return runSubcommandGroup(args, usageTopic(), nil, func(command string, commandArgs []string) (any, error) {
+		ctx.Action = "topic." + strings.TrimSpace(command)
+		if out, handled, err := maybeHandleShortcutMeta("topic", command, commandArgs); handled {
+			return out, err
+		}
 		switch command {
 		case "list":
 			return topicList(ctx, commandArgs)
@@ -28,9 +32,13 @@ func runTopic(ctx *Context, args []string) (any, error) {
 }
 
 func topicList(ctx *Context, args []string) (any, error) {
+	args, all := extractBoolFlag(args, "--all")
 	query, err := parseTopicListQuery(args, true)
 	if err != nil {
 		return nil, err
+	}
+	if all {
+		return listAllByPageNumber(ctx, "/DescribeTopics", query, "Topics")
 	}
 	body, _ := util.MustJSON(map[string]any{})
 	return ctx.Do("GET", "/DescribeTopics", query, nil, body)

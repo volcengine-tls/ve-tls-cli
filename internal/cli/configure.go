@@ -391,35 +391,17 @@ func configureShow(ctx *Context, args []string) (any, error) {
 	if !ok {
 		return nil, errors.New("profile not found: " + name)
 	}
-	maskedAK := config.MaskAK(p.AccessKeyID)
 	credRef := strings.TrimSpace(p.CredRef)
-	credOK := p.AccessKeyID != "" && p.SecretAccessKey != ""
-	credentialSource := "profile_inline"
-	if !credOK {
-		credentialSource = "profile_missing"
-	}
-	if credRef != "" {
-		credentialSource = "profile_cred_ref"
-		if cred, ok := ctx.cfg.GetCred(credRef); ok {
-			maskedAK = config.MaskAK(cred.AccessKeyID)
-			credOK = strings.TrimSpace(cred.AccessKeyID) != "" && strings.TrimSpace(cred.SecretAccessKey) != ""
-			if !credOK {
-				credentialSource = "profile_cred_ref_missing"
-			}
-		} else {
-			credOK = false
-			credentialSource = "profile_cred_ref_missing"
-		}
-	}
+	credStatus := config.ResolveProfileCredentialStatus(ctx.cfg, p)
 	return map[string]any{
 		"profile":            name,
 		"effective_profile":  name,
 		"region":             p.Region,
 		"endpoint":           p.Endpoint,
 		"cred_ref":           credRef,
-		"credential_source":  credentialSource,
-		"credential_present": credOK,
-		"access_key_id":      maskedAK,
+		"credential_source":  credStatus.Source,
+		"credential_present": credStatus.Present,
+		"access_key_id":      config.MaskAK(credStatus.AccessKeyID),
 		"has_security_token": p.SecurityToken != "",
 		"timeout_seconds":    p.TimeoutSeconds,
 	}, nil
@@ -455,35 +437,17 @@ func configureList(ctx *Context, args []string) (any, error) {
 		if !ok {
 			continue
 		}
-		maskedAK := config.MaskAK(p.AccessKeyID)
 		credRef := strings.TrimSpace(p.CredRef)
-		credOK := p.AccessKeyID != "" && p.SecretAccessKey != ""
-		credentialSource := "profile_inline"
-		if !credOK {
-			credentialSource = "profile_missing"
-		}
-		if credRef != "" {
-			credentialSource = "profile_cred_ref"
-			if cred, ok := ctx.cfg.GetCred(credRef); ok {
-				maskedAK = config.MaskAK(cred.AccessKeyID)
-				credOK = strings.TrimSpace(cred.AccessKeyID) != "" && strings.TrimSpace(cred.SecretAccessKey) != ""
-				if !credOK {
-					credentialSource = "profile_cred_ref_missing"
-				}
-			} else {
-				credOK = false
-				credentialSource = "profile_cred_ref_missing"
-			}
-		}
+		credStatus := config.ResolveProfileCredentialStatus(ctx.cfg, p)
 		profiles = append(profiles, map[string]any{
 			"profile":            name,
 			"effective_profile":  name,
 			"region":             p.Region,
 			"endpoint":           p.Endpoint,
 			"cred_ref":           credRef,
-			"credential_source":  credentialSource,
-			"credential_present": credOK,
-			"access_key_id":      maskedAK,
+			"credential_source":  credStatus.Source,
+			"credential_present": credStatus.Present,
+			"access_key_id":      config.MaskAK(credStatus.AccessKeyID),
 			"has_security_token": p.SecurityToken != "",
 			"timeout_seconds":    p.TimeoutSeconds,
 		})

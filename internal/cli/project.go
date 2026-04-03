@@ -10,6 +10,10 @@ import (
 
 func runProject(ctx *Context, args []string) (any, error) {
 	return runSubcommandGroup(args, usageProject(), nil, func(command string, commandArgs []string) (any, error) {
+		ctx.Action = "project." + strings.TrimSpace(command)
+		if out, handled, err := maybeHandleShortcutMeta("project", command, commandArgs); handled {
+			return out, err
+		}
 		switch command {
 		case "list":
 			return projectList(ctx, commandArgs)
@@ -28,6 +32,7 @@ func runProject(ctx *Context, args []string) (any, error) {
 }
 
 func projectList(ctx *Context, args []string) (any, error) {
+	args, all := extractBoolFlag(args, "--all")
 	query := map[string]string{}
 	for len(args) > 0 {
 		switch args[0] {
@@ -106,6 +111,9 @@ func projectList(ctx *Context, args []string) (any, error) {
 		default:
 			return nil, errors.New("unknown flag: " + args[0])
 		}
+	}
+	if all {
+		return listAllByPageNumber(ctx, "/DescribeProjects", query, "Projects")
 	}
 	body, _ := util.MustJSON(map[string]any{})
 	return ctx.Do("GET", "/DescribeProjects", query, nil, body)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -45,16 +46,27 @@ func TestLogExportAnalysis_DefaultOutputIsJSONLRows(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	lines := bytes.Split(bytes.TrimSpace(stdout.Bytes()), []byte("\n"))
-	if len(lines) != 2 {
-		t.Fatalf("expected 2 lines, got %d: %q", len(lines), stdout.String())
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v; %q", err, stdout.String())
 	}
-	var r1, r2 map[string]any
-	if err := json.Unmarshal(lines[0], &r1); err != nil {
-		t.Fatalf("invalid jsonl line1: %v; %q", err, string(lines[0]))
+	if out["status"] != "success" {
+		t.Fatalf("unexpected status: %v", out["status"])
 	}
-	if err := json.Unmarshal(lines[1], &r2); err != nil {
-		t.Fatalf("invalid jsonl line2: %v; %q", err, string(lines[1]))
+	if out["action"] != "log.export-analysis" {
+		t.Fatalf("unexpected action: %v", out["action"])
+	}
+	rows, ok := out["data"].([]any)
+	if !ok || len(rows) != 2 {
+		t.Fatalf("expected 2 rows in data: %v", out["data"])
+	}
+	r1, ok := rows[0].(map[string]any)
+	if !ok {
+		t.Fatalf("invalid row1: %v", rows[0])
+	}
+	r2, ok := rows[1].(map[string]any)
+	if !ok {
+		t.Fatalf("invalid row2: %v", rows[1])
 	}
 	if r1["k"] != "a" || r1["v"] != float64(1) {
 		t.Fatalf("unexpected row1: %v", r1)
@@ -102,12 +114,17 @@ func TestLogExportAnalysis_RespectsExplicitOutputJSON(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	var arr []map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &arr); err != nil {
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
 		t.Fatalf("invalid json: %v; %q", err, stdout.String())
 	}
-	if len(arr) != 1 || arr[0]["k"] != "a" {
-		t.Fatalf("unexpected output: %v", arr)
+	rows, ok := out["data"].([]any)
+	if !ok || len(rows) != 1 {
+		t.Fatalf("unexpected output: %v", out)
+	}
+	row, ok := rows[0].(map[string]any)
+	if !ok || row["k"] != "a" {
+		t.Fatalf("unexpected row: %v", rows[0])
 	}
 }
 
@@ -148,8 +165,16 @@ func TestLogExportAnalysis_RejectsArrayRows(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("expected failure, got exit=0 stdout=%q", stdout.String())
 	}
-	if !bytes.Contains(stderr.Bytes(), []byte("invalid AnalysisResult.Data row")) {
+	if strings.TrimSpace(stderr.String()) != "" {
 		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v; %q", err, stdout.String())
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok || !strings.Contains(toString(errObj["errorMessage"]), "invalid AnalysisResult.Data row") {
+		t.Fatalf("unexpected error object: %v", out["error"])
 	}
 }
 
@@ -178,7 +203,27 @@ func TestLogExportAnalysis_RejectsMaxPages(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("expected failure, got exit=0 stdout=%q", stdout.String())
 	}
-	if !bytes.Contains(stderr.Bytes(), []byte("--max-pages is not supported")) {
+	if strings.TrimSpace(stderr.String()) != "" {
 		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v; %q", err, stdout.String())
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok || !strings.Contains(toString(errObj["errorMessage"]), "--max-pages is not supported") {
+		t.Fatalf("unexpected error object: %v", out["error"])
+	}
+}
+
+func TestLogExportAnalysisDescribeMentionsIndexIncrementalEffect(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"log", "export-analysis", "--describe"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "索引配置") || !strings.Contains(out, "旧日志") || !strings.Contains(out, "null") {
+		t.Fatalf("describe should mention index incremental effect: %q", out)
 	}
 }

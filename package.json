@@ -1,0 +1,31 @@
+{
+  "name": "@volcengine/volclog",
+  "version": "0.0.2",
+  "description": "Volcengine TLS CLI with bundled Agent skill installer",
+  "license": "MIT",
+  "bin": {
+    "volclog": "npm/bin/volclog.js"
+  },
+  "files": [
+    "npm/bin",
+    "npm/lib",
+    "npm/scripts",
+    "README.md",
+    "README_CN.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "postinstall": "node npm/scripts/postinstall.js",
+    "test:npm": "node --test npm/test/*.test.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/volcengine-tls/ve-tls-cli.git"
+  }
+}

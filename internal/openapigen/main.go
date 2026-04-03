@@ -814,10 +814,14 @@ func toKebab(s string) string {
 }
 
 func marshalPretty(v any) string {
-	b, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(v); err != nil {
 		return "{}"
 	}
+	b := bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
 	return string(b)
 }
 

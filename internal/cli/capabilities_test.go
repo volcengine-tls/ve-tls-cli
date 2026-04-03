@@ -138,7 +138,10 @@ func TestCapabilitiesTextViewReturnsHumanReadableText(t *testing.T) {
 	}
 	for _, want := range []string{
 		"project (日志项目管理):\n",
+		"agent entry: shortcut -> volclog project list --describe",
 		"DescribeProject",
+		"[next: volclog project get --describe]",
+		"[next: volclog project create --describe]",
 		":",
 	} {
 		if !strings.Contains(s, want) {
@@ -164,6 +167,8 @@ func TestCapabilitiesGroupsViewReturnsGroupOverview(t *testing.T) {
 	for _, want := range []string{
 		"account (账号管理):",
 		"账号管理相关接口",
+		"project (日志项目管理): 日志项目管理相关接口",
+		"agent entry: shortcut -> volclog project list --describe",
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("groups view missing %q: %s", want, s)
@@ -174,15 +179,67 @@ func TestCapabilitiesGroupsViewReturnsGroupOverview(t *testing.T) {
 	}
 }
 
+func TestCapabilitiesCompactViewIncludesAgentRoutingHints(t *testing.T) {
+	out, err := runCapabilities(nil, []string{"--group", "project", "--action", "CreateProject"})
+	if err != nil {
+		t.Fatalf("run capabilities error: %v", err)
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	s := string(b)
+	for _, want := range []string{
+		`"agent_entrypoint":"shortcut-first"`,
+		`"agent_next_step":"volclog project create --describe"`,
+		`"related_shortcuts":["volclog project create --describe"]`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q in capabilities output: %s", want, s)
+		}
+	}
+}
+
+func TestCapabilitiesJSONViewReturnsMachineReadableDoc(t *testing.T) {
+	out, err := runCapabilities(nil, []string{"--group", "project", "--action", "CreateProject", "--view", "json"})
+	if err != nil {
+		t.Fatalf("run capabilities error: %v", err)
+	}
+	if _, ok := out.(string); ok {
+		t.Fatalf("json view should not return plain text")
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	s := string(b)
+	if !strings.Contains(s, `"commands":`) {
+		t.Fatalf("json view should include commands: %s", s)
+	}
+	if strings.Contains(s, `"params":`) {
+		t.Fatalf("json view should match compact machine-readable view: %s", s)
+	}
+}
+
 func TestUsageCapabilitiesDescribesDiscoveryEntryForAgents(t *testing.T) {
 	text := usageCapabilities()
 	for _, want := range []string{
-		"面向 agent 与自动化程序的统一能力发现入口",
-		"适合先做 group 粗分类，再做 action 筛选",
-		"帮助调用方以低探索成本定位可执行接口",
+		"用于发现 group 与 action；不执行请求",
+		"groups: group 一行概览，并给出 agent entry",
+		"text: group + action + 描述，并给出每个 action 的下一条可执行命令",
+		"json: compact 的机器可读 JSON",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q in capabilities usage: %s", want, text)
+		}
+	}
+	for _, notWant := range []string{
+		"帮助调用方以低探索成本定位可执行接口",
+		"VOLCLOG_HINTS_FILE",
+		"补充说明:",
+	} {
+		if strings.Contains(text, notWant) {
+			t.Fatalf("unexpected verbose text %q in capabilities usage: %s", notWant, text)
 		}
 	}
 }
