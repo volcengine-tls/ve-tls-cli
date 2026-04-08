@@ -27,7 +27,6 @@ func cliGroups() []cliGroupSpec {
 		{Name: "log", Description: "日志高频快捷命令（Agent/Human 一等入口）"},
 		{Name: "host-group", Description: "机器组高频快捷命令（Agent/Human 一等入口）"},
 		{Name: "collector", Description: "采集规则高频快捷命令（Agent/Human 一等入口）"},
-		{Name: "completion", Description: "生成 shell 补全脚本"},
 	}
 }
 

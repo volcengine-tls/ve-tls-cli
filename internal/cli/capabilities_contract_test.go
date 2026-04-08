@@ -31,8 +31,8 @@ func TestCapabilitiesContractSnapshot(t *testing.T) {
 	}
 
 	root := repoRootFromThisFile(t)
-	lockPath := filepath.Join(root, "docs", "agentic-stage1", "capabilities-contract-lock.json")
-	snapshotPath := filepath.Join(root, "docs", "agentic-stage1", "capabilities-contract-snapshot.txt")
+	lockPath := filepath.Join(root, "cospec", "agentic-stage1", "capabilities-contract-lock.json")
+	snapshotPath := filepath.Join(root, "cospec", "agentic-stage1", "capabilities-contract-snapshot.txt")
 
 	sigs := buildCapabilitySignatures(doc.Commands)
 	snapshotContent := strings.Join(sigs, "\n") + "\n"
@@ -46,7 +46,7 @@ func TestCapabilitiesContractSnapshot(t *testing.T) {
 			CapabilitiesSHA: currentCapsSHA,
 			CommandsCount:   len(doc.Commands),
 			SignaturesSHA:   currentSigsSHA,
-			SnapshotPath:    "docs/agentic-stage1/capabilities-contract-snapshot.txt",
+			SnapshotPath:    "cospec/agentic-stage1/capabilities-contract-snapshot.txt",
 			UpdatedAt:       time.Now().Format("2006-01-02"),
 		}
 		lockBytes, err := json.MarshalIndent(lock, "", "  ")

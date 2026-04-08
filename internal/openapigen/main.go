@@ -117,7 +117,7 @@ func main() {
 	spec := flag.String("spec", "", "path to swagger.json")
 	outCapabilities := flag.String("out-capabilities", "internal/cli/generated_capabilities.go", "output file for capabilities")
 	outTemplates := flag.String("out-templates", "internal/cli/generated_request_templates.go", "output file for request templates")
-	groupKeyMapping := flag.String("group-key-mapping", "docs/agentic-stage1/group_key_mapping.yaml", "path to group key mapping yaml")
+	groupKeyMapping := flag.String("group-key-mapping", "cospec/agentic-stage1/group_key_mapping.yaml", "path to group key mapping yaml")
 	swaggerTagMapping := flag.String("swagger-tag-mapping", "repos/日志服务/_swagger_tag_mapping.yaml", "path to swagger tag title mapping yaml")
 	apiDocRoot := flag.String("api-doc-root", "repos/日志服务/API 参考", "path to api reference markdown root")
 	version := flag.String("version", "v1", "capabilities version")

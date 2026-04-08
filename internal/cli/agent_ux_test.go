@@ -273,30 +273,6 @@ func TestDoctorOnlineUsesCredRefCredentials(t *testing.T) {
 	}
 }
 
-func TestCompletionOutputModeFile(t *testing.T) {
-	dir := t.TempDir()
-	outFile := filepath.Join(dir, "out.json")
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	code := Run([]string{"--output-mode", "file", "--output-file", outFile, "completion", "bash"}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("unexpected exit code: %d, stderr=%s", code, stderr.String())
-	}
-	if stdout.String() != outFile+"\n" {
-		t.Fatalf("unexpected stdout: %q", stdout.String())
-	}
-	if _, err := os.Stat(outFile); err != nil {
-		t.Fatalf("expected output file: %v", err)
-	}
-	b, err := os.ReadFile(outFile)
-	if err != nil {
-		t.Fatalf("read output file: %v", err)
-	}
-	if bytes.HasPrefix(b, []byte("\"")) {
-		t.Fatalf("unexpected json-encoded output: %s", string(b[:min(len(b), 40)]))
-	}
-}
-
 func TestAPICallAllowsTrailingDryRunGlobalFlag(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")

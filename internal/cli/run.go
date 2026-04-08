@@ -146,8 +146,6 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		out, err = runAssistant(ctx, rest)
 	case "doctor":
 		out, exitCode, err = runDoctor(ctx, rest)
-	case "completion":
-		out, exitCode, err = runCompletion(ctx, rest)
 	default:
 		_, _ = stderr.Write([]byte(usageText()))
 		return 1

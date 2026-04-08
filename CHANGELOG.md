@@ -5,7 +5,6 @@
 ## volclog-v0.0.2
 
 - Add `doctor` command for offline/online diagnostics.
-- Add `completion` command to generate shell completion scripts.
 - Add `--trace-dir` to generate redacted trace artifacts (JSONL).
 - Add `--output-mode file` and `--output-file` to write output to disk.
 - Add `--secrets-file` (dotenv) and `./.volclog/cli.config.json` project defaults.

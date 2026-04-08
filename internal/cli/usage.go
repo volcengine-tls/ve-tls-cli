@@ -641,12 +641,3 @@ Agent:
   - Use doctor output to decide whether to proceed or reconfigure
 `)
 }
-
-func usageCompletion() string {
-	return u(`Usage:
-  tlsctl completion <bash|zsh|fish|powershell>
-
-Examples:
-  tlsctl completion zsh
-`)
-}
