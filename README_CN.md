@@ -52,7 +52,7 @@ bash scripts/install-binary.sh
 
 **方式二：npm 全局安装**
 ```bash
-npm install -g @volcengine/volclog
+npm install -g @volcengine-tls/volclog
 ```
 
 **方式三：源码编译**
@@ -92,7 +92,7 @@ bash scripts/install-local.sh
 如果你已经发布了 npm 包，也可以直接：
 
 ```bash
-npm install -g @volcengine/volclog
+npm install -g @volcengine-tls/volclog
 ```
 
 #### Step 2 — 发现能力与约束
@@ -144,7 +144,7 @@ volclog skill install --dir skills/
 如果你只是想临时装一次 skill，也可以直接用 `npx`：
 
 ```bash
-npx @volcengine/volclog skill install --dir skills/
+npx @volcengine-tls/volclog skill install --dir skills/
 ```
 
 ---
