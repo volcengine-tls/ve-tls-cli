@@ -47,7 +47,7 @@
 #### 1. 安装
 **方式一：二进制下载（推荐）**
 ```bash
-bash scripts/install-binary.sh
+VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash scripts/install-binary.sh
 ```
 
 **方式二：npm 全局安装**
@@ -55,12 +55,17 @@ bash scripts/install-binary.sh
 npm install -g @volcengine-tls/volclog
 ```
 
-**方式三：源码编译**
+**方式三：Go 安装**
 需要 Go 1.22+ 环境。
+```bash
+go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
+```
+
+**方式四：本地源码安装**
 ```bash
 git clone https://github.com/volcengine-tls/ve-tls-cli.git
 cd ve-tls-cli
-make install # 或 bash scripts/install-local.sh
+bash scripts/install-local.sh
 ```
 
 #### 2. 配置凭证

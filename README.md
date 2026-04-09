@@ -47,7 +47,7 @@ Before you start, make sure you have:
 #### 1. Install
 **Option 1: Download Binary (Recommended)**
 ```bash
-bash scripts/install-binary.sh
+VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash scripts/install-binary.sh
 ```
 
 **Option 2: Install via npm**
@@ -55,12 +55,17 @@ bash scripts/install-binary.sh
 npm install -g @volcengine-tls/volclog
 ```
 
-**Option 3: Build from Source**
+**Option 3: Install with Go**
 Requires Go v1.22+.
+```bash
+go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
+```
+
+**Option 4: Install from Local Source**
 ```bash
 git clone https://github.com/volcengine-tls/ve-tls-cli.git
 cd ve-tls-cli
-make install # or bash scripts/install-local.sh
+bash scripts/install-local.sh
 ```
 
 #### 2. Configure Credentials
