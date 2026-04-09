@@ -441,6 +441,7 @@ Notes:
   - SearchLogs requires X-Tls-Apiversion=0.3.0 (handled by client).
   - Full request body can be passed via --request file://...
   - --request also accepts "-" to read JSON from stdin.
+  - log search 默认返回 100 条样本；log export 默认每批拉取 500 条，可用 --limit 覆盖。
   - Prefer --output jsonl log export for streaming.
   - For pure search (no analysis), you can paginate via Context/Limit/Sort/Offset.
   - For analysis (query contains "|"), Context/Sort/Limit/Offset in body are not effective; use SQL limit/offset in Query. Analysis does not support Context pagination.

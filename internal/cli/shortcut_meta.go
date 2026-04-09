@@ -618,6 +618,9 @@ func shortcutSpecs() map[string]shortcutCommandSpec {
 			APIGroup:         "log",
 			APIAction:        "SearchLogs",
 			SupportsTemplate: true,
+			Notes: []string{
+				"未显式指定 --limit 时，导出默认批次大于普通 search；需要更大/更小批次时自行覆盖。",
+			},
 		},
 		{
 			Group:         "index",

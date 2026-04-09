@@ -8,6 +8,11 @@ import (
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
+const (
+	searchLogsDefaultLimit = 100
+	exportLogsDefaultLimit = 500
+)
+
 func isAnalysisQuery(cmd string) bool {
 	tempCmd := cmd
 	for {
@@ -171,7 +176,7 @@ func logPut(ctx *Context, args []string) (any, error) {
 }
 
 func logExport(ctx *Context, args []string) (any, error) {
-	req, err := parseSearchLogsArgs(args)
+	req, err := parseExportSearchLogsArgs(args)
 	if err != nil {
 		return nil, err
 	}
@@ -286,6 +291,14 @@ func logExportAnalysis(ctx *Context, args []string) (any, error) {
 }
 
 func parseSearchLogsArgs(args []string) (map[string]any, error) {
+	return parseSearchLogsArgsWithDefaultLimit(args, searchLogsDefaultLimit)
+}
+
+func parseExportSearchLogsArgs(args []string) (map[string]any, error) {
+	return parseSearchLogsArgsWithDefaultLimit(args, exportLogsDefaultLimit)
+}
+
+func parseSearchLogsArgsWithDefaultLimit(args []string, defaultLimit int) (map[string]any, error) {
 	var (
 		topicID      string
 		query        string
@@ -307,7 +320,7 @@ func parseSearchLogsArgs(args []string) (map[string]any, error) {
 		sortSet      bool
 		offsetSet    bool
 	)
-	limit = 100
+	limit = defaultLimit
 	for len(args) > 0 {
 		switch args[0] {
 		case "--topic-id":
@@ -489,7 +502,9 @@ func parseSearchLogsArgs(args []string) (map[string]any, error) {
 		return req, nil
 	}
 
-	if limit > 0 {
+	if limitSet {
+		req["Limit"] = limit
+	} else if _, ok := req["Limit"]; !ok && limit > 0 {
 		req["Limit"] = limit
 	}
 	if strings.TrimSpace(contextStr) != "" {
