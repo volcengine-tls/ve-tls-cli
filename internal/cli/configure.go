@@ -2,39 +2,92 @@ package cli
 
 import (
 	"errors"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
 
-	"volclog/internal/config"
+	"github.com/volcengine-tls/ve-tls-cli/internal/config"
 )
 
 func runConfigure(ctx *Context, args []string) (any, error) {
 	if err := ctx.LoadConfig(); err != nil {
 		return nil, err
 	}
+	return runSubcommandGroup(args, usageConfigure(), nil, func(command string, commandArgs []string) (any, error) {
+		switch command {
+		case "set":
+			return configureSet(ctx, commandArgs)
+		case "use":
+			return configureUse(ctx, commandArgs)
+		case "show":
+			return configureShow(ctx, commandArgs)
+		case "list":
+			return configureList(ctx, commandArgs)
+		case "delete":
+			return configureDelete(ctx, commandArgs)
+		case "profile":
+			return runConfigureProfile(ctx, commandArgs)
+		case "cred":
+			return runConfigureCred(ctx, commandArgs)
+		case "project":
+			return runConfigureProject(ctx, commandArgs)
+		default:
+			return nil, errors.New("unknown configure command: " + command)
+		}
+	})
+}
+
+func runConfigureProfile(ctx *Context, args []string) (any, error) {
 	if len(args) == 0 {
 		return nil, &usageError{Text: usageConfigure(), ExitCode: 1}
 	}
 	if args[0] == "-h" || args[0] == "--help" {
 		return nil, &usageError{Text: usageConfigure(), ExitCode: 0}
 	}
-	if hasHelp(args[1:]) {
-		return nil, &usageError{Text: usageConfigure(), ExitCode: 0}
-	}
 	switch args[0] {
-	case "set":
-		return configureSet(ctx, args[1:])
+	case "add":
+		if len(args) < 2 {
+			return nil, errors.New("missing profile name")
+		}
+		mapped := make([]string, 0, len(args)+1)
+		mapped = append(mapped, "--profile", args[1])
+		mapped = append(mapped, args[2:]...)
+		return configureSet(ctx, mapped)
 	case "use":
-		return configureUse(ctx, args[1:])
+		if len(args) < 2 {
+			return nil, errors.New("missing profile name")
+		}
+		return configureUse(ctx, []string{args[1]})
 	case "show":
+		if len(args) >= 2 && strings.TrimSpace(args[1]) != "" && !strings.HasPrefix(args[1], "-") {
+			return configureShow(ctx, []string{"--profile", args[1]})
+		}
 		return configureShow(ctx, args[1:])
 	case "list":
 		return configureList(ctx, args[1:])
 	case "delete":
+		if len(args) >= 2 && strings.TrimSpace(args[1]) != "" && !strings.HasPrefix(args[1], "-") {
+			return configureDelete(ctx, []string{args[1]})
+		}
 		return configureDelete(ctx, args[1:])
 	default:
-		return nil, errors.New("unknown configure command: " + args[0])
+		return nil, errors.New("unknown configure profile command: " + args[0])
+	}
+}
+
+func runConfigureCred(ctx *Context, args []string) (any, error) {
+	if len(args) == 0 {
+		return nil, &usageError{Text: usageConfigure(), ExitCode: 1}
+	}
+	if args[0] == "-h" || args[0] == "--help" {
+		return nil, &usageError{Text: usageConfigure(), ExitCode: 0}
+	}
+	switch args[0] {
+	case "delete":
+		return configureCredDelete(ctx, args[1:])
+	default:
+		return nil, errors.New("unknown configure cred command: " + args[0])
 	}
 }
 
@@ -166,6 +219,141 @@ func configureSet(ctx *Context, args []string) (any, error) {
 	}, nil
 }
 
+func runConfigureProject(ctx *Context, args []string) (any, error) {
+	if len(args) == 0 {
+		return nil, &usageError{Text: usageConfigure(), ExitCode: 1}
+	}
+	switch args[0] {
+	case "show":
+		wd, err := os.Getwd()
+		if err != nil {
+			return nil, err
+		}
+		cfg, p, err := config.LoadProjectConfig(wd)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"path":          p,
+			"output":        cfg.Output,
+			"output_mode":   cfg.OutputMode,
+			"output_dir":    cfg.OutputDir,
+			"timeout":       cfg.TimeoutSeconds,
+			"trace_redact":  cfg.TraceRedact,
+			"hints_file":    cfg.HintsFile,
+			"region":        cfg.Region,
+			"endpoint":      cfg.Endpoint,
+			"effective_wd":  wd,
+			"config_exists": p != "",
+		}, nil
+	case "set":
+		var output string
+		var outputMode string
+		var outputDir string
+		var timeout int
+		var traceRedact string
+		var hintsFile string
+		for len(args) > 0 {
+			switch args[0] {
+			case "set":
+				args = args[1:]
+			case "--output":
+				if len(args) < 2 {
+					return nil, errors.New("missing --output value")
+				}
+				output = args[1]
+				args = args[2:]
+			case "--output-mode":
+				if len(args) < 2 {
+					return nil, errors.New("missing --output-mode value")
+				}
+				outputMode = args[1]
+				args = args[2:]
+			case "--output-dir":
+				if len(args) < 2 {
+					return nil, errors.New("missing --output-dir value")
+				}
+				outputDir = args[1]
+				args = args[2:]
+			case "--timeout-seconds":
+				if len(args) < 2 {
+					return nil, errors.New("missing --timeout-seconds value")
+				}
+				v, err := strconv.Atoi(args[1])
+				if err != nil {
+					return nil, err
+				}
+				timeout = v
+				args = args[2:]
+			case "--trace-redact":
+				if len(args) < 2 {
+					return nil, errors.New("missing --trace-redact value")
+				}
+				traceRedact = args[1]
+				args = args[2:]
+			case "--hints-file":
+				if len(args) < 2 {
+					return nil, errors.New("missing --hints-file value")
+				}
+				hintsFile = args[1]
+				args = args[2:]
+			default:
+				return nil, errors.New("unknown flag: " + args[0])
+			}
+		}
+		wd, err := os.Getwd()
+		if err != nil {
+			return nil, err
+		}
+		cfg, p, err := config.LoadProjectConfig(wd)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(output) != "" {
+			cfg.Output = strings.TrimSpace(output)
+		}
+		if strings.TrimSpace(outputMode) != "" {
+			cfg.OutputMode = strings.TrimSpace(outputMode)
+		}
+		if strings.TrimSpace(outputDir) != "" {
+			cfg.OutputDir = strings.TrimSpace(outputDir)
+		}
+		if timeout != 0 {
+			cfg.TimeoutSeconds = timeout
+		}
+		if strings.TrimSpace(traceRedact) != "" {
+			cfg.TraceRedact = strings.TrimSpace(traceRedact)
+		}
+		if strings.TrimSpace(hintsFile) != "" {
+			cfg.HintsFile = strings.TrimSpace(hintsFile)
+		}
+		if p == "" {
+			p = ""
+			if w, err := os.Getwd(); err == nil {
+				p = w
+			}
+			if strings.TrimSpace(p) == "" {
+				return nil, errors.New("working directory not found")
+			}
+			p = p + string(os.PathSeparator) + ".volclog" + string(os.PathSeparator) + "cli.config.json"
+		}
+		if err := config.SaveProjectConfigAt(p, cfg); err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"path":         p,
+			"output":       cfg.Output,
+			"output_mode":  cfg.OutputMode,
+			"output_dir":   cfg.OutputDir,
+			"timeout":      cfg.TimeoutSeconds,
+			"trace_redact": cfg.TraceRedact,
+			"hints_file":   cfg.HintsFile,
+		}, nil
+	default:
+		return nil, errors.New("unknown configure project command: " + args[0])
+	}
+}
+
 func configureUse(ctx *Context, args []string) (any, error) {
 	var name string
 	if len(args) >= 2 && args[0] == "--profile" {
@@ -203,24 +391,17 @@ func configureShow(ctx *Context, args []string) (any, error) {
 	if !ok {
 		return nil, errors.New("profile not found: " + name)
 	}
-	maskedAK := config.MaskAK(p.AccessKeyID)
 	credRef := strings.TrimSpace(p.CredRef)
-	credOK := p.AccessKeyID != "" && p.SecretAccessKey != ""
-	if credRef != "" {
-		if cred, ok := ctx.cfg.GetCred(credRef); ok {
-			maskedAK = config.MaskAK(cred.AccessKeyID)
-			credOK = strings.TrimSpace(cred.AccessKeyID) != "" && strings.TrimSpace(cred.SecretAccessKey) != ""
-		} else {
-			credOK = false
-		}
-	}
+	credStatus := config.ResolveProfileCredentialStatus(ctx.cfg, p)
 	return map[string]any{
 		"profile":            name,
+		"effective_profile":  name,
 		"region":             p.Region,
 		"endpoint":           p.Endpoint,
 		"cred_ref":           credRef,
-		"credential_present": credOK,
-		"access_key_id":      maskedAK,
+		"credential_source":  credStatus.Source,
+		"credential_present": credStatus.Present,
+		"access_key_id":      config.MaskAK(credStatus.AccessKeyID),
 		"has_security_token": p.SecurityToken != "",
 		"timeout_seconds":    p.TimeoutSeconds,
 	}, nil
@@ -256,24 +437,17 @@ func configureList(ctx *Context, args []string) (any, error) {
 		if !ok {
 			continue
 		}
-		maskedAK := config.MaskAK(p.AccessKeyID)
 		credRef := strings.TrimSpace(p.CredRef)
-		credOK := p.AccessKeyID != "" && p.SecretAccessKey != ""
-		if credRef != "" {
-			if cred, ok := ctx.cfg.GetCred(credRef); ok {
-				maskedAK = config.MaskAK(cred.AccessKeyID)
-				credOK = strings.TrimSpace(cred.AccessKeyID) != "" && strings.TrimSpace(cred.SecretAccessKey) != ""
-			} else {
-				credOK = false
-			}
-		}
+		credStatus := config.ResolveProfileCredentialStatus(ctx.cfg, p)
 		profiles = append(profiles, map[string]any{
 			"profile":            name,
+			"effective_profile":  name,
 			"region":             p.Region,
 			"endpoint":           p.Endpoint,
 			"cred_ref":           credRef,
-			"credential_present": credOK,
-			"access_key_id":      maskedAK,
+			"credential_source":  credStatus.Source,
+			"credential_present": credStatus.Present,
+			"access_key_id":      config.MaskAK(credStatus.AccessKeyID),
 			"has_security_token": p.SecurityToken != "",
 			"timeout_seconds":    p.TimeoutSeconds,
 		})
@@ -371,6 +545,52 @@ func configureDelete(ctx *Context, args []string) (any, error) {
 		"deleted":         name,
 		"current_profile": strings.TrimSpace(ctx.cfg.CurrentProfile),
 	}, nil
+}
+
+func configureCredDelete(ctx *Context, args []string) (any, error) {
+	var name string
+	for len(args) > 0 {
+		switch {
+		case strings.HasPrefix(args[0], "--"):
+			return nil, errors.New("unknown flag: " + args[0])
+		default:
+			if name != "" {
+				return nil, errors.New("too many arguments")
+			}
+			name = args[0]
+			args = args[1:]
+		}
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, errors.New("missing credential name")
+	}
+	if _, ok := ctx.cfg.GetCred(name); !ok {
+		return nil, errors.New("credential not found: " + name)
+	}
+	inUse := profilesUsingCredential(ctx.cfg, name)
+	if len(inUse) > 0 {
+		return nil, errors.New("credential in use by profiles: " + strings.Join(inUse, ","))
+	}
+	delete(ctx.cfg.Creds, name)
+	if err := ctx.SaveConfig(); err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"deleted":         name,
+		"current_profile": strings.TrimSpace(ctx.cfg.CurrentProfile),
+	}, nil
+}
+
+func profilesUsingCredential(cfg config.Config, credName string) []string {
+	names := make([]string, 0, 8)
+	for profileName, p := range cfg.Profiles {
+		if strings.TrimSpace(p.CredRef) == credName {
+			names = append(names, profileName)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 func adjustCurrentProfile(cfg *config.Config) {

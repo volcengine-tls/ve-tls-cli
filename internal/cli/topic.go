@@ -5,135 +5,40 @@ import (
 	"strconv"
 	"strings"
 
-	"volclog/internal/util"
+	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 func runTopic(ctx *Context, args []string) (any, error) {
-	if len(args) == 0 {
-		return nil, &usageError{Text: usageTopic(), ExitCode: 1}
-	}
-	if args[0] == "-h" || args[0] == "--help" {
-		return nil, &usageError{Text: usageTopic(), ExitCode: 0}
-	}
-	if hasHelp(args[1:]) {
-		return nil, &usageError{Text: usageTopic(), ExitCode: 0}
-	}
-	switch args[0] {
-	case "list":
-		return topicList(ctx, args[1:])
-	case "get":
-		return topicGet(ctx, args[1:])
-	case "create":
-		return topicCreate(ctx, args[1:])
-	case "modify":
-		return topicModify(ctx, args[1:])
-	case "delete":
-		return topicDelete(ctx, args[1:])
-	default:
-		return nil, errors.New("unknown topic command: " + args[0])
-	}
+	return runSubcommandGroup(args, usageTopic(), nil, func(command string, commandArgs []string) (any, error) {
+		ctx.Action = "topic." + strings.TrimSpace(command)
+		if out, handled, err := maybeHandleShortcutMeta("topic", command, commandArgs); handled {
+			return out, err
+		}
+		switch command {
+		case "list":
+			return topicList(ctx, commandArgs)
+		case "get":
+			return topicGet(ctx, commandArgs)
+		case "create":
+			return topicCreate(ctx, commandArgs)
+		case "modify":
+			return topicModify(ctx, commandArgs)
+		case "delete":
+			return topicDelete(ctx, commandArgs)
+		default:
+			return nil, errors.New("unknown topic command: " + command)
+		}
+	})
 }
 
 func topicList(ctx *Context, args []string) (any, error) {
-	query := map[string]string{}
-	for len(args) > 0 {
-		switch args[0] {
-		case "--project-id":
-			if len(args) < 2 {
-				return nil, errors.New("missing --project-id value")
-			}
-			query["ProjectId"] = args[1]
-			args = args[2:]
-		case "--topic-name":
-			if len(args) < 2 {
-				return nil, errors.New("missing --topic-name value")
-			}
-			query["TopicName"] = args[1]
-			args = args[2:]
-		case "--topic-id":
-			if len(args) < 2 {
-				return nil, errors.New("missing --topic-id value")
-			}
-			query["TopicId"] = args[1]
-			args = args[2:]
-		case "--page-number":
-			if len(args) < 2 {
-				return nil, errors.New("missing --page-number value")
-			}
-			query["PageNumber"] = args[1]
-			args = args[2:]
-		case "--page-size":
-			if len(args) < 2 {
-				return nil, errors.New("missing --page-size value")
-			}
-			query["PageSize"] = args[1]
-			args = args[2:]
-		case "--cursor":
-			if len(args) < 2 {
-				return nil, errors.New("missing --cursor value")
-			}
-			query["Cursor"] = args[1]
-			args = args[2:]
-		case "--region":
-			if len(args) < 2 {
-				return nil, errors.New("missing --region value")
-			}
-			query["Region"] = args[1]
-			args = args[2:]
-		case "--project-name":
-			if len(args) < 2 {
-				return nil, errors.New("missing --project-name value")
-			}
-			query["ProjectName"] = args[1]
-			args = args[2:]
-		case "--fuzzy-search-key":
-			if len(args) < 2 {
-				return nil, errors.New("missing --fuzzy-search-key value")
-			}
-			query["FuzzySearchKey"] = args[1]
-			args = args[2:]
-		case "--description":
-			if len(args) < 2 {
-				return nil, errors.New("missing --description value")
-			}
-			query["Description"] = args[1]
-			args = args[2:]
-		case "--tags":
-			if len(args) < 2 {
-				return nil, errors.New("missing --tags value")
-			}
-			s, err := util.ReadStringMaybeFile(args[1])
-			if err != nil {
-				return nil, err
-			}
-			if strings.TrimSpace(s) != "" {
-				query["Tags"] = s
-			}
-			args = args[2:]
-		case "--is-full-name":
-			query["IsFullName"] = "true"
-			args = args[1:]
-		case "--no-is-full-name":
-			query["IsFullName"] = "false"
-			args = args[1:]
-		case "--favourite":
-			query["Favourite"] = "true"
-			args = args[1:]
-		case "--no-favourite":
-			query["Favourite"] = "false"
-			args = args[1:]
-		case "--order-by-project":
-			query["OrderByProject"] = "true"
-			args = args[1:]
-		case "--no-order-by-project":
-			query["OrderByProject"] = "false"
-			args = args[1:]
-		default:
-			return nil, errors.New("unknown flag: " + args[0])
-		}
+	args, all := extractBoolFlag(args, "--all")
+	query, err := parseTopicListQuery(args, true)
+	if err != nil {
+		return nil, err
 	}
-	if strings.TrimSpace(query["TopicName"]) != "" && strings.TrimSpace(query["TopicId"]) != "" {
-		return nil, errors.New("TopicName and TopicId cannot be provided together")
+	if all {
+		return listAllByPageNumber(ctx, "/DescribeTopics", query, "Topics")
 	}
 	body, _ := util.MustJSON(map[string]any{})
 	return ctx.Do("GET", "/DescribeTopics", query, nil, body)

@@ -38,6 +38,18 @@ type ProfileDefaults struct {
 	TimeoutSeconds int
 }
 
+type CredentialStatus struct {
+	AccessKeyID     string
+	SecretAccessKey string
+	SecurityToken   string
+	Source          string
+	Mode            string
+	Present         bool
+	AK              bool
+	SK              bool
+	Token           bool
+}
+
 func DefaultConfig() Config {
 	return Config{
 		Version:  1,
@@ -94,11 +106,10 @@ func Save(cfg Config, path string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(cfg, "", "  ")
+	b, err := marshalIndentNoEscape(cfg)
 	if err != nil {
 		return err
 	}
-	b = append(b, '\n')
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
 		return err
@@ -134,6 +145,43 @@ func (c *Config) PutCred(name string, v Credential) {
 		c.Creds = map[string]Credential{}
 	}
 	c.Creds[name] = v
+}
+
+func ResolveEnvCredentialStatus() CredentialStatus {
+	ak := strings.TrimSpace(os.Getenv("VOLCENGINE_ACCESS_KEY_ID"))
+	sk := strings.TrimSpace(os.Getenv("VOLCENGINE_ACCESS_KEY_SECRET"))
+	token := strings.TrimSpace(os.Getenv("VOLCENGINE_TOKEN"))
+	if ak == "" && sk == "" && token == "" {
+		return CredentialStatus{}
+	}
+	return buildCredentialStatus(ak, sk, token, "env")
+}
+
+func ResolveProfileCredentialStatus(cfg Config, p Profile) CredentialStatus {
+	ak := strings.TrimSpace(p.AccessKeyID)
+	sk := strings.TrimSpace(p.SecretAccessKey)
+	token := strings.TrimSpace(p.SecurityToken)
+	source := "profile_inline"
+	if ak == "" || sk == "" {
+		source = "profile_missing"
+	}
+	if credRef := strings.TrimSpace(p.CredRef); credRef != "" {
+		source = "profile_cred_ref"
+		if cred, ok := cfg.GetCred(credRef); ok {
+			if ak == "" {
+				ak = strings.TrimSpace(cred.AccessKeyID)
+			}
+			if sk == "" {
+				sk = strings.TrimSpace(cred.SecretAccessKey)
+			}
+			if ak == "" || sk == "" {
+				source = "profile_cred_ref_missing"
+			}
+		} else {
+			source = "profile_cred_ref_missing"
+		}
+	}
+	return buildCredentialStatus(ak, sk, token, source)
 }
 
 func EffectiveProfile(cfg Config, name string, defaults ProfileDefaults) (Profile, error) {
@@ -193,9 +241,6 @@ func normalize(p Profile) (Profile, error) {
 	if p.TimeoutSeconds <= 0 {
 		p.TimeoutSeconds = 60
 	}
-	if p.AccessKeyID == "" || p.SecretAccessKey == "" {
-		return Profile{}, errors.New("missing access key id/secret access key")
-	}
 	if p.Region == "" {
 		return Profile{}, errors.New("missing region")
 	}
@@ -216,6 +261,30 @@ func applyDefaults(p Profile, d ProfileDefaults) Profile {
 		p.TimeoutSeconds = d.TimeoutSeconds
 	}
 	return p
+}
+
+func buildCredentialStatus(ak, sk, token, source string) CredentialStatus {
+	ak = strings.TrimSpace(ak)
+	sk = strings.TrimSpace(sk)
+	token = strings.TrimSpace(token)
+	return CredentialStatus{
+		AccessKeyID:     ak,
+		SecretAccessKey: sk,
+		SecurityToken:   token,
+		Source:          source,
+		Mode:            credentialMode(token),
+		Present:         ak != "" && sk != "",
+		AK:              ak != "",
+		SK:              sk != "",
+		Token:           token != "",
+	}
+}
+
+func credentialMode(token string) string {
+	if strings.TrimSpace(token) != "" {
+		return "sts"
+	}
+	return "aksk"
 }
 
 func DefaultEndpointForRegion(region string) string {

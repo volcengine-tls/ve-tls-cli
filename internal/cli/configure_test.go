@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -141,5 +142,145 @@ func TestConfigure_CredRefReuseAndDeriveRegionFromEndpoint(t *testing.T) {
 	}
 	if out["credential_present"] != true {
 		t.Fatalf("credential_present=%v", out["credential_present"])
+	}
+}
+
+func TestConfigure_ProfileAliasAddUse(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "config.json")
+	t.Setenv("VOLCLOG_CONFIG", cfgPath)
+
+	run := func(args ...string) map[string]any {
+		t.Helper()
+		var stdout, stderr bytes.Buffer
+		code := Run(args, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+		}
+		var m map[string]any
+		if err := json.Unmarshal(stdout.Bytes(), &m); err != nil {
+			t.Fatalf("invalid json: %v; stdout=%q", err, stdout.String())
+		}
+		return m
+	}
+
+	run("configure", "profile", "add", "stage", "--ak", "akS", "--sk", "skS", "--endpoint", "https://tls-cn-beijing.volces.com")
+	out := run("configure", "profile", "use", "stage")
+	if out["current_profile"] != "stage" {
+		t.Fatalf("current_profile=%v", out["current_profile"])
+	}
+}
+
+func TestConfigure_ShowAndListExposeAgentContextFields(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "config.json")
+	t.Setenv("VOLCLOG_CONFIG", cfgPath)
+
+	run := func(args ...string) map[string]any {
+		t.Helper()
+		var stdout, stderr bytes.Buffer
+		code := Run(args, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+		}
+		var m map[string]any
+		if err := json.Unmarshal(stdout.Bytes(), &m); err != nil {
+			t.Fatalf("invalid json: %v; stdout=%q", err, stdout.String())
+		}
+		return m
+	}
+
+	run("configure", "set", "--profile", "inline-cn", "--ak", "akA", "--sk", "skA", "--endpoint", "https://tls-cn-beijing.volces.com")
+	run("configure", "set", "--profile", "ref-cn", "--cred-ref", "ma-root", "--ak", "akR", "--sk", "skR", "--endpoint", "https://tls-cn-beijing.volces.com")
+
+	show := run("configure", "show", "--profile", "inline-cn")
+	if show["effective_profile"] != "inline-cn" {
+		t.Fatalf("effective_profile=%v", show["effective_profile"])
+	}
+	if show["credential_source"] != "profile_inline" {
+		t.Fatalf("credential_source=%v", show["credential_source"])
+	}
+
+	list := run("configure", "list")
+	items, ok := list["profiles"].([]any)
+	if !ok {
+		t.Fatalf("profiles=%T", list["profiles"])
+	}
+	foundRef := false
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if m["profile"] == "ref-cn" {
+			foundRef = true
+			if m["effective_profile"] != "ref-cn" {
+				t.Fatalf("effective_profile=%v", m["effective_profile"])
+			}
+			if m["credential_source"] != "profile_cred_ref" {
+				t.Fatalf("credential_source=%v", m["credential_source"])
+			}
+		}
+	}
+	if !foundRef {
+		t.Fatalf("profile ref-cn not found in list: %v", list["profiles"])
+	}
+}
+
+func TestConfigure_CredDelete_SuccessAndInUseGuard(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "config.json")
+	t.Setenv("VOLCLOG_CONFIG", cfgPath)
+
+	runOK := func(args ...string) map[string]any {
+		t.Helper()
+		var stdout, stderr bytes.Buffer
+		code := Run(args, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+		}
+		var m map[string]any
+		if err := json.Unmarshal(stdout.Bytes(), &m); err != nil {
+			t.Fatalf("invalid json: %v; stdout=%q", err, stdout.String())
+		}
+		return m
+	}
+	runErr := func(args ...string) string {
+		t.Helper()
+		var stdout, stderr bytes.Buffer
+		code := Run(args, &stdout, &stderr)
+		if code == 0 {
+			t.Fatalf("expected non-zero exit; stdout=%q stderr=%q", stdout.String(), stderr.String())
+		}
+		return stdout.String() + stderr.String()
+	}
+
+	runOK("configure", "set", "--profile", "ref-cn", "--cred-ref", "ma-root", "--ak", "akR", "--sk", "skR", "--endpoint", "https://tls-cn-beijing.volces.com")
+
+	errOut := runErr("configure", "cred", "delete", "ma-root")
+	if !strings.Contains(errOut, "credential in use by profiles") {
+		t.Fatalf("expected in-use error, got: %q", errOut)
+	}
+
+	runOK("configure", "delete", "ref-cn")
+	out := runOK("configure", "cred", "delete", "ma-root")
+	if out["deleted"] != "ma-root" {
+		t.Fatalf("deleted=%v", out["deleted"])
+	}
+}
+
+func TestConfigure_CredDelete_RequiresName(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "config.json")
+	t.Setenv("VOLCLOG_CONFIG", cfgPath)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"configure", "cred", "delete"}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected non-zero exit; stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	out := stdout.String() + stderr.String()
+	if !strings.Contains(out, "missing credential name") {
+		t.Fatalf("unexpected error output: %q", out)
 	}
 }

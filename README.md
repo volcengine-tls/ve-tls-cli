@@ -1,202 +1,172 @@
-# volclog（火山引擎 TLS 日志服务 CLI）
+# volclog-cli
 
-`volclog` 用于通过命令行管理 TLS 日志服务资源（Project/Topic/Index/MetricTopic）并进行日志/指标查询与导出。面向自动化场景（CI、批处理、Agent）默认输出结构化 JSON/JSONL，便于二次处理。
+[中文版](README_CN.md) | [English](README.md)
 
-更详细的逐命令参数手册与示例文件见：
-- 中文完整指南：[README_CN.md](./README_CN.md)
-- 示例文件目录：[examples](./examples/README.md)
-- CLI 参数最佳实践：[docs/cli-best-practices.md](./docs/cli-best-practices.md)
+The official Volcengine TLS (Tencent Log Service) CLI tool, built for both human developers and AI Agents. It covers the main TLS domains, including projects, topics, indexes, search & analysis, alarms, consumer groups, and data processing, with shortcuts, raw API access, and optional skills.
 
-## 目录
-- 安装
-- 配置
-- 快速上手
-- 输入与输出约定
-- 自动化与诊断
-- 常用命令
-- 进一步阅读
+**What volclog provides**
 
-## 安装
+- **Agent integration** — Includes optional skills so common TLS workflows can be handed to LLM-driven tooling or automation.
+- **Broad coverage** — Covers 20+ domains; use shortcuts for common tasks and drop to raw OpenAPI when you need exact control.
+- **Clearer command constraints** — `--describe`, request templates, `--dry-run`, and structured output make it easier to inspect a call before sending it.
+- **Straightforward setup** — Supports binary install, source build, local profiles, environment variables, and `--secrets-file`.
+- **Reasonable safety defaults** — Includes `--dry-run`, redacted trace output, and environment-isolation related options.
+- **Layered usage** — Shortcut / API / skills are all available, so you can pick the level you need.
 
-### 方式 A：GitHub Release 预编译包（无需 Go）
+---
 
-macOS/Linux 依赖：`bash`、`curl`、`tar`、（可选）`shasum` 或 `sha256sum`
+## Features
 
-安装最新 release：
+| Category | Capabilities |
+| --- | --- |
+| 📁 **Project** | Create, query, update, and delete log projects |
+| 📚 **Topic** | Create, query, update, and delete log topics, manage log lifecycle |
+| 🔍 **Index & Log** | Create and manage indexes, powerful log search capabilities, SQL analytics export, and raw log download |
+| 📈 **Metric Topic** | Create metric topics, support monitoring metric queries based on PromQL |
+| 🚨 **Alarm** | Configure alarm policies and notification channels to ensure seconds-level alerts |
+| 🖥️ **Dashboard** | Create and manage visual dashboards for real-time data insights |
+| 🔄 **Consumer/Shipper** | Manage consumer groups, configure data shipping to external storage (e.g., TOS, Kafka) |
+| 🛠 **ETL/Processor** | Log cleaning, enrichment, distribution, and formatting |
+| 🌐 **Host/Collector** | Manage log collector host groups, configure and dispatch LogCollector rules |
+
+---
+
+## Installation & Quick Start
+
+### Prerequisites
+
+Before you start, make sure you have:
+- A terminal environment for your operating system
+- Your Volcengine AK (Access Key ID) and SK (Secret Access Key)
+- Target Region (e.g., `cn-beijing`) and Endpoint (e.g., `https://tls-cn-beijing.volces.com`)
+
+### Quick Start (Human Users)
+
+*If you are using an AI assistant for installation, jump directly to **Quick Start (AI Agent)**.*
+
+#### 1. Install
+**Option 1: Download Binary (Recommended)**
 ```bash
-VOLCLOG_BASE_URL="https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download" \
 bash scripts/install-binary.sh
-
-~/.local/bin/volclog --help
 ```
 
-固定安装某个版本（推荐用于生产/CI）：
+**Option 2: Install via npm**
 ```bash
-VOLCLOG_BASE_URL="https://github.com/volcengine-tls/ve-tls-cli/releases/download/volclog-v0.0.2" \
-bash scripts/install-binary.sh
+npm install -g @volcengine/volclog
 ```
 
-Windows 依赖：PowerShell 5+（或 PowerShell 7+）
-
-安装最新 release：
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install.ps1
-```
-
-固定安装某个版本：
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -BaseUrl "https://github.com/volcengine-tls/ve-tls-cli/releases/download/volclog-v0.0.2"
-```
-
-### 方式 B：本地编译安装（需要 Go）
-
-依赖：`bash`、`go 1.22+`
-
-一键安装到 `~/.local/bin/volclog`：
+**Option 3: Build from Source**
+Requires Go v1.22+.
 ```bash
-bash scripts/install-local.sh
-~/.local/bin/volclog --help
+git clone https://github.com/volcengine/ve-tls-cli.git
+cd ve-tls-cli
+make install # or bash scripts/install-local.sh
 ```
 
-### 方式 C：Docker（无需本机 Go）
-
-依赖：`docker`
-
+#### 2. Configure Credentials
+Run the configure command and enter your AK, SK, Region, and Endpoint when prompted:
 ```bash
-docker build -t volclog:local .
-docker run --rm volclog:local --help
+volclog configure
 ```
 
-## 配置
-
-### 环境变量（优先级最高，适合 CI/容器）
-- `VOLCENGINE_ACCESS_KEY_ID`
-- `VOLCENGINE_ACCESS_KEY_SECRET`
-- `VOLCENGINE_TOKEN`（可选）
-- `VOLCENGINE_ENDPOINT`（例如 `https://tls-cn-beijing.volces.com`）
-- `VOLCENGINE_REGION`（可选；当 endpoint 形如 `tls-<region>.volces.com` 时可从 endpoint 推导）
-
-### 本地 Profile（默认 `~/.volclog/config.json`）
+#### 3. Start Using
 ```bash
-volclog configure set --profile default --ak "$VOLCENGINE_ACCESS_KEY_ID" --sk "$VOLCENGINE_ACCESS_KEY_SECRET" --endpoint https://tls-cn-beijing.volces.com
-volclog configure show --profile default
-volclog configure use default
-```
-
-多账号/多 region 场景建议使用多个 profile，并在单次命令上使用 `--profile <name>` 选择；跨多个 region/endpoint 复用同一 AK/SK 时，推荐使用 `--cred-ref`（详见 README_CN.md 的“多租户 / 多账号 / 多 Region 组合配置”）。
-
-## 安全建议
-
-- 建议通过环境变量或 CI Secret 注入 AK/SK，避免在命令行参数或脚本中明文写入。
-- 如使用本地 Profile，请妥善保护 `~/.volclog/config.json`（包含敏感凭证），并避免将其纳入版本控制。
-- 建议在共享终端/日志环境中谨慎开启调试输出（如后续版本增加更多调试信息）。
-- 请求失败时可使用 stderr 中的 `requestId` 协助排障，避免在 issue/工单中粘贴完整密钥。
-
-## 快速上手
-
-查看命令入口：
-```bash
-volclog --help
-volclog project -h
-volclog topic -h
-volclog metric-topic -h
-volclog log -h
-```
-
-资源管理（建议 ID 优先）：
-```bash
+# Query project list
 volclog project list
-volclog project create --project-name demo --description test
-volclog project get --project-id <pid>
-
-volclog topic list --project-id <pid>
-volclog topic create --project-id <pid> --topic-name demo-topic --ttl 30 --shard-count 2 --auto-split --max-split-shard 10
-volclog topic get --topic-id <tid>
-
-volclog index create --topic-id <tid> --body file://./index.json
+# Query log topics
+volclog topic list --project-id <your-project-id>
 ```
 
-日志查询与导出：
+---
+
+### Quick Start (AI Agent)
+
+If you are an AI Agent, this is a practical order for helping users configure and verify the CLI.
+
+#### Step 1 — Install
 ```bash
-volclog log search --topic-id <tid> --query "*" --from "2026-03-14 00:00:00" --to "2026-03-14 01:00:00"
-volclog --output jsonl log export --topic-id <tid> --query "*" --from 1710374400000 --to 1710378000000 --max-pages 10
+# If in a development environment
+bash scripts/install-local.sh
 ```
 
-指标主题与 Prom API：
+If the npm package is available, you can also install it directly:
+
 ```bash
-volclog metric-topic list --project-id <pid>
-volclog metric-topic prom -h
-volclog metric-topic prom query --topic-id <metric_tid> --query 'up' --time 1710374400000
-volclog metric-topic prom query-range --topic-id <metric_tid> --query 'rate(up[5m])' --start 1710374400000 --end 1710378000000 --step 15
+npm install -g @volcengine/volclog
 ```
 
-## 输入与输出约定
-
-### file:// 文件输入
-参数值以 `file://` 开头时会从文件读取内容。例如：
+#### Step 2 — Discover Capabilities & Constraints
+For unfamiliar APIs, check constraints via `capabilities` and `--describe` before guessing parameters:
 ```bash
-volclog index create --topic-id <tid> --body file://./index.json
+# Check available domains
+volclog capabilities --view groups
+# Check specific domain interfaces
+volclog capabilities --group project --view text
+# Check input requirements, templates, and limits
+volclog api project CreateProject --describe
 ```
 
-### stdin 输入（-）
-部分参数支持使用 `-` 从 stdin 读取内容（便于与管道组合）。例如：
+#### Step 3 — Dry Run & Execute
+Validate your request payload via `--dry-run`:
 ```bash
-cat ./examples/create_topic.json | volclog topic create --request -
+volclog --dry-run api project CreateProject --request '{"ProjectName":"test", "Region": "cn-beijing"}'
 ```
+Once it looks correct, remove `--dry-run` and run it for real.
 
-### --request file://... 覆盖完整请求体
-部分命令支持 `--request file://...` 直接传入 JSON 请求体，以覆盖更多服务端参数（以 swagger 为准）：
+#### Step 4 — Data Filtering
+Use `--jmes-filter` to extract key data and prevent long lists from blowing up your context window:
 ```bash
-volclog topic create --request file://./examples/create_topic.json
-volclog log search --request file://./examples/search_logs.json
+volclog project list --jmes-filter "Projects[].{Id: ProjectId, Name: ProjectName}"
 ```
 
-### 输出格式
-- `--output json`：默认，适合资源管理与查询
-- `--output jsonl`：每行一条 JSON，适合日志导出/流式处理
+---
 
-### 错误输出
-请求失败时在 stderr 输出结构化 JSON（包含 `errorCode/errorMessage/requestId/statusCode/kind/hint`），便于自动化系统识别与告警。
+## Agent Skills
 
-## 自动化与诊断
+The repository includes a set of Agent Skills under `skills/`:
 
-### doctor
-快速检查当前环境与配置是否满足请求条件：
+| Skill | Description |
+| --- | --- |
+| **volclog-shared** | Common config & diagnostics (base for all other skills), handles env, auth, and common queries |
+| **volclog-project** | Project lifecycle management and query planning |
+| **volclog-topic** | Topic configuration and constraint validation |
+| **volclog-index** | Index analysis and creation, auto-handles full-text and key-value index structures |
+| **volclog-log** | Core log search, SQL analytics, and big data export routing |
+| **volclog-metric-topic** | Metric stream query and PromQL support |
+| **volclog-alarm** | Alarm rule troubleshooting and configuration |
+| **volclog-api-explorer** | Provides full detection and execution capabilities for underlying OpenAPIs |
+
+**Install Skills:**
 ```bash
-volclog doctor
+volclog skill install --dir skills/
 ```
 
-### trace（工件化复盘）
-为任意命令生成 trace 工件（脱敏 JSONL），并在输出中返回 trace 路径：
+For a one-off install, `npx` works as well:
+
 ```bash
-volclog --trace-dir ./.volclog/traces log search --topic-id <tid> --query "*" --from 1710374400000 --to 1710378000000
+npx @volcengine/volclog skill install --dir skills/
 ```
 
-### 输出落盘（stdout/file）
-将命令输出写入文件并在 stdout 返回输出路径（适合 CI/Agent 降低 stdout 体积）：
-```bash
-volclog --output-mode file log search --topic-id <tid> --query "*" --from 1710374400000 --to 1710378000000
-```
+---
 
-### 项目级默认配置
-在仓库根目录放置 `./.volclog/cli.config.json` 可为该项目提供非敏感默认值（如 region/endpoint/timeout/output/output_mode/trace_redact）。
+## Advanced & Best Practices
 
-### secrets file（dotenv）
-通过 `--secrets-file` 从 dotenv 文件加载环境变量（不会覆盖当前已存在的环境变量）：
-```bash
-volclog --secrets-file ./.env project list
-```
+Beyond the basic commands, a few capabilities are especially useful in troubleshooting and automation:
 
-## 常用命令
+- **Automated Discovery**: Fetch API constraints and complex JSON payload templates instantly using `--describe` and `--print-request-template`.
+- **Safe Pre-execution**: Use `--dry-run` to intercept network requests and locally validate JSON syntax and required parameters.
+- **Flexible Payload Inputs**: Pass JSON payloads via inline strings, local files (`file://...`), or standard input (`-`) streams.
+- **Troubleshooting & Redaction**: Generate sanitized Trace artifacts using `--trace-dir` combined with `--trace-redact strict`.
+- **Big Data Streaming**: Process massive log exports and SQL analysis results efficiently with `--output jsonl` and `--output-mode file`.
+- **Multi-Account Isolation**: Inject localized environment variables via `--secrets-file ./.env`.
 
-### OpenAPI 兜底调用
-当某个接口 CLI 尚未封装时，可用 `api call` 直接调用：
-```bash
-volclog api call --method GET --path /DescribeProject --query ProjectId=<pid>
-volclog api call --method POST --path /SearchLogs --body file://./examples/search_logs.json
-```
+For detailed scenario guides (including specific commands for log search, ETL, alarms, and multi-tenant isolation), we have extracted them into a dedicated document.
 
-## 进一步阅读
-- 中文逐命令参数手册：[README_CN.md](./README_CN.md)
-- 示例文件（请求体、PromQL、match 等）：[examples](./examples/README.md)
-- 版本变更记录：[CHANGELOG.md](./CHANGELOG.md)
+👉 **[CLI Best Practices & Scenario Guide](docs/cli-best-practices.md)**
+
+---
+
+## Security & Contributing
+
+- **Security**: Avoid hardcoding plaintext AK/SK in command arguments. Use `volclog configure`, inject them via environment variables (`VOLCENGINE_ACCESS_KEY_ID`, `VOLCENGINE_ACCESS_KEY_SECRET`), or use `--secrets-file <path>`.
+- **Contributing**: We welcome PRs to enhance the CLI. When adding new OpenAPI commands or skills, be sure to run `scripts/update_capabilities_contract.sh` to update the API contract.

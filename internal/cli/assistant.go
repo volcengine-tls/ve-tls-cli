@@ -12,29 +12,26 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
-	"time"
 
-	"volclog/internal/signv4"
-	"volclog/internal/tlsapi"
-	"volclog/internal/util"
-	"volclog/internal/version"
+	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
+	"github.com/volcengine-tls/ve-tls-cli/internal/util"
+	"github.com/volcengine-tls/ve-tls-cli/internal/version"
 )
 
 func runAssistant(ctx *Context, args []string) (any, error) {
-	if len(args) == 0 {
-		return nil, &usageError{Text: usageAssistant(), ExitCode: 1}
-	}
-	if args[0] == "-h" || args[0] == "--help" {
-		return nil, &usageError{Text: usageAssistant(), ExitCode: 0}
-	}
-	switch args[0] {
-	case "describe-session-answer":
-		return assistantDescribeSessionAnswer(ctx, args[1:])
-	default:
-		return nil, errors.New("unknown assistant command: " + args[0])
-	}
+	return runSubcommandGroup(args, usageAssistant(), nil, func(command string, commandArgs []string) (any, error) {
+		ctx.Action = "assistant." + strings.TrimSpace(command)
+		if out, handled, err := maybeHandleShortcutMeta("assistant", command, commandArgs); handled {
+			return out, err
+		}
+		switch command {
+		case "describe-session-answer":
+			return assistantDescribeSessionAnswer(ctx, commandArgs)
+		default:
+			return nil, errors.New("unknown assistant command: " + command)
+		}
+	})
 }
 
 func assistantDescribeSessionAnswer(ctx *Context, args []string) (any, error) {
@@ -244,9 +241,15 @@ func assistantStreamAnswer(ctx *Context, instanceID, topicID, sessionID, questio
 		return "", err
 	}
 	defer resp.Body.Close()
+	ctx.RequestID = resp.Header.Get("x-tls-requestid")
+	ctx.StatusCode = resp.StatusCode
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
-		return "", errors.New("DescribeSessionAnswer failed: status=" + strconv.Itoa(resp.StatusCode) + " body=" + strings.TrimSpace(string(b)))
+		return "", &httpError{
+			statusCode: resp.StatusCode,
+			body:       b,
+			requestID:  resp.Header.Get("x-tls-requestid"),
+		}
 	}
 
 	var sb strings.Builder
@@ -361,8 +364,9 @@ func doStream(ctx context.Context, c *tlsapi.Client, method, path string, query 
 	for k, v := range header {
 		req.Header.Set(k, v)
 	}
-	if err := signv4.Sign(req, c.Creds, time.Now()); err != nil {
-		return nil, err
+	req = c.Creds.Sign(req)
+	if strings.TrimSpace(req.Header.Get("Authorization")) == "" {
+		return nil, errors.New("signing failed: missing Authorization header")
 	}
 	return c.HTTP.Do(req)
 }

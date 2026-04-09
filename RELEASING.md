@@ -18,25 +18,28 @@
 
 ## 版本号与 Tag 规则
 
-- 使用 Tag 触发发布：`volclog-vX.Y.Z`（例如 `volclog-v0.0.2`）
+- 使用 Tag 触发发布：`volclog-vX.Y.Z`（例如 `volclog-v1.0.0`）
 - Release workflow 会将 `${GITHUB_REF_NAME}` 注入到二进制版本号中：
-  - `volclog --version` 输出：`volclog volclog-v0.0.2`
+  - `volclog --version` 输出：`volclog volclog-v1.0.0`
   
 版本建议：
 - `0.0.0` 通常用于开发态占位（不建议作为对外发布版本号）
-- 对外首发建议使用 `volclog-v0.0.2`（表达需求与接口可能演进）
+- 首个稳定版本建议使用 `volclog-v1.0.0`
 
 ## 发布流程（GitHub Actions）
 
 ### 1) 打 Tag 并推送
 ```bash
-git tag volclog-v0.0.2
-git push origin volclog-v0.0.2
+git tag volclog-v1.0.0
+git push origin volclog-v1.0.0
 ```
 
 ### 2) 等待工作流完成
 - workflow：`.github/workflows/release-volclog.yml`
 - 输出：Release assets（不同 OS/Arch 的 tar.gz/zip 与 sha256）
+- Release 构建参数：
+  - `go build -trimpath -ldflags "-s -w -X volclog/internal/version.Version=${GITHUB_REF_NAME}" -o <out> ./cmd/volclog`
+  - 目的：减少二进制中的路径与调试符号，降低 release 产物体积
 
 ### 3) 验证安装（建议）
 
@@ -48,14 +51,14 @@ VOLCLOG_BASE_URL="https://github.com/volcengine-tls/ve-tls-cli/releases/latest/d
 
 安装指定版本：
 ```bash
-VOLCLOG_BASE_URL="https://github.com/volcengine-tls/ve-tls-cli/releases/download/volclog-v0.0.2" bash scripts/install-binary.sh
+VOLCLOG_BASE_URL="https://github.com/volcengine-tls/ve-tls-cli/releases/download/volclog-v1.0.0" bash scripts/install-binary.sh
 ~/.local/bin/volclog --version
 ```
 
 Windows 安装（示例）：
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
-powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -BaseUrl "https://github.com/volcengine-tls/ve-tls-cli/releases/download/volclog-v0.0.2"
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -BaseUrl "https://github.com/volcengine-tls/ve-tls-cli/releases/download/volclog-v1.0.0"
 ```
 
 ## 常见问题

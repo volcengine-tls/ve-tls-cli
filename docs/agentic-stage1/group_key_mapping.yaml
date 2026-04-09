@@ -1,0 +1,24 @@
+账号管理: account
+Account: account
+机器组管理: host-group
+告警管理: alarm
+日志管理: log
+日志项目管理: project
+日志主题管理: topic
+消费组管理: consumer-group
+标签管理: tag
+分区管理: shard
+索引管理: index
+采集配置管理: collector
+数据导入: import
+数据投递: shipper
+数据加工: etl
+数据处理器: processor
+数据回流: log-back-flow
+定时 SQL 分析: schedule-sql-task
+指标主题管理: metric-topic
+模板市场: template-market
+仪表盘: dashboard
+Trace 存储: trace
+Kafka 协议消费: kafka-proxy
+OLAP: olap

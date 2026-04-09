@@ -14,6 +14,9 @@ func ReadMaybeFile(s string) ([]byte, error) {
 	if v == "" {
 		return []byte{}, nil
 	}
+	if looksLikeInlineJSON(v) {
+		return []byte(v), nil
+	}
 	if v == "-" {
 		return io.ReadAll(os.Stdin)
 	}
@@ -28,7 +31,62 @@ func ReadMaybeFile(s string) ([]byte, error) {
 		}
 		return b, nil
 	}
+	if b, ok, err := readLocalFileIfExists(v); ok || err != nil {
+		return b, err
+	}
+	if looksLikeLocalFilePath(v) {
+		return nil, errors.New("file not found: " + filepath.Clean(v))
+	}
 	return []byte(v), nil
+}
+
+func readLocalFileIfExists(path string) ([]byte, bool, error) {
+	p := filepath.Clean(path)
+	fi, err := os.Stat(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	if fi.IsDir() {
+		return nil, false, errors.New("path is a directory: " + p)
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return nil, false, err
+	}
+	return b, true, nil
+}
+
+func looksLikeInlineJSON(v string) bool {
+	if v == "" {
+		return false
+	}
+	switch v[0] {
+	case '{', '[', '"':
+		return true
+	default:
+		return false
+	}
+}
+
+func looksLikeLocalFilePath(v string) bool {
+	if v == "" {
+		return false
+	}
+	if strings.Contains(v, "/") || strings.Contains(v, `\`) {
+		return true
+	}
+	if strings.HasPrefix(v, ".") || strings.HasPrefix(v, "~") {
+		return true
+	}
+	switch strings.ToLower(filepath.Ext(v)) {
+	case ".json", ".jsonl", ".ndjson", ".yaml", ".yml", ".txt", ".log":
+		return true
+	default:
+		return false
+	}
 }
 
 func MustJSON(v any) ([]byte, error) {

@@ -5,36 +5,34 @@ import (
 	"strconv"
 	"strings"
 
-	"volclog/internal/util"
+	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 func runProject(ctx *Context, args []string) (any, error) {
-	if len(args) == 0 {
-		return nil, &usageError{Text: usageProject(), ExitCode: 1}
-	}
-	if args[0] == "-h" || args[0] == "--help" {
-		return nil, &usageError{Text: usageProject(), ExitCode: 0}
-	}
-	if hasHelp(args[1:]) {
-		return nil, &usageError{Text: usageProject(), ExitCode: 0}
-	}
-	switch args[0] {
-	case "list":
-		return projectList(ctx, args[1:])
-	case "get":
-		return projectGet(ctx, args[1:])
-	case "create":
-		return projectCreate(ctx, args[1:])
-	case "modify":
-		return projectModify(ctx, args[1:])
-	case "delete":
-		return projectDelete(ctx, args[1:])
-	default:
-		return nil, errors.New("unknown project command: " + args[0])
-	}
+	return runSubcommandGroup(args, usageProject(), nil, func(command string, commandArgs []string) (any, error) {
+		ctx.Action = "project." + strings.TrimSpace(command)
+		if out, handled, err := maybeHandleShortcutMeta("project", command, commandArgs); handled {
+			return out, err
+		}
+		switch command {
+		case "list":
+			return projectList(ctx, commandArgs)
+		case "get":
+			return projectGet(ctx, commandArgs)
+		case "create":
+			return projectCreate(ctx, commandArgs)
+		case "modify":
+			return projectModify(ctx, commandArgs)
+		case "delete":
+			return projectDelete(ctx, commandArgs)
+		default:
+			return nil, errors.New("unknown project command: " + command)
+		}
+	})
 }
 
 func projectList(ctx *Context, args []string) (any, error) {
+	args, all := extractBoolFlag(args, "--all")
 	query := map[string]string{}
 	for len(args) > 0 {
 		switch args[0] {
@@ -113,6 +111,9 @@ func projectList(ctx *Context, args []string) (any, error) {
 		default:
 			return nil, errors.New("unknown flag: " + args[0])
 		}
+	}
+	if all {
+		return listAllByPageNumber(ctx, "/DescribeProjects", query, "Projects")
 	}
 	body, _ := util.MustJSON(map[string]any{})
 	return ctx.Do("GET", "/DescribeProjects", query, nil, body)

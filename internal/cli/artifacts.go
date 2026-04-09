@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"volclog/internal/output"
+	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
 func attachMeta(out any, tracePath string) any {
@@ -29,16 +29,60 @@ func attachMeta(out any, tracePath string) any {
 	}
 }
 
-func writeOutputFile(outputFile string, group string, out any, format output.Format) (string, error) {
+type fileArtifactOutput struct {
+	Path   string
+	Format output.Format
+}
+
+func buildOutputArtifact(path string, format output.Format) map[string]any {
+	artifact := map[string]any{
+		"path":   path,
+		"format": string(format),
+	}
+	if fi, err := os.Stat(path); err == nil {
+		artifact["sizeBytes"] = fi.Size()
+	}
+	return artifact
+}
+
+func resolveOutputFilePath(outputFile string, baseDir string, group string, format output.Format) (string, error) {
 	p := strings.TrimSpace(outputFile)
 	if p == "" {
 		var err error
-		p, err = defaultOutputFile(group, format)
+		p, err = defaultOutputFile(baseDir, group, format)
 		if err != nil {
 			return "", err
 		}
 	}
-	p = filepath.Clean(p)
+	return filepath.Clean(p), nil
+}
+
+func writeOutputFileToDir(outputFile string, baseDir string, group string, out any, format output.Format) (string, error) {
+	if fileOut, ok := out.(fileArtifactOutput); ok {
+		return filepath.Clean(fileOut.Path), nil
+	}
+	if raw, ok := out.(rawBinaryOutput); ok {
+		p := strings.TrimSpace(outputFile)
+		if p == "" {
+			var err error
+			p, err = defaultBinaryOutputFile(baseDir, group, raw.Ext)
+			if err != nil {
+				return "", err
+			}
+		}
+		p = filepath.Clean(p)
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(p, raw.Data, 0o600); err != nil {
+			return "", err
+		}
+		return p, nil
+	}
+	p, err := resolveOutputFilePath(outputFile, baseDir, group, format)
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return "", err
 	}
@@ -53,11 +97,11 @@ func writeOutputFile(outputFile string, group string, out any, format output.For
 	return p, nil
 }
 
-func writeTextFile(outputFile string, group string, s string) (string, error) {
+func writeTextFileToDir(outputFile string, baseDir string, group string, s string) (string, error) {
 	p := strings.TrimSpace(outputFile)
 	if p == "" {
 		var err error
-		p, err = defaultOutputFile(group, output.FormatJSON)
+		p, err = defaultOutputFile(baseDir, group, output.FormatJSON)
 		if err != nil {
 			return "", err
 		}
@@ -77,20 +121,53 @@ func writeTextFile(outputFile string, group string, s string) (string, error) {
 	return p, nil
 }
 
-func defaultOutputFile(group string, format output.Format) (string, error) {
+func defaultOutputFile(baseDir string, group string, format output.Format) (string, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(wd, ".volclog", "output")
+	dir := strings.TrimSpace(baseDir)
+	if dir == "" {
+		dir = filepath.Join(wd, ".volclog", "output")
+	} else if !filepath.IsAbs(dir) {
+		dir = filepath.Join(wd, dir)
+	}
 	ext := "json"
 	if format == output.FormatJSONL {
 		ext = "jsonl"
+	} else if format == output.FormatTable {
+		ext = "txt"
 	}
 	g := strings.TrimSpace(group)
 	if g == "" {
 		return "", errors.New("empty group")
 	}
 	name := g + "-" + time.Now().UTC().Format("2006-01-02T15-04-05.000Z") + "." + ext
+	return filepath.Join(dir, name), nil
+}
+
+func defaultBinaryOutputFile(baseDir string, group string, ext string) (string, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	dir := strings.TrimSpace(baseDir)
+	if dir == "" {
+		dir = filepath.Join(wd, ".volclog", "output")
+	} else if !filepath.IsAbs(dir) {
+		dir = filepath.Join(wd, dir)
+	}
+	g := strings.TrimSpace(group)
+	if g == "" {
+		return "", errors.New("empty group")
+	}
+	suffix := strings.TrimSpace(ext)
+	if suffix == "" {
+		suffix = ".bin"
+	}
+	if !strings.HasPrefix(suffix, ".") {
+		suffix = "." + suffix
+	}
+	name := g + "-" + time.Now().UTC().Format("2006-01-02T15-04-05.000Z") + suffix
 	return filepath.Join(dir, name), nil
 }

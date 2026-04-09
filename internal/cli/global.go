@@ -11,7 +11,7 @@ type GlobalFlags struct {
 	TraceDir    string
 	TraceRedact string
 	SecretsFile string
-	Debug       bool
+	DryRun      bool
 	ShowHelp    bool
 	ShowVersion bool
 }
@@ -71,8 +71,8 @@ func parseGlobal(args []string) (group string, rest []string, flags GlobalFlags,
 			}
 			flags.SecretsFile = args[1]
 			args = args[2:]
-		case "--debug":
-			flags.Debug = true
+		case "--dry-run":
+			flags.DryRun = true
 			args = args[1:]
 		case "--help", "-h":
 			flags.ShowHelp = true
@@ -90,4 +90,70 @@ func parseGlobal(args []string) (group string, rest []string, flags GlobalFlags,
 	group = args[0]
 	rest = args[1:]
 	return group, rest, flags, true
+}
+
+func extractTrailingGlobals(args []string, flags GlobalFlags, allowDryRun bool) (rest []string, merged GlobalFlags, ok bool) {
+	merged = flags
+	rest = make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch a {
+		case "--output":
+			if i+1 >= len(args) {
+				return nil, GlobalFlags{}, false
+			}
+			merged.Output = args[i+1]
+			i++
+		case "--output-mode":
+			if i+1 >= len(args) {
+				return nil, GlobalFlags{}, false
+			}
+			merged.OutputMode = args[i+1]
+			i++
+		case "--output-file":
+			if i+1 >= len(args) {
+				return nil, GlobalFlags{}, false
+			}
+			merged.OutputFile = args[i+1]
+			i++
+		case "--jmes-filter":
+			if i+1 >= len(args) {
+				return nil, GlobalFlags{}, false
+			}
+			merged.Filter = args[i+1]
+			i++
+		case "--trace-dir":
+			if i+1 >= len(args) {
+				return nil, GlobalFlags{}, false
+			}
+			merged.TraceDir = args[i+1]
+			i++
+		case "--trace-redact":
+			if i+1 >= len(args) {
+				return nil, GlobalFlags{}, false
+			}
+			merged.TraceRedact = args[i+1]
+			i++
+		case "--dry-run":
+			if !allowDryRun {
+				rest = append(rest, a)
+				continue
+			}
+			merged.DryRun = true
+		default:
+			rest = append(rest, a)
+		}
+	}
+	return rest, merged, true
+}
+
+func allowsTrailingGlobalsForGroup(group string) bool {
+	switch strings.TrimSpace(group) {
+	case "api":
+		return true
+	case "project", "topic", "metric-topic", "index", "log", "assistant", "host-group", "collector":
+		return true
+	default:
+		return false
+	}
 }

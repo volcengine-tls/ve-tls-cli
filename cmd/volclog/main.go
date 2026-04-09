@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"volclog/internal/cli"
+	"github.com/volcengine-tls/ve-tls-cli/internal/cli"
 )
 
 func main() {
