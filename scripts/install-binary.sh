@@ -34,15 +34,19 @@ trap 'rm -rf "$tmp"' EXIT
 
 mkdir -p "$DEST_DIR"
 
-curl -fsSL "$DOWNLOAD_URL" -o "$tmp/pkg.tgz"
+pkg_file="$(basename "${DOWNLOAD_URL%%\?*}")"
+archive_path="$tmp/$pkg_file"
+
+curl -fsSL "$DOWNLOAD_URL" -o "$archive_path"
 
 sha_url="${DOWNLOAD_URL}.sha256"
-if curl -fsSL "$sha_url" -o "$tmp/pkg.tgz.sha256" 2>/dev/null; then
+sha_path="${archive_path}.sha256"
+if curl -fsSL "$sha_url" -o "$sha_path" 2>/dev/null; then
   if command -v sha256sum >/dev/null 2>&1; then
-    (cd "$tmp" && sha256sum -c pkg.tgz.sha256)
+    (cd "$tmp" && sha256sum -c "$(basename "$sha_path")")
   elif command -v shasum >/dev/null 2>&1; then
-    expected="$(awk '{print $1}' "$tmp/pkg.tgz.sha256")"
-    actual="$(shasum -a 256 "$tmp/pkg.tgz" | awk '{print $1}')"
+    expected="$(awk '{print $1}' "$sha_path")"
+    actual="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
     if [[ "$expected" != "$actual" ]]; then
       echo "sha256 mismatch" >&2
       exit 3
@@ -50,7 +54,7 @@ if curl -fsSL "$sha_url" -o "$tmp/pkg.tgz.sha256" 2>/dev/null; then
   fi
 fi
 
-tar -xzf "$tmp/pkg.tgz" -C "$tmp"
+tar -xzf "$archive_path" -C "$tmp"
 if [[ ! -f "$tmp/$BIN_NAME" ]]; then
   echo "binary not found in package" >&2
   exit 4
