@@ -2,16 +2,16 @@
 
 [中文版](README_CN.md) | [English](README.md)
 
-火山引擎 TLS（日志服务）官方 CLI 工具，专为人类开发者与 AI Agent 打造。覆盖日志服务全量核心业务域，包括日志项目、主题、索引、检索分析、告警、消费组、数据加工等 20+ 个领域，支持上百个底层 API 与原生 Agent Skills。
+火山引擎 TLS（日志服务）官方 CLI 工具，兼顾人类开发者和 AI Agent 的使用场景。覆盖日志项目、主题、索引、检索分析、告警、消费组、数据加工等主要业务域，提供快捷命令、底层 API 调用和可选 skills。
 
-**为什么选择 volclog？**
+**volclog 提供什么？**
 
-- **Agent 原生设计** — 开箱即用的 10+ 结构化 Agent Skills，兼容主流大模型工具调用规范，Agent 零成本接入。
-- **全量能力覆盖** — 涵盖 20+ 个业务领域，无论是高频的快捷命令，还是全量的底层 OpenAPI，皆可一键触达。
-- **AI 友好 & 极致优化** — 每个命令均经过真实的 Agent 测试，具备极简的参数设计、智能的默认值、自解释的 `--describe` 能力，以及标准化的 Envelope JSON 结构化输出，最大化 Agent 调用成功率。
-- **开箱即用，无缝接入** — 支持快速安装、交互式配置，从下载到发起第一次 API 请求只需 3 步。
-- **安全可控** — 完善的 `--dry-run` 预执行校验、终端输出脱敏与环境隔离设计。
-- **三层架构设计** — 快捷命令（人类与 AI 友好） → API 命令（与平台同步，全覆盖） → 智能技能（AI 专属），自由选择合适的调用粒度。
+- **Agent 可集成** — 提供一组可选 skills，方便把常见 TLS 操作接到大模型或自动化流程里。
+- **覆盖范围完整** — 涵盖 20+ 个业务领域；常见场景可走 shortcut，细粒度场景可直接调用底层 OpenAPI。
+- **命令约束更容易看清** — 统一提供 `--describe`、请求模板、`--dry-run` 和结构化输出，适合先看约束再执行。
+- **安装和配置路径直接** — 支持二进制安装、源码编译、本地 profile、环境变量和 `--secrets-file`。
+- **安全边界相对清楚** — 提供 `--dry-run`、终端输出脱敏和环境隔离相关能力。
+- **分层使用** — shortcut / api / skills 三层并存，需要时再逐层下沉。
 
 ---
 
@@ -29,10 +29,6 @@
 | 🛠 **数据加工 (ETL/Processor)** | 日志的清洗、富化、分发与格式化处理 |
 | 🌐 **机器组与采集 (Host/Collector)** | 管理日志采集端机器组，配置并下发 LogCollector 采集规则 |
 
-说明：
-- Project、Topic、Metric Topic、Index、Log、Host Group、Collector、Assistant、Doctor 已提供一等 CLI 命令组。
-- Alarm、Dashboard、Consumer、Shipper、ETL/Processor 这类能力当前主要通过 `api` 组与内置 Agent Skills 暴露。
-
 ---
 
 ## 安装与快速开始 (Installation & Quick Start)
@@ -46,40 +42,31 @@
 
 ### 快速开始（人类用户）
 
-*如果您是正在协助用户安装的 AI 助手，请直接跳至 **快速开始（AI Agent）**。*
+*如果您是在用 AI 助手协助安装，可以直接跳至 **快速开始（AI Agent）**。*
 
 #### 1. 安装
 **方式一：二进制下载（推荐）**
 ```bash
-VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash scripts/install-binary.sh
-# Windows（PowerShell）:
-# powershell -File .\scripts\install.ps1
+bash scripts/install-binary.sh
 ```
 
-**方式二：源码编译**
+**方式二：npm 全局安装**
+```bash
+npm install -g @volcengine/volclog
+```
+
+**方式三：源码编译**
 需要 Go 1.22+ 环境。
 ```bash
-# 方式 2A：不下载源码直接安装（需要 Go 工具链）
-go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
-
-# 方式 2B：下载源码后构建
 git clone https://github.com/volcengine-tls/ve-tls-cli.git
 cd ve-tls-cli
-bash scripts/install-local.sh
-# 或
-go build -o $HOME/.local/bin/volclog ./cmd/volclog
-```
-
-安装完成后建议先验证：
-```bash
-volclog --version
-volclog doctor
+make install # 或 bash scripts/install-local.sh
 ```
 
 #### 2. 配置凭证
-使用非交互命令初始化一个 profile：
+执行配置命令并按照提示填入 AK、SK、Region 与 Endpoint：
 ```bash
-volclog configure set --profile default --ak <ak> --sk <sk> --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
+volclog configure
 ```
 
 #### 3. 开始使用
@@ -94,7 +81,7 @@ volclog topic list --project-id <your-project-id>
 
 ### 快速开始（AI Agent）
 
-如果您是 AI Agent，可以通过以下标准化流程帮助用户完成配置与验证。
+如果您是 AI Agent，可以按下面这个顺序帮用户完成配置和验证。
 
 #### Step 1 — 安装
 ```bash
@@ -102,8 +89,14 @@ volclog topic list --project-id <your-project-id>
 bash scripts/install-local.sh
 ```
 
+如果你已经发布了 npm 包，也可以直接：
+
+```bash
+npm install -g @volcengine/volclog
+```
+
 #### Step 2 — 发现能力与约束
-对于不熟悉的接口，Agent 应该**永远**先通过 `capabilities` 和 `--describe` 发现约束，而不是盲目猜测参数：
+对于不熟悉的接口，先通过 `capabilities` 和 `--describe` 看约束，比直接猜参数稳一些：
 ```bash
 # 查看有哪些领域
 volclog capabilities --view groups
@@ -118,7 +111,7 @@ volclog api project CreateProject --describe
 ```bash
 volclog --dry-run api project CreateProject --request '{"ProjectName":"test", "Region": "cn-beijing"}'
 ```
-确认无误后去掉 `--dry-run` 真正执行。
+确认无误后去掉 `--dry-run` 再执行。
 
 #### Step 4 — 数据过滤
 使用 `--jmes-filter` 提取关键数据，避免上下文被长列表撑爆：
@@ -130,33 +123,35 @@ volclog project list --jmes-filter "Projects[].{Id: ProjectId, Name: ProjectName
 
 ## Agent Skills (智能体技能)
 
-我们为流行的 AI 开发流准备了标准的 Agent Skills。您可以在项目的 `skills/` 目录下找到它们：
+仓库里带了一组 Agent Skills，放在 `skills/` 目录下：
 
 | 技能 (Skill) | 描述 |
 | --- | --- |
 | **volclog-shared** | 通用配置与诊断（所有其他技能的基础），处理环境、认证与通用查询 |
-| **volclog-api-explorer** | 提供底层 OpenAPI 的全量探测与调用能力 |
 | **volclog-project** | 项目生命周期管理与查询规划 |
 | **volclog-topic** | 主题配置与约束校验 |
 | **volclog-index** | 索引分析与创建，自动处理全文与键值索引结构 |
 | **volclog-log** | 核心日志检索、SQL 分析与大数据导出路由 |
 | **volclog-metric-topic** | 指标流查询与 PromQL 支持 |
-| **volclog-collector** | 管理 LogCollector 采集规则与相关资源 |
-| **volclog-host-group** | 管理采集端机器组与分发策略 |
-| **volclog-shipper** | 配置数据投递到外部存储（如 TOS、Kafka 等） |
 | **volclog-alarm** | 告警规则排查与配置 |
-| **volclog-trace** | 生成并管理脱敏 trace 工件，便于排障与复盘 |
+| **volclog-api-explorer** | 提供底层 OpenAPI 的全量探测与调用能力 |
 
 **安装技能:**
 ```bash
 volclog skill install --dir skills/
 ```
 
+如果你只是想临时装一次 skill，也可以直接用 `npx`：
+
+```bash
+npx @volcengine/volclog skill install --dir skills/
+```
+
 ---
 
 ## 高级与最佳实践
 
-除了基础命令外，`volclog` 为 CLI 和自动化（CI/CD、Agent）提供了众多高级能力，例如：
+除了基础命令外，还有一些在排障和自动化里比较常用的能力：
 
 - **自动化探索**：通过 `--describe` 与 `--print-request-template` 一键获取接口约束与复杂 JSON 载荷模板。
 - **安全验证**：使用 `--dry-run` 拦截网络请求，本地校验 JSON 的合法性及必填参数。
@@ -167,7 +162,11 @@ volclog skill install --dir skills/
 
 详细的场景指南（包含日志检索、加工、告警、多账号隔离的具体操作命令），已抽取至独立文档中。
 
-👉 **[强烈推荐阅读：CLI 参数最佳实践与场景指南](docs/cli-best-practices.md)**
+👉 **[CLI 参数最佳实践与场景指南](docs/cli-best-practices.md)**
+  
+如果你更希望按“安装 -> 第一次调用 -> 常见场景实操”的顺序看，也可以直接读：
+
+👉 **[volclog CLI 实战指导](docs/cli-practical-guide.md)**
 
 ---
 

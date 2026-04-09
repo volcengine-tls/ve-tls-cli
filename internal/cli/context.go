@@ -20,6 +20,7 @@ type Context struct {
 	Format      output.Format
 	OutputMode  string
 	OutputDir   string
+	OutputFile  string
 	Profile     string
 	Filter      string
 	TraceDir    string

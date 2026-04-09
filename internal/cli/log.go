@@ -184,6 +184,14 @@ func logExport(ctx *Context, args []string) (any, error) {
 	}
 	delete(req, "__max_pages")
 
+	streamWriter, err := maybeNewStreamedLogFileWriter(ctx, "log")
+	if err != nil {
+		return nil, err
+	}
+	if streamWriter != nil {
+		defer streamWriter.abort()
+	}
+
 	var all []any
 	for page := 0; page < maxPages; page++ {
 		body, err := util.MustJSON(req)
@@ -199,7 +207,13 @@ func logExport(ctx *Context, args []string) (any, error) {
 			return nil, errors.New("unexpected search response")
 		}
 		if logs, ok := m["Logs"].([]any); ok {
-			all = append(all, logs...)
+			if streamWriter != nil {
+				if err := streamWriter.WriteRows(logs); err != nil {
+					return nil, err
+				}
+			} else {
+				all = append(all, logs...)
+			}
 		}
 		listOver, _ := m["ListOver"].(bool)
 		nextCtx, _ := m["Context"].(string)
@@ -207,6 +221,9 @@ func logExport(ctx *Context, args []string) (any, error) {
 			break
 		}
 		req["Context"] = nextCtx
+	}
+	if streamWriter != nil {
+		return streamWriter.Commit()
 	}
 	return all, nil
 }
@@ -221,6 +238,14 @@ func logExportAnalysis(ctx *Context, args []string) (any, error) {
 	}
 	if q, ok := req["Query"].(string); !ok || !isAnalysisQuery(q) {
 		return nil, errors.New("log export-analysis requires analysis query (e.g. '*|select ...'); use log export for pure search")
+	}
+
+	streamWriter, err := maybeNewStreamedLogFileWriter(ctx, "log")
+	if err != nil {
+		return nil, err
+	}
+	if streamWriter != nil {
+		defer streamWriter.abort()
 	}
 
 	body, err := util.MustJSON(req)
@@ -246,7 +271,16 @@ func logExportAnalysis(ctx *Context, args []string) (any, error) {
 		if !ok {
 			return nil, errors.New("invalid AnalysisResult.Data row")
 		}
-		rows = append(rows, row)
+		if streamWriter != nil {
+			if err := streamWriter.WriteObjectRows([]map[string]any{row}); err != nil {
+				return nil, err
+			}
+		} else {
+			rows = append(rows, row)
+		}
+	}
+	if streamWriter != nil {
+		return streamWriter.Commit()
 	}
 	return rows, nil
 }

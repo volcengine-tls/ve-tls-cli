@@ -98,6 +98,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	ctx := newContext(stdout, stderr, format, gf.Profile, gf.Filter)
 	ctx.OutputMode = outputMode
 	ctx.OutputDir = defaultOutDir
+	ctx.OutputFile = gf.OutputFile
 	ctx.TraceDir = gf.TraceDir
 	ctx.TraceRedact = gf.TraceRedact
 	ctx.DryRun = gf.DryRun

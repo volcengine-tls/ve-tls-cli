@@ -2,16 +2,16 @@
 
 [中文版](README_CN.md) | [English](README.md)
 
-The official Volcengine TLS (Tencent Log Service) CLI tool, built for human developers and AI Agents. It covers all core business domains of the Log Service, including projects, topics, indexes, search & analysis, alarms, consumer groups, and data processing, supporting over 20 domains, hundreds of raw APIs, and native Agent Skills.
+The official Volcengine TLS (Tencent Log Service) CLI tool, built for both human developers and AI Agents. It covers the main TLS domains, including projects, topics, indexes, search & analysis, alarms, consumer groups, and data processing, with shortcuts, raw API access, and optional skills.
 
-**Why volclog?**
+**What volclog provides**
 
-- **Agent-Native Design** — Out-of-the-box structured Agent Skills compatible with popular AI tool calling specifications. Agents can operate TLS with zero extra setup.
-- **Wide Coverage** — Covers 20+ business domains. Whether you need high-frequency shortcuts or full raw OpenAPI access, it's just one command away.
-- **AI-Friendly & Optimized** — Every command is tested with real Agents, featuring concise parameters, smart defaults, self-explaining `--describe` capabilities, and standardized Envelope JSON structured output to maximize Agent call success rates.
-- **Up and Running in 3 Minutes** — Supports fast installation and interactive configuration. From download to your first API call in just 3 steps.
-- **Secure & Controllable** — Comprehensive `--dry-run` pre-execution validation, terminal output sanitization, and environment isolation design.
-- **Three-Layer Architecture** — Shortcuts (human & AI friendly) → API Commands (platform-synced, full coverage) → Agent Skills (AI-exclusive), choose the right granularity for your needs.
+- **Agent integration** — Includes optional skills so common TLS workflows can be handed to LLM-driven tooling or automation.
+- **Broad coverage** — Covers 20+ domains; use shortcuts for common tasks and drop to raw OpenAPI when you need exact control.
+- **Clearer command constraints** — `--describe`, request templates, `--dry-run`, and structured output make it easier to inspect a call before sending it.
+- **Straightforward setup** — Supports binary install, source build, local profiles, environment variables, and `--secrets-file`.
+- **Reasonable safety defaults** — Includes `--dry-run`, redacted trace output, and environment-isolation related options.
+- **Layered usage** — Shortcut / API / skills are all available, so you can pick the level you need.
 
 ---
 
@@ -29,10 +29,6 @@ The official Volcengine TLS (Tencent Log Service) CLI tool, built for human deve
 | 🛠 **ETL/Processor** | Log cleaning, enrichment, distribution, and formatting |
 | 🌐 **Host/Collector** | Manage log collector host groups, configure and dispatch LogCollector rules |
 
-Notes:
-- Project, Topic, Metric Topic, Index, Log, Host Group, Collector, Assistant, and Doctor are available as first-class CLI groups.
-- Alarm, Dashboard, Consumer, Shipper, and ETL/Processor capabilities are primarily exposed through the `api` group and bundled Agent Skills.
-
 ---
 
 ## Installation & Quick Start
@@ -46,40 +42,31 @@ Before you start, make sure you have:
 
 ### Quick Start (Human Users)
 
-*Note for AI assistants: If you are an AI Agent helping the user with installation, jump directly to **Quick Start (AI Agent)**.*
+*If you are using an AI assistant for installation, jump directly to **Quick Start (AI Agent)**.*
 
 #### 1. Install
 **Option 1: Download Binary (Recommended)**
 ```bash
-VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash scripts/install-binary.sh
-# Windows (PowerShell):
-# powershell -File .\scripts\install.ps1
+bash scripts/install-binary.sh
 ```
 
-**Option 2: Build from Source**
+**Option 2: Install via npm**
+```bash
+npm install -g @volcengine/volclog
+```
+
+**Option 3: Build from Source**
 Requires Go v1.22+.
 ```bash
-# Option 2A: Install without cloning (requires Go toolchain)
-go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
-
-# Option 2B: Build from source
-git clone https://github.com/volcengine-tls/ve-tls-cli.git
+git clone https://github.com/volcengine/ve-tls-cli.git
 cd ve-tls-cli
-bash scripts/install-local.sh
-# or
-go build -o $HOME/.local/bin/volclog ./cmd/volclog
-```
-
-Verify the installation:
-```bash
-volclog --version
-volclog doctor
+make install # or bash scripts/install-local.sh
 ```
 
 #### 2. Configure Credentials
-Set up a profile non-interactively:
+Run the configure command and enter your AK, SK, Region, and Endpoint when prompted:
 ```bash
-volclog configure set --profile default --ak <ak> --sk <sk> --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
+volclog configure
 ```
 
 #### 3. Start Using
@@ -94,7 +81,7 @@ volclog topic list --project-id <your-project-id>
 
 ### Quick Start (AI Agent)
 
-If you are an AI Agent, you can follow this standardized process to help users configure and verify.
+If you are an AI Agent, this is a practical order for helping users configure and verify the CLI.
 
 #### Step 1 — Install
 ```bash
@@ -102,8 +89,14 @@ If you are an AI Agent, you can follow this standardized process to help users c
 bash scripts/install-local.sh
 ```
 
+If the npm package is available, you can also install it directly:
+
+```bash
+npm install -g @volcengine/volclog
+```
+
 #### Step 2 — Discover Capabilities & Constraints
-For unfamiliar APIs, Agents should **ALWAYS** discover constraints first via `capabilities` and `--describe` instead of guessing parameters:
+For unfamiliar APIs, check constraints via `capabilities` and `--describe` before guessing parameters:
 ```bash
 # Check available domains
 volclog capabilities --view groups
@@ -118,7 +111,7 @@ Validate your request payload via `--dry-run`:
 ```bash
 volclog --dry-run api project CreateProject --request '{"ProjectName":"test", "Region": "cn-beijing"}'
 ```
-Once verified, remove `--dry-run` to execute for real.
+Once it looks correct, remove `--dry-run` and run it for real.
 
 #### Step 4 — Data Filtering
 Use `--jmes-filter` to extract key data and prevent long lists from blowing up your context window:
@@ -130,33 +123,35 @@ volclog project list --jmes-filter "Projects[].{Id: ProjectId, Name: ProjectName
 
 ## Agent Skills
 
-We have prepared standard Agent Skills for popular AI development workflows. You can find them in the `skills/` directory:
+The repository includes a set of Agent Skills under `skills/`:
 
 | Skill | Description |
 | --- | --- |
 | **volclog-shared** | Common config & diagnostics (base for all other skills), handles env, auth, and common queries |
-| **volclog-api-explorer** | Full discovery and execution capabilities for underlying OpenAPIs |
 | **volclog-project** | Project lifecycle management and query planning |
 | **volclog-topic** | Topic configuration and constraint validation |
 | **volclog-index** | Index analysis and creation, auto-handles full-text and key-value index structures |
 | **volclog-log** | Core log search, SQL analytics, and big data export routing |
 | **volclog-metric-topic** | Metric stream query and PromQL support |
-| **volclog-collector** | Manage and install LogCollector rules and assets |
-| **volclog-host-group** | Manage collector host groups and dispatch strategies |
-| **volclog-shipper** | Configure data shipping to external storage (TOS/Kafka etc.) |
 | **volclog-alarm** | Alarm rule troubleshooting and configuration |
-| **volclog-trace** | Generate and manage redacted trace artifacts for troubleshooting |
+| **volclog-api-explorer** | Provides full detection and execution capabilities for underlying OpenAPIs |
 
 **Install Skills:**
 ```bash
 volclog skill install --dir skills/
 ```
 
+For a one-off install, `npx` works as well:
+
+```bash
+npx @volcengine/volclog skill install --dir skills/
+```
+
 ---
 
 ## Advanced & Best Practices
 
-Beyond basic commands, `volclog` provides numerous advanced capabilities designed specifically for CLI and automation (CI/CD, Agents):
+Beyond the basic commands, a few capabilities are especially useful in troubleshooting and automation:
 
 - **Automated Discovery**: Fetch API constraints and complex JSON payload templates instantly using `--describe` and `--print-request-template`.
 - **Safe Pre-execution**: Use `--dry-run` to intercept network requests and locally validate JSON syntax and required parameters.
@@ -167,7 +162,7 @@ Beyond basic commands, `volclog` provides numerous advanced capabilities designe
 
 For detailed scenario guides (including specific commands for log search, ETL, alarms, and multi-tenant isolation), we have extracted them into a dedicated document.
 
-👉 **[Highly Recommended: CLI Best Practices & Scenario Guide](docs/cli-best-practices.md)**
+👉 **[CLI Best Practices & Scenario Guide](docs/cli-best-practices.md)**
 
 ---
 

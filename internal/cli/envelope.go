@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"os"
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
@@ -45,18 +44,15 @@ func buildAPIEnvelope(ctx *Context, group string, out any, outputMode string, ou
 		"error":     nil,
 	}
 	if outputMode == "file" {
+		if fileOut, ok := out.(fileArtifactOutput); ok {
+			env["artifacts"] = []map[string]any{buildOutputArtifact(fileOut.Path, fileOut.Format)}
+			return env, nil
+		}
 		p, err := writeOutputFileToDir(outputFile, ctx.OutputDir, group, out, format)
 		if err != nil {
 			return nil, err
 		}
-		artifact := map[string]any{
-			"path":   p,
-			"format": string(format),
-		}
-		if fi, err := os.Stat(p); err == nil {
-			artifact["sizeBytes"] = fi.Size()
-		}
-		env["artifacts"] = []map[string]any{artifact}
+		env["artifacts"] = []map[string]any{buildOutputArtifact(p, format)}
 		return env, nil
 	}
 	env["data"] = out

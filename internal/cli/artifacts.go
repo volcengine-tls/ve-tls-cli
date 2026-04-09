@@ -29,7 +29,38 @@ func attachMeta(out any, tracePath string) any {
 	}
 }
 
+type fileArtifactOutput struct {
+	Path   string
+	Format output.Format
+}
+
+func buildOutputArtifact(path string, format output.Format) map[string]any {
+	artifact := map[string]any{
+		"path":   path,
+		"format": string(format),
+	}
+	if fi, err := os.Stat(path); err == nil {
+		artifact["sizeBytes"] = fi.Size()
+	}
+	return artifact
+}
+
+func resolveOutputFilePath(outputFile string, baseDir string, group string, format output.Format) (string, error) {
+	p := strings.TrimSpace(outputFile)
+	if p == "" {
+		var err error
+		p, err = defaultOutputFile(baseDir, group, format)
+		if err != nil {
+			return "", err
+		}
+	}
+	return filepath.Clean(p), nil
+}
+
 func writeOutputFileToDir(outputFile string, baseDir string, group string, out any, format output.Format) (string, error) {
+	if fileOut, ok := out.(fileArtifactOutput); ok {
+		return filepath.Clean(fileOut.Path), nil
+	}
 	if raw, ok := out.(rawBinaryOutput); ok {
 		p := strings.TrimSpace(outputFile)
 		if p == "" {
@@ -48,15 +79,10 @@ func writeOutputFileToDir(outputFile string, baseDir string, group string, out a
 		}
 		return p, nil
 	}
-	p := strings.TrimSpace(outputFile)
-	if p == "" {
-		var err error
-		p, err = defaultOutputFile(baseDir, group, format)
-		if err != nil {
-			return "", err
-		}
+	p, err := resolveOutputFilePath(outputFile, baseDir, group, format)
+	if err != nil {
+		return "", err
 	}
-	p = filepath.Clean(p)
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return "", err
 	}
