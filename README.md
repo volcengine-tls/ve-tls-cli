@@ -52,7 +52,7 @@ bash scripts/install-binary.sh
 
 **Option 2: Install via npm**
 ```bash
-npm install -g @volcengine/volclog
+npm install -g @volcengine-tls/volclog
 ```
 
 **Option 3: Build from Source**
@@ -92,7 +92,7 @@ bash scripts/install-local.sh
 If the npm package is available, you can also install it directly:
 
 ```bash
-npm install -g @volcengine/volclog
+npm install -g @volcengine-tls/volclog
 ```
 
 #### Step 2 — Discover Capabilities & Constraints
@@ -144,7 +144,7 @@ volclog skill install --dir skills/
 For a one-off install, `npx` works as well:
 
 ```bash
-npx @volcengine/volclog skill install --dir skills/
+npx @volcengine-tls/volclog skill install --dir skills/
 ```
 
 ---

@@ -110,7 +110,7 @@ VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/do
 如果你更习惯 npm：
 
 ```bash
-npm install -g @volcengine/volclog
+npm install -g @volcengine-tls/volclog
 ```
 
 如果你已经有 Go 1.22+，也可以：
@@ -181,7 +181,7 @@ volclog skill install --dir /path/to/agent/global-skills
 如果你还没全局安装 CLI，只想先装一次 skill，也可以直接：
 
 ```bash
-npx @volcengine/volclog skill install --dir /path/to/agent/global-skills
+npx @volcengine-tls/volclog skill install --dir /path/to/agent/global-skills
 ```
 
 安装到当前项目目录：
@@ -662,7 +662,7 @@ volclog skill install --dir /path/to/agent/global-skills
 如果你是一次性执行，也可以直接用：
 
 ```bash
-npx @volcengine/volclog skill install --dir /path/to/agent/global-skills
+npx @volcengine-tls/volclog skill install --dir /path/to/agent/global-skills
 ```
 
 ### 安装到项目目录
@@ -676,7 +676,7 @@ volclog skill install --dir ./skills
 同样可以写成：
 
 ```bash
-npx @volcengine/volclog skill install --dir ./skills
+npx @volcengine-tls/volclog skill install --dir ./skills
 ```
 
 ### 按需安装最小集合

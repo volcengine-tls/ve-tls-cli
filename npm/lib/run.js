@@ -19,7 +19,7 @@ function runCLI(options = {}) {
   const spawnImpl = options.spawnImpl || spawnSync;
   const existsImpl = options.existsImpl || fs.existsSync;
   if (!existsImpl(binaryPath)) {
-    throw new Error(`volclog binary not found: ${binaryPath}. Reinstall package or run npm rebuild @volcengine/volclog.`);
+    throw new Error(`volclog binary not found: ${binaryPath}. Reinstall package or run npm rebuild @volcengine-tls/volclog.`);
   }
   const result = spawnImpl(binaryPath, argv, { stdio: 'inherit' });
   if (result.error) {
