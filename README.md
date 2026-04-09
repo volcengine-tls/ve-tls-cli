@@ -58,7 +58,7 @@ npm install -g @volcengine-tls/volclog
 **Option 3: Build from Source**
 Requires Go v1.22+.
 ```bash
-git clone https://github.com/volcengine/ve-tls-cli.git
+git clone https://github.com/volcengine-tls/ve-tls-cli.git
 cd ve-tls-cli
 make install # or bash scripts/install-local.sh
 ```
