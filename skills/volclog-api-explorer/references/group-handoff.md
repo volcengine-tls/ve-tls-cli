@@ -142,7 +142,18 @@ volclog capabilities --group consumer-group --view text
 volclog api consumer-group <Action> --describe
 ```
 
-适用：消费组、消费状态
+适用：消费组、checkpoint、heartbeat、消费状态
+
+注意：
+
+- `consumer-group` 更偏管理面，不是实际拉取日志的数据面
+- 用户要“消费日志 / 拉原始日志 / 按 cursor 读取”时，通常还要回到：
+
+```bash
+volclog api shard DescribeShards --describe
+volclog api log DescribeCursor --describe
+volclog api log ConsumeOriginalLogs --describe
+```
 
 ### `trace`
 

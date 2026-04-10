@@ -58,6 +58,32 @@ volclog log search --describe
 volclog --output-mode file log export --describe
 ```
 
+## 用户要“消费日志 / 按游标拉日志 / 拉原始日志包”
+
+先用：
+
+```bash
+volclog api shard DescribeShards --describe
+volclog api log DescribeCursor --describe
+volclog api log ConsumeOriginalLogs --describe
+```
+
+固定顺序：
+
+1. 先拿 topic 下的 shard 列表
+2. 对每一个 shard 单独获取 cursor
+3. 再对每一个 shard 单独消费
+
+关键提醒：
+
+- topic 级消费不是一条 `Consume*` 就结束，agent 需要遍历全部 shard
+- 用户明确说“原始日志 / 原始包 / raw package”时，优先 `ConsumeOriginalLogs`
+- 用户明确说“保留原始写入 IO / 不要服务端组装 / 更省服务端性能”时，也优先 `ConsumeOriginalLogs`
+- 如果用户要的是解析后的日志，再考虑 `ConsumeLogs`
+- 如果用户要保留原始包边界，不要先切 `jsonl`
+- 这是消费链路，不要改走 `log search` / `log export`
+- 如果用户同时提到 checkpoint / heartbeat / consumer group，再补看 `consumer-group`
+
 ## 用户要“做分析导出”
 
 先用：
@@ -92,6 +118,11 @@ volclog api <group> <Action> --describe
 ```
 
 如果用户说的是当前已有 shortcut 的 group，但 shortcut 没命中，也优先留在原 group 里继续找，不要换组。
+
+注意：
+
+- `consumer-group` 更偏管理面（group / checkpoint / heartbeat）
+- 真正消费日志的数据面常常是 `shard + log` 联动，不要把“消费日志”直接改写成 `search/export`
 
 ## List / Detail 默认策略
 

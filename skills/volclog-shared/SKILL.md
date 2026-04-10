@@ -70,6 +70,7 @@ description: Use when operating volclog global workflows such as configure or do
 - 建主题：`volclog topic create --describe`
 - 看索引：`volclog index get --topic-id <TopicId>`
 - 查日志：`volclog log search --describe`
+- 消费原始日志：`volclog api shard DescribeShards --describe`
 - 导出原始日志：`volclog --output-mode file log export --describe`
 - 导出分析结果：`volclog --output-mode file log export-analysis --describe`
 
