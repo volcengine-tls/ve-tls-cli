@@ -426,6 +426,7 @@ Commands:
   histogram Query histogram buckets for a log query
   context  Fetch surrounding logs for one hit
   put      Write logs via PutLogs special IO
+  ingest   Batch-ingest text/JSON logs and let CLI assemble PutLogs requests
   export   Auto-page export logs (stdout JSON array; use --output jsonl for streaming)
   export-analysis  Export SQL/analysis rows as JSONL (one row object per line by default)
 
@@ -434,6 +435,7 @@ Commands:
   - 看命中日志上下文: volclog log context --describe
   - 看查询直方图: volclog log histogram --describe
   - 写日志/WebTracking: volclog log put --describe
+  - 批量导入文本或 JSON 日志: volclog log ingest --describe
   - 大量原始日志导出: volclog --output-mode file log export --describe
   - SQL/聚合/分析导出: volclog --output-mode file log export-analysis --describe
 
@@ -442,6 +444,9 @@ Notes:
   - Full request body can be passed via --request file://...
   - --request also accepts "-" to read JSON from stdin.
   - log search 默认返回 100 条样本；log export 默认每批拉取 500 条，可用 --limit 覆盖。
+  - log ingest 默认按 500 条一批发送，默认压缩为 lz4。
+  - lines 输入会把每行文本写入 __content__；jsonl/json-array 会保留用户原始字段。
+  - log ingest 未指定 --time-field 时，会用本次命令启动时的毫秒时间戳补齐日志时间。
   - Prefer --output jsonl log export for streaming.
   - For pure search (no analysis), you can paginate via Context/Limit/Sort/Offset.
   - For analysis (query contains "|"), Context/Sort/Limit/Offset in body are not effective; use SQL limit/offset in Query. Analysis does not support Context pagination.
@@ -455,6 +460,9 @@ Examples:
   tlsctl log put --describe
   tlsctl log put --print-request-template=full
   tlsctl log put --topic-id <tid> --request file://./put_logs.json
+  tlsctl log ingest --describe
+  tlsctl log ingest --topic-id <tid> --input file://./app.log --input-format lines --source host-a --file-name app.log
+  tlsctl log ingest --topic-id <tid> --input file://./events.jsonl --input-format jsonl --time-field ts --time-format unix_ms
   tlsctl log search --topic-id <tid> --query "*" --from 1710374400000 --to 1710378000000 --limit 100 --sort desc
   tlsctl log search --request file://./search_logs.json
   tlsctl --output jsonl log export --topic-id <tid> --query "*" --from 1710374400000 --to 1710378000000 --max-pages 10

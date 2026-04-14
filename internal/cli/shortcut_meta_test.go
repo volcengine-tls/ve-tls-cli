@@ -116,6 +116,28 @@ func TestShortcutDescribeLogPutUsesPutLogsTemplate(t *testing.T) {
 	}
 }
 
+func TestShortcutDescribeLogIngestUsesPutLogsAction(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"log", "ingest", "--describe"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		`"group": "log"`,
+		`"command": "ingest"`,
+		`"api_action": "PutLogs"`,
+		`lines 输入默认写入字段 __content__`,
+		`log-count`,
+		`earliest-log-time`,
+		`latest-log-time`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in stdout: %q", want, out)
+		}
+	}
+}
+
 func TestShortcutDescribeHostGroupCreate(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"host-group", "create", "--describe"}, &stdout, &stderr)
@@ -294,9 +316,11 @@ func TestUsageLogIncludesHighFrequencyWriteAndContextShortcuts(t *testing.T) {
 	text := usageLog()
 	for _, want := range []string{
 		"log put",
+		"log ingest",
 		"log context",
 		"log histogram",
 		"写日志/WebTracking",
+		"批量导入文本或 JSON 日志",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q in usage: %q", want, text)

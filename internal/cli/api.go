@@ -776,6 +776,7 @@ func defaultScenarioRoutingForGroup(group string) []describeScenarioHint {
 			{Intent: "看命中日志上下文", FirstCommand: `volclog log context --describe`},
 			{Intent: "看时间分布直方图", FirstCommand: `volclog log histogram --describe`},
 			{Intent: "写日志或 WebTracking", FirstCommand: `volclog log put --describe`, InsteadOf: "不要继续留在 log search"},
+			{Intent: "批量导入文本或 JSON 日志", FirstCommand: `volclog log ingest --describe`, InsteadOf: "不要手工组装每批 PutLogs body"},
 			{Intent: "大量原始日志导出", FirstCommand: `volclog --output-mode file log export --describe`},
 			{Intent: "SQL/聚合/分析结果导出", FirstCommand: `volclog --output-mode file log export-analysis --describe`},
 		}
