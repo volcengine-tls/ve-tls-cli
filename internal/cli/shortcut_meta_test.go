@@ -134,6 +134,67 @@ func TestShortcutDescribeSeparatesOptionalParamsAndUsageGuidance(t *testing.T) {
 	}
 }
 
+func TestShortcutDescribeTopicCreateMatchesOfficialDoc(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"topic", "create", "--describe"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		`"group": "topic"`,
+		`"command": "create"`,
+		`"api_action": "CreateTopic"`,
+		`"cli_flag": "--ttl"`,
+		`"cli_flag": "--shard-count"`,
+		`"cli_flag": "--enable-hot-ttl"`,
+		`"cli_flag": "--disable-hot-ttl"`,
+		`"cli_flag": "--hot-ttl"`,
+		`"cli_flag": "--cold-ttl"`,
+		`"cli_flag": "--archive-ttl"`,
+		`"cli_flag": "--enable-tracking"`,
+		`"cli_flag": "--disable-tracking"`,
+		`"cli_flag": "--metering-mode"`,
+		`"cli_flag": "--log-public-ip"`,
+		`"cli_flag": "--no-log-public-ip"`,
+		`"cli_flag": "--tags"`,
+		`"cli_flag": "--encrypt-conf"`,
+		`"cli_flag": "--time-key"`,
+		`"cli_flag": "--time-format"`,
+		`Ttl 时长需与 HotTtl、ColdTtl 和 ArchiveTtl 总值相同`,
+		`HotTtl、ColdTtl、ArchiveTtl 仅在 EnableHotTtl=true 时生效`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in stdout: %q", want, out)
+		}
+	}
+	for _, want := range []string{
+		`"name": "Ttl"`,
+		`"cli_flag": "--ttl"`,
+		`"required": true`,
+		`"name": "ShardCount"`,
+		`"cli_flag": "--shard-count"`,
+		`"required": true`,
+		`"description": "所属项目 ID"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing required field marker %q in stdout: %q", want, out)
+		}
+	}
+	if strings.Contains(out, `"required_text":`) {
+		t.Fatalf("shortcut describe should omit redundant required_text: %q", out)
+	}
+	for _, notWant := range []string{
+		`:::tip`,
+		`命名规则请参考`,
+		`详细说明请参考`,
+	} {
+		if strings.Contains(out, notWant) {
+			t.Fatalf("shortcut topic create should keep concise descriptions instead of raw official prose: %q", out)
+		}
+	}
+}
+
 func TestShortcutDescribeLogPutUsesPutLogsTemplate(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"log", "put", "--describe"}, &stdout, &stderr)

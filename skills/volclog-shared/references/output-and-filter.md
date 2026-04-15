@@ -1,39 +1,39 @@
 # Output And Filter Rules
 
-这个 reference 解决输出、过滤和 shell 转义问题。
+## 适用场景
 
-## JMESPath Scope
+- 需要处理 `--jmes-filter`
+- 结果太大，想落文件而不是刷 stdout
+- shell 转义容易写错
 
-- `--jmes-filter` 作用于原始结果的 `data` 根，不作用于 CLI envelope。
-- 所以要写 `Total`，不要写 `data.Total`。
-- 如果最终只想拿数据本体，优先让过滤表达式直接落在数据根上。
+## 必填输入
 
-Examples:
+- 一个目标命令
+- 一个明确的过滤或输出目标
 
-- 取总数: `--jmes-filter "Total"`
-- 列键名: `--jmes-filter "keys(@)"`
-- 取数组长度: `--jmes-filter "length(Projects)"`
+## 可选参数触发词
 
-## Envelope Rules
+- 说“只要某几个字段”时，补 `--jmes-filter`
+- 说“结果很多”“发文件给我”时，补 `--output-mode file`
+- 说“shell 转义总出错”时，优先整体加引号
 
-- `api` 和高频 shortcut 默认会输出统一 envelope。
-- 过滤发生在 envelope 之前，而不是之后。
-- `--describe` 和 `--print-request-template` 属于元信息输出，优先直接读取其结果，不要把它们当业务数据 envelope 处理。
+## 字段联动/限制
 
-## Shell Quoting
+- `--jmes-filter` 作用于原始结果的 `data` 根，不作用于 CLI envelope
+- `--describe` 和 `--print-request-template` 属于元信息输出，不要把它们当业务数据 envelope 处理
+- 大结果优先文件模式，尤其是 `log export`、`export-analysis`
+- `zsh/bash/fish/PowerShell` 都优先整体加引号，减少 shell 先展开
 
-- `zsh`/`bash`: 表达式里带 `@`、括号、空格时优先整体加双引号
-- `fish`: 也优先整体加引号，避免 shell 先展开
-- PowerShell: 复杂表达式优先用单引号包起来
+## 常见误用
 
-Examples:
+- 写 `data.Total` 这种 envelope 路径
+- 不先裁字段就让大结果直接打印到 stdout
+- 过滤表达式不加引号，导致 shell 先解释
 
-- `--jmes-filter "keys(@)"`
-- `--jmes-filter "length(Topics)"`
-- `--jmes-filter "Topics[].TopicName"`
+## 下一步命令
 
-## Large Result Guidance
-
-- 结果大、需要落盘、或后续还要给别的命令消费时，优先 `--output-mode file`
-- `log export`、`export-analysis` 这类大结果默认就应该偏向文件模式
-- 如果只是 agent 内部做二次处理，也可以先输出到文件再读，避免 stdout 过大
+```bash
+volclog ... --jmes-filter "Total"
+volclog ... --jmes-filter "keys(@)"
+volclog --output-mode file ...
+```

@@ -1,21 +1,36 @@
 # Pagination And All
 
-这个 reference 只关注 generated `api` 的分页策略。
+## 适用场景
 
-## When `--all` Applies
+- 使用 generated `api` 的复数 Describe 动作
+- 需要判断什么时候该加 `--all`
 
-- 只对 `api <group> <Describe*...s>` 这类复数 Describe action 使用
-- 一般是“列举型接口”，名字通常以 `s` 结尾
-- 不要把 `--all` 用在 `api call`
-- 不要把 `--all` 用在单数 `Describe*`
+## 必填输入
 
-Examples:
+- 一个明确的复数 Describe action
 
-- `volclog api project DescribeProjects --all`
-- `volclog api topic DescribeTopics --all`
+## 可选参数触发词
 
-## Conflict Rules
+- 说“全量”“别漏”“一次看完”时，考虑 `--all`
+- 说“继续翻页”“沿用上次 cursor”时，优先分页参数，不要再叠加 `--all`
+- 说“结果很多”时，再补 `--output-mode file`
 
+## 字段联动/限制
+
+- `--all` 只用于 `api <group> <Describe*...s>` 这类复数 Describe action
+- `--all` 不用于 `api call`
 - 如果已经显式给了 `PageNumber` 或 `Cursor`，不要再加 `--all`
 - 聚合后的结果再做 `--jmes-filter`
-- 列举接口大结果时，优先配合 `--output-mode file`
+
+## 常见误用
+
+- 在单数 `Describe*` 上加 `--all`
+- 已经给了分页参数还继续叠 `--all`
+- 在 `api call` 上期待 `--all` 生效
+
+## 下一步命令
+
+```bash
+volclog api project DescribeProjects --all
+volclog api topic DescribeTopics --all
+```

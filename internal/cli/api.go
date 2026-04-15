@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
@@ -275,9 +276,6 @@ func usageAPIGenerated(group string, action string, ops []apiActionOp) string {
 	if input := strings.TrimSpace(op.Cmd.InputMode); input != "" {
 		b.WriteString("  " + humanizeInputMode(input) + "\n")
 	}
-	if len(op.Cmd.RequiredFlags) > 0 && docHasStructuredParams {
-		b.WriteString("  必填 flags: " + strings.Join(op.Cmd.RequiredFlags, ", ") + "\n")
-	}
 	if op.Cmd.BodyRequired && docHasStructuredParams {
 		b.WriteString("  请求体: 通过 --request 传入（必填）\n")
 	}
@@ -317,7 +315,7 @@ func usageAPIGenerated(group string, action string, ops []apiActionOp) string {
 	if len(optionalParams) == 0 {
 		b.WriteString("  (none)\n")
 	} else {
-		b.WriteString("  只在用户明确给出过滤、分页、排序、范围或额外约束时再加；不填表示按接口默认行为执行。\n")
+		b.WriteString("  " + optionalAPIParamIntro(op, optionalParams) + "\n")
 		writeGeneratedFlagParams(&b, optionalParams)
 	}
 	b.WriteString("\n输出过滤与引号:\n")
@@ -579,22 +577,21 @@ type paramGuidance struct {
 }
 
 type describeFieldParam struct {
-	Name         string   `json:"name"`
-	CLIFlag      string   `json:"cli_flag,omitempty"`
-	In           string   `json:"in"`
-	Required     bool     `json:"required"`
-	RequiredText string   `json:"required_text,omitempty"`
-	Type         string   `json:"type,omitempty"`
-	Format       string   `json:"format,omitempty"`
-	Ref          string   `json:"ref,omitempty"`
-	Description  string   `json:"description,omitempty"`
-	Example      string   `json:"example,omitempty"`
-	Enum         []string `json:"enum,omitempty"`
-	Pattern      string   `json:"pattern,omitempty"`
-	Minimum      *float64 `json:"minimum,omitempty"`
-	Maximum      *float64 `json:"maximum,omitempty"`
-	MinLength    *int     `json:"min_length,omitempty"`
-	MaxLength    *int     `json:"max_length,omitempty"`
+	Name        string   `json:"name"`
+	CLIFlag     string   `json:"cli_flag,omitempty"`
+	In          string   `json:"in"`
+	Required    bool     `json:"required"`
+	Type        string   `json:"type,omitempty"`
+	Format      string   `json:"format,omitempty"`
+	Ref         string   `json:"ref,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Example     string   `json:"example,omitempty"`
+	Enum        []string `json:"enum,omitempty"`
+	Pattern     string   `json:"pattern,omitempty"`
+	Minimum     *float64 `json:"minimum,omitempty"`
+	Maximum     *float64 `json:"maximum,omitempty"`
+	MinLength   *int     `json:"min_length,omitempty"`
+	MaxLength   *int     `json:"max_length,omitempty"`
 }
 
 type describeFlagInput struct {
@@ -603,9 +600,10 @@ type describeFlagInput struct {
 }
 
 type describeRequestBodyInput struct {
-	Required      bool   `json:"required,omitempty"`
-	PrintTemplate string `json:"print_template,omitempty"`
-	Note          string `json:"note,omitempty"`
+	Required      bool                 `json:"required,omitempty"`
+	Fields        []describeFieldParam `json:"fields,omitempty"`
+	PrintTemplate string               `json:"print_template,omitempty"`
+	Note          string               `json:"note,omitempty"`
 }
 
 type describeInput struct {
@@ -682,6 +680,28 @@ func parseGeneratedMetaArgs(args []string) (generatedMetaArgs, error) {
 	}, nil
 }
 
+func optionalAPIParamIntro(op apiActionOp, optionalParams []apiCapParam) string {
+	if len(optionalParams) == 0 {
+		return ""
+	}
+	if supportsGeneratedActionAll(op) || looksLikeListAction(op) {
+		return "这些都是筛选或翻页项。不带参数就先按默认方式请求；需要缩小范围、分页或列全时再加。"
+	}
+	if normalizeToken(op.Cmd.Action) == "searchlogs" || normalizeToken(op.Cmd.Action) == "searchhistogram" {
+		return "这些都是补充条件。先给够核心查询条件，再按需要补范围、条数、排序或输出相关参数。"
+	}
+	return "这些都是可选项。用户没明确提到就先别加，按接口默认行为请求。"
+}
+
+func looksLikeListAction(op apiActionOp) bool {
+	action := normalizeToken(op.Cmd.Action)
+	if strings.HasPrefix(action, "describe") && strings.HasSuffix(action, "s") {
+		return true
+	}
+	path := strings.ToLower(strings.TrimSpace(op.Cmd.Path))
+	return strings.HasPrefix(path, "/describe") && strings.HasSuffix(path, "s")
+}
+
 func describeOperationOutput(group string, action string, ops []apiActionOp, required map[string]string, full map[string]string) (string, error) {
 	if len(ops) == 0 {
 		return "", errors.New("no matched operation")
@@ -691,8 +711,9 @@ func describeOperationOutput(group string, action string, ops []apiActionOp, req
 	if actionName == "" {
 		actionName = strings.TrimSpace(action)
 	}
-	_, flagParamsDoc := splitRequestParamsDocForOutput(op.Cmd.RequestParamsDoc)
+	bodyParamsDoc, flagParamsDoc := splitRequestParamsDocForOutput(op.Cmd.RequestParamsDoc)
 	params := sanitizeParamsForOutput(op.Cmd, op.Cmd.Params, op.ParamFlags, flagParamsDoc)
+	bodyFields := buildRequestBodyFields(op.Cmd, op.Cmd.Params, bodyParamsDoc)
 	out := apiDescribeOutput{
 		Group:                group,
 		GroupTitle:           strings.TrimSpace(op.Cmd.GroupTitle),
@@ -737,7 +758,7 @@ func describeOperationOutput(group string, action string, ops []apiActionOp, req
 		if out.Input == nil {
 			out.Input = &describeInput{}
 		}
-		out.Input.RequestBody = buildRequestBodyInput(req, "volclog api "+group+" "+actionName+" --print-request-template=required|full", group, actionName)
+		out.Input.RequestBody = buildRequestBodyInput(req, "volclog api "+group+" "+actionName+" --print-request-template=required|full", group, actionName, bodyFields)
 	}
 	if out.Input != nil && out.Input.Flags == nil && out.Input.RequestBody == nil {
 		out.Input = nil
@@ -852,12 +873,12 @@ func buildFlagInput(params []apiCapParam, doc []apiCapDocParam, scope string) *d
 	}
 }
 
-func buildRequestBodyInput(req *apiDescribeRequestBody, printTemplate string, group string, action string) *describeRequestBodyInput {
+func buildRequestBodyInput(req *apiDescribeRequestBody, printTemplate string, group string, action string, fields []describeFieldParam) *describeRequestBodyInput {
 	var required bool
 	if req != nil {
 		required = req.Required
 	}
-	if !required && strings.TrimSpace(printTemplate) == "" {
+	if !required && strings.TrimSpace(printTemplate) == "" && len(fields) == 0 {
 		return nil
 	}
 	note := "请求体通过 --request file://req.json 传入。先用 required 看最小骨架；字段不确定、嵌套较多或准备落盘编辑时再切到 full。"
@@ -869,6 +890,7 @@ func buildRequestBodyInput(req *apiDescribeRequestBody, printTemplate string, gr
 	}
 	return &describeRequestBodyInput{
 		Required:      required,
+		Fields:        fields,
 		PrintTemplate: strings.TrimSpace(printTemplate),
 		Note:          note,
 	}
@@ -894,9 +916,12 @@ func mergeParamsWithDoc(params []apiCapParam, doc []apiCapDocParam) []apiCapPara
 			}
 			if s := strings.TrimSpace(item.RequiredText); s != "" && strings.TrimSpace(cp.RequiredText) == "" {
 				cp.RequiredText = s
+				if !cp.Required && requiredFromText(s) {
+					cp.Required = true
+				}
 			}
-			if s := strings.TrimSpace(item.Description); s != "" {
-				cp.Description = s
+			if s := conciseFieldDescription(item.Description); s != "" {
+				cp.Description = chooseShorterDescription(cp.Description, s)
 			}
 			if s := strings.TrimSpace(item.Example); s != "" {
 				cp.Example = s
@@ -917,22 +942,21 @@ func describeFieldParams(params []apiCapParam) []describeFieldParam {
 	out := make([]describeFieldParam, 0, len(params))
 	for _, param := range params {
 		out = append(out, describeFieldParam{
-			Name:         param.Name,
-			CLIFlag:      param.CLIFlag,
-			In:           param.In,
-			Required:     param.Required,
-			RequiredText: param.RequiredText,
-			Type:         param.Type,
-			Format:       param.Format,
-			Ref:          param.Ref,
-			Description:  param.Description,
-			Example:      param.Example,
-			Enum:         param.Enum,
-			Pattern:      param.Pattern,
-			Minimum:      param.Minimum,
-			Maximum:      param.Maximum,
-			MinLength:    param.MinLength,
-			MaxLength:    param.MaxLength,
+			Name:        param.Name,
+			CLIFlag:     param.CLIFlag,
+			In:          param.In,
+			Required:    param.Required,
+			Type:        param.Type,
+			Format:      param.Format,
+			Ref:         param.Ref,
+			Description: conciseFieldDescription(param.Description),
+			Example:     param.Example,
+			Enum:        param.Enum,
+			Pattern:     param.Pattern,
+			Minimum:     param.Minimum,
+			Maximum:     param.Maximum,
+			MinLength:   param.MinLength,
+			MaxLength:   param.MaxLength,
 		})
 	}
 	return out
@@ -1107,22 +1131,173 @@ func splitRequestParamsDocForOutput(params []apiCapDocParam) ([]apiCapDocParam, 
 		return nil, nil
 	}
 	body := make([]apiCapDocParam, 0, len(sanitized))
-	query := make([]apiCapDocParam, 0, len(sanitized))
+	flags := make([]apiCapDocParam, 0, len(sanitized))
 	for _, param := range sanitized {
 		switch strings.ToLower(strings.TrimSpace(param.In)) {
 		case "body":
 			body = append(body, param)
-		case "query":
-			query = append(query, param)
+		case "query", "path", "header":
+			flags = append(flags, param)
 		}
 	}
 	if len(body) == 0 {
 		body = nil
 	}
-	if len(query) == 0 {
-		query = nil
+	if len(flags) == 0 {
+		flags = nil
 	}
-	return body, query
+	return body, flags
+}
+
+func buildRequestBodyFields(cmd apiCapabilityCommand, params []apiCapParam, doc []apiCapDocParam) []describeFieldParam {
+	fields := mergeBodyParamsWithDoc(cmd, params, doc)
+	if len(fields) == 0 {
+		return nil
+	}
+	return describeFieldParams(fields)
+}
+
+func mergeBodyParamsWithDoc(cmd apiCapabilityCommand, params []apiCapParam, doc []apiCapDocParam) []apiCapParam {
+	if len(doc) > 0 {
+		paramByKey := make(map[string]apiCapParam, len(params))
+		for _, param := range params {
+			if !strings.EqualFold(strings.TrimSpace(param.In), "body") {
+				continue
+			}
+			if isGenericBodyParam(param) {
+				continue
+			}
+			paramByKey[paramDocKey("body", param.Name)] = param
+		}
+		out := make([]apiCapParam, 0, len(doc))
+		for _, item := range doc {
+			if !strings.EqualFold(strings.TrimSpace(item.In), "body") {
+				continue
+			}
+			name := strings.TrimSpace(item.Name)
+			if name == "" {
+				continue
+			}
+			cp, ok := paramByKey[paramDocKey("body", name)]
+			if !ok {
+				cp = apiCapParam{Name: name, In: "body"}
+			}
+			cp.In = "body"
+			if s := strings.TrimSpace(item.Type); s != "" && strings.TrimSpace(cp.Type) == "" {
+				cp.Type = s
+			}
+			if s := strings.TrimSpace(item.RequiredText); s != "" {
+				cp.RequiredText = s
+				if requiredFromText(s) {
+					cp.Required = true
+				}
+			}
+			if s := strings.TrimSpace(item.Description); s != "" {
+				cp.Description = s
+			}
+			if s := strings.TrimSpace(item.Example); s != "" {
+				cp.Example = s
+			}
+			out = append(out, cp)
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	if isPublishedOfficialCommand(cmd) && !hasStructuredOfficialParamTable(cmd) {
+		return nil
+	}
+	out := make([]apiCapParam, 0, len(params))
+	for _, param := range params {
+		if !strings.EqualFold(strings.TrimSpace(param.In), "body") {
+			continue
+		}
+		if isGenericBodyParam(param) {
+			continue
+		}
+		cp := param
+		cp.In = "body"
+		out = append(out, cp)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func isGenericBodyParam(param apiCapParam) bool {
+	if !strings.EqualFold(strings.TrimSpace(param.In), "body") {
+		return false
+	}
+	name := strings.ToLower(strings.TrimSpace(param.Name))
+	return name == "data" || name == "body" || name == "request"
+}
+
+func requiredFromText(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "是", "yes", "y", "required", "true":
+		return true
+	default:
+		return false
+	}
+}
+
+func chooseShorterDescription(current string, candidate string) string {
+	current = conciseFieldDescription(current)
+	candidate = conciseFieldDescription(candidate)
+	if current == "" {
+		return candidate
+	}
+	if candidate == "" {
+		return current
+	}
+	if utf8.RuneCountInString(candidate) < utf8.RuneCountInString(current) {
+		return candidate
+	}
+	return current
+}
+
+func conciseFieldDescription(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	replacer := strings.NewReplacer(
+		"\r", " ",
+		"\n", " ",
+		"\t", " ",
+		"&nbsp;", " ",
+		"```", " ",
+		"`", "",
+	)
+	s = replacer.Replace(s)
+	s = strings.Join(strings.Fields(s), " ")
+	for _, marker := range []string{
+		":::",
+		"详细说明请参考",
+		"详细说明请参见",
+		"详细说明请见",
+		"命名规则请参考",
+		"设置规则请参考",
+		"满足如下任一条件时",
+		"标签用于云资源的标识与分类",
+	} {
+		if idx := strings.Index(s, marker); idx > 0 {
+			s = strings.TrimSpace(s[:idx])
+		}
+	}
+	if idx := strings.Index(s, " * "); idx > 0 {
+		s = strings.TrimSpace(s[:idx])
+	}
+	if utf8.RuneCountInString(s) > 72 {
+		for idx, r := range s {
+			if strings.ContainsRune("。!?；;", r) {
+				s = strings.TrimSpace(s[:idx+utf8.RuneLen(r)])
+				break
+			}
+		}
+	}
+	return strings.TrimSpace(s)
 }
 
 func sanitizeParamsForOutput(cmd apiCapabilityCommand, params []apiCapParam, paramFlags map[string]apiCapParam, doc []apiCapDocParam) []apiCapParam {

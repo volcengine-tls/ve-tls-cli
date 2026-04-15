@@ -37,24 +37,24 @@ type shortcutCommandSpec struct {
 }
 
 type shortcutDescribeOutput struct {
-	Group                  string                  `json:"group"`
-	Command                string                  `json:"command"`
-	Action                 string                  `json:"action"`
-	APIGroup               string                  `json:"api_group,omitempty"`
-	APIAction              string                  `json:"api_action,omitempty"`
-	Summary                string                  `json:"summary,omitempty"`
-	Description            string                  `json:"description,omitempty"`
-	Method                 string                  `json:"method"`
-	Path                   string                  `json:"path"`
-	InputMode              string                  `json:"input_mode,omitempty"`
-	PreferredOutputMode    string                  `json:"preferred_output_mode,omitempty"`
-	RecommendedGlobalFlags []string                `json:"recommended_global_flags,omitempty"`
-	Input                  *describeInput          `json:"input,omitempty"`
-	OutputFilterScope      string                  `json:"output_filter_scope,omitempty"`
-	OutputFilterExamples   []string                `json:"output_filter_examples,omitempty"`
-	ShellQuoting           map[string]string       `json:"shell_quoting,omitempty"`
-	Notes                  []string                `json:"notes,omitempty"`
-	Guidance               apiDescribeGuidance     `json:"guidance"`
+	Group                  string              `json:"group"`
+	Command                string              `json:"command"`
+	Action                 string              `json:"action"`
+	APIGroup               string              `json:"api_group,omitempty"`
+	APIAction              string              `json:"api_action,omitempty"`
+	Summary                string              `json:"summary,omitempty"`
+	Description            string              `json:"description,omitempty"`
+	Method                 string              `json:"method"`
+	Path                   string              `json:"path"`
+	InputMode              string              `json:"input_mode,omitempty"`
+	PreferredOutputMode    string              `json:"preferred_output_mode,omitempty"`
+	RecommendedGlobalFlags []string            `json:"recommended_global_flags,omitempty"`
+	Input                  *describeInput      `json:"input,omitempty"`
+	OutputFilterScope      string              `json:"output_filter_scope,omitempty"`
+	OutputFilterExamples   []string            `json:"output_filter_examples,omitempty"`
+	ShellQuoting           map[string]string   `json:"shell_quoting,omitempty"`
+	Notes                  []string            `json:"notes,omitempty"`
+	Guidance               apiDescribeGuidance `json:"guidance"`
 }
 
 func parseShortcutMetaArgs(args []string) (shortcutMetaArgs, error) {
@@ -117,6 +117,16 @@ func describeShortcutOutput(spec shortcutCommandSpec) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	var flagDoc []apiCapDocParam
+	var bodyFields []describeFieldParam
+	if strings.TrimSpace(spec.APIGroup) != "" && strings.TrimSpace(spec.APIAction) != "" {
+		if ops, err := shortcutActionOps(spec.APIGroup, spec.APIAction); err == nil && len(ops) > 0 {
+			bodyDoc, docs := splitRequestParamsDocForOutput(ops[0].Cmd.RequestParamsDoc)
+			flagDoc = append(flagDoc, bodyDoc...)
+			flagDoc = append(flagDoc, docs...)
+			bodyFields = buildRequestBodyFields(ops[0].Cmd, ops[0].Cmd.Params, bodyDoc)
+		}
+	}
 	out := shortcutDescribeOutput{
 		Group:                  spec.Group,
 		Command:                spec.Command,
@@ -138,7 +148,7 @@ func describeShortcutOutput(spec shortcutCommandSpec) (string, error) {
 			"fish":       `--jmes-filter 'keys(@)'`,
 			"powershell": `--jmes-filter 'keys(@)'`,
 		},
-		Notes:           append([]string(nil), spec.Notes...),
+		Notes: append([]string(nil), spec.Notes...),
 		Guidance: apiDescribeGuidance{
 			ListGroup:         "volclog " + spec.Group + " --help",
 			Describe:          "volclog " + spec.Group + " " + spec.Command + " --describe",
@@ -148,7 +158,7 @@ func describeShortcutOutput(spec shortcutCommandSpec) (string, error) {
 		},
 	}
 	out.Input = &describeInput{
-		Flags: buildShortcutFlagInput(spec.Params),
+		Flags: buildShortcutFlagInput(spec.Params, flagDoc),
 	}
 	if strings.TrimSpace(spec.APIGroup) != "" && strings.TrimSpace(spec.APIAction) != "" {
 		out.Guidance.FallbackAPIDescribe = "volclog api " + spec.APIGroup + " " + spec.APIAction + " --describe"
@@ -184,7 +194,7 @@ func describeShortcutOutput(spec shortcutCommandSpec) (string, error) {
 		if strings.TrimSpace(actionName) == "" {
 			actionName = spec.Command
 		}
-		out.Input.RequestBody = buildShortcutRequestBodyInput(reqBody, printTemplate, actionGroup, actionName)
+		out.Input.RequestBody = buildShortcutRequestBodyInput(reqBody, printTemplate, actionGroup, actionName, bodyFields)
 	}
 	if out.Input != nil && out.Input.Flags == nil && out.Input.RequestBody == nil {
 		out.Input = nil
@@ -227,7 +237,7 @@ func shortcutBodyRequired(params []apiCapParam) bool {
 	return false
 }
 
-func buildShortcutFlagInput(params []apiCapParam) *describeFlagInput {
+func buildShortcutFlagInput(params []apiCapParam, doc []apiCapDocParam) *describeFlagInput {
 	if len(params) == 0 {
 		return nil
 	}
@@ -237,6 +247,7 @@ func buildShortcutFlagInput(params []apiCapParam) *describeFlagInput {
 		cp.In = strings.ToLower(strings.TrimSpace(cp.In))
 		fields = append(fields, cp)
 	}
+	fields = mergeParamsWithDoc(fields, doc)
 	return &describeFlagInput{
 		Fields:   describeFieldParams(fields),
 		Guidance: buildParamGuidance(fields, "shortcut"),
@@ -261,8 +272,8 @@ func shouldDescribeShortcutRequestBody(params []apiCapParam) bool {
 	return hasRequest && structuredBodyFlags == 0
 }
 
-func buildShortcutRequestBodyInput(req *apiDescribeRequestBody, printTemplate string, group string, action string) *describeRequestBodyInput {
-	out := buildRequestBodyInput(req, printTemplate, group, action)
+func buildShortcutRequestBodyInput(req *apiDescribeRequestBody, printTemplate string, group string, action string, fields []describeFieldParam) *describeRequestBodyInput {
+	out := buildRequestBodyInput(req, printTemplate, group, action, fields)
 	if out == nil {
 		return nil
 	}
@@ -484,20 +495,41 @@ func shortcutSpecs() map[string]shortcutCommandSpec {
 			Method:        "POST",
 			Path:          "/CreateTopic",
 			InputMode:     "body via --request; common fields via flags",
-			RequiredFlags: []string{"--project-id and --topic-name (or request.ProjectId/request.TopicName)"},
+			RequiredFlags: []string{"--project-id, --topic-name, --ttl and --shard-count (or request.ProjectId/request.TopicName/request.Ttl/request.ShardCount)"},
 			Params: []apiCapParam{
 				flagParam("ProjectId", "--project-id", "body", true, "string", "所属项目 ID"),
 				flagParam("TopicName", "--topic-name", "body", true, "string", "主题名"),
+				flagParam("Ttl", "--ttl", "body", true, "integer", "日志总保存时间，单位天"),
+				flagParam("ShardCount", "--shard-count", "body", true, "integer", "分区数量"),
 				flagParam("Description", "--description", "body", false, "string", "主题描述"),
-				flagParam("Ttl", "--ttl", "body", false, "integer", "保存天数"),
-				flagParam("ShardCount", "--shard-count", "body", false, "integer", "Shard 数量"),
 				flagParam("AutoSplit", "--auto-split", "body", false, "boolean", "开启自动分裂"),
 				flagParam("MaxSplitShard", "--max-split-shard", "body", false, "integer", "自动分裂最大 shard"),
+				flagParam("EnableTracking", "--enable-tracking", "body", false, "boolean", "开启 WebTracking"),
+				flagParam("EnableTracking", "--disable-tracking", "body", false, "boolean", "关闭 WebTracking"),
+				flagParam("MeteringMode", "--metering-mode", "body", false, "string", "计费模式"),
+				flagParam("LogPublicIP", "--log-public-ip", "body", false, "boolean", "开启记录来源 IP"),
+				flagParam("LogPublicIP", "--no-log-public-ip", "body", false, "boolean", "关闭记录来源 IP"),
+				flagParam("EnableHotTtl", "--enable-hot-ttl", "body", false, "boolean", "开启分层存储"),
+				flagParam("EnableHotTtl", "--disable-hot-ttl", "body", false, "boolean", "关闭分层存储"),
+				flagParam("HotTtl", "--hot-ttl", "body", false, "integer", "标准存储时长"),
+				flagParam("ColdTtl", "--cold-ttl", "body", false, "integer", "低频存储时长"),
+				flagParam("ArchiveTtl", "--archive-ttl", "body", false, "integer", "归档存储时长"),
+				flagParam("TimeKey", "--time-key", "body", false, "string", "日志时间字段名"),
+				flagParam("TimeFormat", "--time-format", "body", false, "string", "日志时间字段格式"),
+				flagParam("EncryptConf", "--encrypt-conf", "body", false, "json", "数据加密配置 JSON"),
+				flagParam("Tags", "--tags", "body", false, "json", "标签数组 JSON"),
 				flagParam("request", "--request", "body", false, "json", "完整请求 JSON"),
 			},
 			APIGroup:         "topic",
 			APIAction:        "CreateTopic",
 			SupportsTemplate: true,
+			Notes: []string{
+				"Ttl 和 ShardCount 按官网文档属于必填字段；shortcut describe 也按此口径展示。",
+				"EnableHotTtl=true 时，Ttl 时长需与 HotTtl、ColdTtl 和 ArchiveTtl 总值相同。",
+				"HotTtl、ColdTtl、ArchiveTtl 仅在 EnableHotTtl=true 时生效。",
+				"AutoSplit=true 时，MaxSplitShard 必填，且必须大于 ShardCount。",
+				"TimeKey 和 TimeFormat 必须成对提供。",
+			},
 		},
 		{
 			Group:         "topic",

@@ -57,7 +57,7 @@ func TestSkillInstallAllToTargetDir(t *testing.T) {
 
 	for _, rel := range []string{
 		filepath.Join("volclog-shared", "SKILL.md"),
-		filepath.Join("volclog-log", "references", "log-playbook.md"),
+		filepath.Join("volclog-log", "references", "log-search.md"),
 	} {
 		if _, err := os.Stat(filepath.Join(dest, rel)); err != nil {
 			t.Fatalf("missing installed file %s: %v", rel, err)

@@ -1,34 +1,38 @@
 # Configure And Doctor
 
-这个 reference 解决凭证和环境诊断问题。
+## 适用场景
 
-## When To Run Doctor First
-
-遇到这些情况，先跑 `volclog doctor`:
-
+- 凭证、profile、region、endpoint 看起来不对
 - 用户说“明明配了 AK/SK 但还是鉴权失败”
-- endpoint / region 不确定
-- profile 切换后行为异常
-- 怀疑 `cred_ref` 没被正确解析
+- 怀疑 `cred_ref`、环境变量或 profile 切换有问题
 
-## What Doctor Checks
+## 必填输入
 
-- 配置文件是否能加载
-- 选中的 profile 是谁
-- 凭证来源是环境变量、profile inline，还是 `cred_ref`
-- region / endpoint / timeout 是否存在
-- `--online` 场景下是否能真正拿解析后的凭证发请求
+- 无固定业务参数
+- 需要知道当前想检查的 profile 或环境
 
-## Practical Rules
+## 可选参数触发词
 
-- `configure list` 适合看有哪些 profile 和凭证来源
-- `doctor` 适合看当前实际生效配置
-- 如果 profile 使用 `cred_ref`，要相信解析后的有效凭证状态，而不是只看 profile 里是否直接内联 AK/SK
+- 说“看有哪些 profile”时，先跑 `configure list`
+- 说“检查当前实际生效配置”时，先跑 `doctor`
+- 说“需要真实联机验证”时，再考虑 `doctor --online`
 
-## Escalation
+## 字段联动/限制
 
-如果 `doctor` 看起来正常但业务请求仍失败，再切到:
+- `configure list` 用于看有哪些 profile 和凭证来源
+- `doctor` 用于看当前实际生效配置
+- profile 使用 `cred_ref` 时，要看解析后的有效凭证状态，不要只看 profile 是否直接内联 AK/SK
+- 先确认配置层，再判断是不是业务接口本身的问题
 
-1. `volclog <group> <command> --describe`
-2. `volclog --dry-run api <group> <action> ...`
-3. 必要时再检查服务端报错 envelope
+## 常见误用
+
+- 业务请求失败后直接改 API 参数，不先查配置
+- 只看 profile 文件，不看实际生效配置
+- 配置问题还没定位清楚就先退到 `api call`
+
+## 下一步命令
+
+```bash
+volclog configure list
+volclog doctor
+```

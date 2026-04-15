@@ -303,6 +303,39 @@ func TestGeneratedDescribeIncludesTemplateGuidance(t *testing.T) {
 	}
 }
 
+func TestGeneratedDescribeCreateTopicIncludesBodyFieldsFromOfficialDoc(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"api", "topic", "CreateTopic", "--describe"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		`"request_body": {`,
+		`"fields": [`,
+		`"name": "TopicName"`,
+		`"name": "ProjectId"`,
+		`"name": "Ttl"`,
+		`"name": "EnableHotTtl"`,
+		`"required": true`,
+		`日志主题所属的日志项目 ID。`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in output: %s", want, out)
+		}
+	}
+	for _, notWant := range []string{
+		`"name": "data"`,
+		`:::tip`,
+		`命名规则请参考`,
+		`详细说明请参考`,
+	} {
+		if strings.Contains(out, notWant) {
+			t.Fatalf("request body should expand official doc fields instead of generic data: %s", out)
+		}
+	}
+}
+
 func TestGeneratedDescribePutLogsMentionsMillisecondTimestamp(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"api", "log", "PutLogs", "--describe"}, &stdout, &stderr)
@@ -441,6 +474,9 @@ func TestGeneratedDescribeUsesLeanRequestBodyHint(t *testing.T) {
 		`"group_title": "日志项目管理"`,
 		`"input": {`,
 		`"request_body": {`,
+		`"fields": [`,
+		`"name": "ProjectName"`,
+		`"required": true`,
 		`"print_template":`,
 		`"note":`,
 	} {
@@ -454,8 +490,6 @@ func TestGeneratedDescribeUsesLeanRequestBodyHint(t *testing.T) {
 		`"required_flags":`,
 		`"template_required":`,
 		`"template_full":`,
-		`"ProjectName"`,
-		`"Region"`,
 	} {
 		if strings.Contains(out, notWant) {
 			t.Fatalf("create project describe should stay lean and omit %q: %s", notWant, out)

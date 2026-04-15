@@ -1,48 +1,39 @@
 # Error Quick Reference
 
-## 鉴权 / 配置
+## 适用场景
 
-症状:
+- 想先做一轮快速分诊，而不是直接深挖单个 action
+- 常见问题是鉴权失败、过滤不对、大结果刷屏、是否该切 explorer
 
-- 明明配置了凭证却仍失败
-- endpoint / region 不确定
-- profile 切换后行为异常
+## 必填输入
 
-先做:
+- 无固定业务参数
+- 至少先明确问题属于配置、过滤、输出还是接口探索
+
+## 可选参数触发词
+
+- 说“鉴权失败”“配置不对”时，先转配置诊断
+- 说“过滤结果不对”时，先检查 `--jmes-filter`
+- 说“结果太大”“stdout 太长”时，先补 `--output-mode file`
+- 说“不知道该不该切 explorer”时，先看当前 domain skill 是否已给入口
+
+## 字段联动/限制
+
+- 配置问题优先 `doctor`
+- 过滤作用在原始结果根，不是 envelope 根
+- 大结果优先落文件，避免模型在大对象里反复试错
+- 只有 shortcut 不覆盖或用户明确指定底层 action 时，才切 explorer
+
+## 常见误用
+
+- 把配置问题误当接口问题
+- 在 envelope 上写 `data.Total` 这种过滤路径
+- 明明只是结果太大，却继续让 stdout 刷屏
+
+## 下一步命令
 
 ```bash
 volclog doctor
 volclog configure list
+volclog --output-mode file <command>
 ```
-
-## 过滤结果不对
-
-症状:
-
-- 写了 `data.Total` 取不到值
-- 结果结构和预期不一致
-
-先做:
-
-- 把过滤表达式改成原始结果根路径
-- 例如写 `Total`，不要写 `data.Total`
-
-## 大结果输出失控
-
-症状:
-
-- stdout 太大
-- 模型在大对象里反复试错
-
-先做:
-
-```bash
-volclog --output-mode file ...
-```
-
-## 不知道该不该切 explorer
-
-先判断:
-
-- 如果 domain skill 已有默认入口，不要切
-- 只有 shortcut 不覆盖或用户明确指定 OpenAPI action 时才切

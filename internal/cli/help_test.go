@@ -283,9 +283,29 @@ func TestShortcutSubcommandHelpExplainsOptionalFlagUsage(t *testing.T) {
 	out := stdout.String()
 	for _, want := range []string{
 		"Optional Flags:",
-		"这些 flags 只在过滤、分页、排序、输出或附加约束需要时再加；不填表示按当前命令默认行为执行。",
+		"这些都是可选项。不带参数就先按默认方式列结果；只有用户明确要筛选、翻页或列全时再加。",
 		"--project-id",
 		"--all",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in stdout: %q", want, out)
+		}
+	}
+}
+
+func TestShortcutSubcommandHelpAvoidsDuplicateRequiredSummary(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"topic", "get", "-h"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	if strings.Contains(out, "Required:\n  - --topic-id\n\nRequired Flags:") {
+		t.Fatalf("single required flag should not be repeated in both Required and Required Flags: %q", out)
+	}
+	for _, want := range []string{
+		"Required Flags:",
+		"--topic-id <string>  主题 ID",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in stdout: %q", want, out)
@@ -339,7 +359,7 @@ func TestAPIGeneratedHelpSeparatesOptionalQueryPathParams(t *testing.T) {
 		"必填 query/path 参数:",
 		"(none)",
 		"可选 query/path 参数:",
-		"只在用户明确给出过滤、分页、排序、范围或额外约束时再加；不填表示按接口默认行为执行。",
+		"这些都是筛选或翻页项。不带参数就先按默认方式请求；需要缩小范围、分页或列全时再加。",
 		"--project-id <value> - 日志项目ID",
 		"输出过滤与引号:",
 	} {
@@ -358,6 +378,28 @@ func TestAPIGeneratedHelpSeparatesOptionalQueryPathParams(t *testing.T) {
 	} {
 		if strings.Contains(out, notWant) {
 			t.Fatalf("api help should hide undocumented param %q: %q", notWant, out)
+		}
+	}
+}
+
+func TestAPIGeneratedHelpAvoidsDuplicateRequiredFlagSummary(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"api", "topic", "DescribeTopic", "-h"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	if strings.Contains(out, "调用输入:\n  query/path 参数通过 flags 传入\n  必填 flags: TopicId") {
+		t.Fatalf("api help should not repeat required flags summary above the detailed required param table: %q", out)
+	}
+	for _, want := range []string{
+		"调用输入:",
+		"query/path 参数通过 flags 传入",
+		"必填 query/path 参数:",
+		"--topic-id <value> - 日志主题ID（UUID）。",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in stdout: %q", want, out)
 		}
 	}
 }

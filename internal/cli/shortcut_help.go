@@ -16,6 +16,9 @@ func shortcutCommandHelpLookup(group string) subcommandHelpLookup {
 
 func shortcutCommandUsage(spec shortcutCommandSpec) string {
 	var b strings.Builder
+	requiredParams := filterShortcutParams(spec.Params, true)
+	optionalParams := filterShortcutParams(spec.Params, false)
+
 	b.WriteString("Usage:\n")
 	b.WriteString("  volclog " + spec.Group + " " + spec.Command + " [flags]\n\n")
 
@@ -35,18 +38,18 @@ func shortcutCommandUsage(spec shortcutCommandSpec) string {
 	}
 	b.WriteString("\n")
 
-	b.WriteString("Required:\n")
-	if len(spec.RequiredFlags) == 0 {
-		b.WriteString("  (none)\n\n")
-	} else {
-		for _, item := range spec.RequiredFlags {
-			b.WriteString("  - " + strings.TrimSpace(item) + "\n")
+	if shouldRenderRequiredSummary(spec, requiredParams) {
+		b.WriteString("Required:\n")
+		if len(spec.RequiredFlags) == 0 {
+			b.WriteString("  (none)\n\n")
+		} else {
+			for _, item := range spec.RequiredFlags {
+				b.WriteString("  - " + strings.TrimSpace(item) + "\n")
+			}
+			b.WriteString("\n")
 		}
-		b.WriteString("\n")
 	}
 
-	requiredParams := filterShortcutParams(spec.Params, true)
-	optionalParams := filterShortcutParams(spec.Params, false)
 	if len(requiredParams) > 0 {
 		b.WriteString("Required Flags:\n")
 		writeShortcutParams(&b, requiredParams)
@@ -54,7 +57,7 @@ func shortcutCommandUsage(spec shortcutCommandSpec) string {
 	}
 	if len(optionalParams) > 0 {
 		b.WriteString("Optional Flags:\n")
-		b.WriteString("  这些 flags 只在过滤、分页、排序、输出或附加约束需要时再加；不填表示按当前命令默认行为执行。\n")
+		b.WriteString("  " + optionalFlagsIntro(spec) + "\n")
 		writeShortcutParams(&b, optionalParams)
 		b.WriteString("\n")
 	}
@@ -96,6 +99,50 @@ func shortcutCommandUsage(spec shortcutCommandSpec) string {
 	return b.String()
 }
 
+func shouldRenderRequiredSummary(spec shortcutCommandSpec, requiredParams []apiCapParam) bool {
+	if len(spec.RequiredFlags) == 0 {
+		return true
+	}
+	if len(requiredParams) == 0 {
+		return true
+	}
+	requiredFlagSet := map[string]struct{}{}
+	for _, param := range requiredParams {
+		flag := primaryShortcutFlag(param.CLIFlag)
+		if flag == "" {
+			continue
+		}
+		requiredFlagSet[flag] = struct{}{}
+	}
+	if len(requiredFlagSet) == 0 {
+		return true
+	}
+	for _, item := range spec.RequiredFlags {
+		raw := strings.TrimSpace(item)
+		flag := primaryShortcutFlag(raw)
+		if flag == "" || flag != raw {
+			return true
+		}
+		if _, ok := requiredFlagSet[flag]; !ok {
+			return true
+		}
+	}
+	return false
+}
+
+func optionalFlagsIntro(spec shortcutCommandSpec) string {
+	switch normalizeToken(spec.Command) {
+	case "list":
+		return "这些都是可选项。不带参数就先按默认方式列结果；只有用户明确要筛选、翻页或列全时再加。"
+	case "search", "histogram", "context", "export", "export-analysis":
+		return "这些都是附加条件。先满足核心查询条件，再按需要补范围、条数、排序或输出相关参数。"
+	case "create", "modify":
+		return "这些都是补充项。只有用户明确要设置对应能力时再加；字段一多就切到模板，不要继续硬拼。"
+	default:
+		return "这些都是可选项。用户没明确提到就先别加，按当前命令默认行为执行。"
+	}
+}
+
 func filterShortcutParams(params []apiCapParam, required bool) []apiCapParam {
 	out := make([]apiCapParam, 0, len(params))
 	for _, param := range params {
@@ -120,6 +167,20 @@ func writeShortcutParams(b *strings.Builder, params []apiCapParam) {
 		}
 		b.WriteString("  - " + line + "\n")
 	}
+}
+
+func primaryShortcutFlag(raw string) string {
+	flag := strings.TrimSpace(raw)
+	if flag == "" {
+		return ""
+	}
+	if strings.Contains(flag, " ") || strings.Contains(flag, ",") {
+		return ""
+	}
+	if strings.Contains(flag, "/") {
+		flag = strings.TrimSpace(strings.Split(flag, "/")[0])
+	}
+	return flag
 }
 
 func shortcutAgentGuidance(spec shortcutCommandSpec) []string {
@@ -172,10 +233,7 @@ func firstRequiredShortcutFlag(params []apiCapParam) string {
 		if !param.Required || strings.TrimSpace(param.CLIFlag) == "" {
 			continue
 		}
-		flag := strings.TrimSpace(param.CLIFlag)
-		if strings.Contains(flag, "/") {
-			flag = strings.TrimSpace(strings.Split(flag, "/")[0])
-		}
+		flag := primaryShortcutFlag(param.CLIFlag)
 		return flag
 	}
 	return ""
