@@ -76,16 +76,62 @@ volclog api metric-topic <Action> --describe
 
 如果 shortcut 没覆盖某个资源管理或查询动作，仍优先留在 `metric-topic` 里继续找。
 
-### `assistant`
+### `host-group`
 
-当前 shortcut 较少。如果需求仍明显属于 assistant：
+基础 CRUD 先留在 shortcut：
 
 ```bash
-volclog capabilities --group assistant --view text
-volclog api assistant <Action> --describe
+volclog host-group list --describe
+volclog host-group get --describe
+volclog host-group create --describe
+volclog host-group modify --describe
 ```
 
-如果生成能力里没有 `assistant` 组，再结合现有 shortcut/文档确认是否其实是别的已知组；不要凭空猜 action。
+如果需求已经超出 shortcut，比如查看主机成员、绑定规则、自动更新，再进入：
+
+```bash
+volclog capabilities --group host-group --view text
+volclog api host-group <Action> --describe
+```
+
+常见 action 形态：
+
+- `DescribeHostGroupV2`
+- `DescribeHostGroupsV2`
+- `DescribeHosts`
+- `ApplyHostGroupToRules`
+- `DeleteHostGroupFromRules`
+- `DeleteHost`
+- `ModifyHostGroupsAutoUpdate`
+
+### `collector`
+
+基础 CRUD 先留在 shortcut：
+
+```bash
+volclog collector list --describe
+volclog collector get --describe
+volclog collector create --describe
+volclog collector modify --describe
+```
+
+如果需求已经超出 shortcut，比如绑定机器组、导入配置、解析辅助，再进入：
+
+```bash
+volclog capabilities --group collector --view text
+volclog api collector <Action> --describe
+```
+
+常见 action 形态：
+
+- `DescribeRuleV2`
+- `DescribeRulesV2`
+- `ApplyRuleToHostGroups`
+- `DeleteRuleFromHostGroups`
+- `CreateConfigImportTask`
+- `ParsePath`
+- `ParseTime`
+- `SplitWithQuote`
 
 ## API-first Groups Without Shortcuts
 
@@ -102,17 +148,6 @@ volclog api shipper <Action> --describe
 
 适用：投递、投递配置、投递状态
 
-### `collector`
-
-先读 `volclog-collector`。如果它仍不覆盖，再：
-
-```bash
-volclog capabilities --group collector --view text
-volclog api collector <Action> --describe
-```
-
-适用：采集配置、采集任务
-
 ### `alarm`
 
 先读 `volclog-alarm`。如果它仍不覆盖，再：
@@ -123,17 +158,6 @@ volclog api alarm <Action> --describe
 ```
 
 适用：告警规则、通知策略
-
-### `host-group`
-
-先读 `volclog-host-group`。如果它仍不覆盖，再：
-
-```bash
-volclog capabilities --group host-group --view text
-volclog api host-group <Action> --describe
-```
-
-适用：机器组、机器纳管、规则绑定、自动更新
 
 ### `consumer-group`
 

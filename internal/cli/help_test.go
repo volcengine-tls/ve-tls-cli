@@ -15,7 +15,6 @@ func TestSubcommandHelpFlagWorksAfterArgs(t *testing.T) {
 		{name: "project list -h", args: []string{"project", "list", "-h"}, wantText: "volclog project"},
 		{name: "configure set -h", args: []string{"configure", "set", "-h"}, wantText: "volclog configure"},
 		{name: "doctor --online -h", args: []string{"doctor", "--online", "-h"}, wantText: "volclog doctor"},
-		{name: "metric-topic prom query -h", args: []string{"metric-topic", "prom", "query", "--topic-id", "t", "--query", "up", "-h"}, wantText: "/topic/{topic_id}/api/v1/query"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -72,7 +71,7 @@ func TestAPIGroupHelpWorks(t *testing.T) {
 		"volclog api project",
 		"当前 group: project",
 		"场景速选:",
-		"模糊找项目",
+		"按项目名过滤",
 		"volclog project list --describe",
 		"CreateProject: 创建日志项目请求",
 		"下一步命令:",
@@ -189,7 +188,7 @@ func TestUsageGroupHelpIncludesScenarioRouting(t *testing.T) {
 			want: []string{
 				"场景速选:",
 				"列项目/拿 ProjectId",
-				"模糊找项目",
+				"按项目名过滤",
 			},
 		},
 		{
@@ -215,5 +214,196 @@ func TestUsageGroupHelpIncludesScenarioRouting(t *testing.T) {
 				t.Fatalf("missing %q in usage: %q", want, tc.text)
 			}
 		}
+	}
+}
+
+func TestShortcutGroupUsageOmitsExamples(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+	}{
+		{name: "project", text: usageProject()},
+		{name: "topic", text: usageTopic()},
+		{name: "metric-topic", text: usageMetricTopic()},
+		{name: "index", text: usageIndex()},
+		{name: "log", text: usageLog()},
+		{name: "host-group", text: usageHostGroup()},
+		{name: "collector", text: usageCollector()},
+	}
+	for _, tc := range cases {
+		if strings.Contains(tc.text, "Examples:") {
+			t.Fatalf("%s usage should not include Examples anymore: %q", tc.name, tc.text)
+		}
+	}
+}
+
+func TestShortcutSubcommandHelpIsCommandScopedForTopicList(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"topic", "list", "-h"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"Usage:",
+		"volclog topic list",
+		"列出日志主题",
+		"Required:",
+		"(none)",
+		"--page-size",
+		"--all",
+		"Agent Guidance:",
+		"volclog topic list",
+		"不要因为可选 query 参数里出现了 --project-id",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in stdout: %q", want, out)
+		}
+	}
+	for _, notWant := range []string{
+		"volclog topic create --describe",
+		"volclog topic modify --topic-id",
+		"volclog topic delete --topic-id",
+		"volclog topic get --topic-id",
+		"Commands:",
+		"Examples:",
+	} {
+		if strings.Contains(out, notWant) {
+			t.Fatalf("unexpected %q in stdout: %q", notWant, out)
+		}
+	}
+}
+
+func TestShortcutSubcommandHelpExplainsOptionalFlagUsage(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"topic", "list", "-h"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"Optional Flags:",
+		"这些 flags 只在过滤、分页、排序、输出或附加约束需要时再加；不填表示按当前命令默认行为执行。",
+		"--project-id",
+		"--all",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in stdout: %q", want, out)
+		}
+	}
+}
+
+func TestShortcutSubcommandHelpIsCommandScopedForLogSearch(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"log", "search", "-h"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"volclog log search",
+		"执行日志检索",
+		"--topic-id",
+		"--query",
+		"--from",
+		"--to",
+		"--limit",
+		"Agent Guidance:",
+		"只把 Required 里的参数视为必填",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in stdout: %q", want, out)
+		}
+	}
+	for _, notWant := range []string{
+		"volclog log put --describe",
+		"volclog log export-analysis",
+		"Commands:",
+		"批量导入文本或 JSON 日志",
+		"Examples:",
+	} {
+		if strings.Contains(out, notWant) {
+			t.Fatalf("unexpected %q in stdout: %q", notWant, out)
+		}
+	}
+}
+
+func TestAPIGeneratedHelpSeparatesOptionalQueryPathParams(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"api", "topic", "DescribeTopics", "-h"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"必填 query/path 参数:",
+		"(none)",
+		"可选 query/path 参数:",
+		"只在用户明确给出过滤、分页、排序、范围或额外约束时再加；不填表示按接口默认行为执行。",
+		"--project-id <value> - 日志项目ID",
+		"输出过滤与引号:",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in stdout: %q", want, out)
+		}
+	}
+	for _, notWant := range []string{
+		"--cursor <value>",
+		"--region <value>",
+		"--fuzzy-search-key <value>",
+		"--favourite <value>",
+		"--order-by-project <value>",
+		"--is-full-name <value>",
+		"--description <value>",
+	} {
+		if strings.Contains(out, notWant) {
+			t.Fatalf("api help should hide undocumented param %q: %q", notWant, out)
+		}
+	}
+}
+
+func TestAPIGeneratedHelpOfficialNoParamTableOmitsSwaggerFallback(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"api", "log", "DescribeCursorTime", "-h"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"官网有接口页面，但当前未解析到结构化参数表",
+		"必填 query/path 参数:",
+		"(none)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in stdout: %q", want, out)
+		}
+	}
+	for _, notWant := range []string{
+		"--cursor <value>",
+		"请求体: 通过 --request 传入（必填）",
+		"--print-request-template=full",
+	} {
+		if strings.Contains(out, notWant) {
+			t.Fatalf("official no-table help should not fall back to swagger detail %q: %q", notWant, out)
+		}
+	}
+}
+
+func TestPublicV1DoesNotExposeAssistantOrMetricTopicProm(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{name: "assistant group", args: []string{"assistant", "describe-session-answer"}},
+		{name: "metric-topic prom", args: []string{"metric-topic", "prom", "query", "--topic-id", "t", "--query", "up"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := Run(tc.args, &stdout, &stderr)
+			if code == 0 {
+				t.Fatalf("expected non-zero exit for hidden public entry, stdout=%q stderr=%q", stdout.String(), stderr.String())
+			}
+		})
 	}
 }

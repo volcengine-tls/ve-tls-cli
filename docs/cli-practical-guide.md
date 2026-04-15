@@ -2,7 +2,7 @@
 
 > <u>***这篇文档不打算按 API 清单展开，而是想把几条最常见的 TLS 实战链路讲清楚：怎么接入、怎么排障、怎么导出、怎么让 Agent 少走弯路。***</u>
 
-> [!NOTE]
+> \[!NOTE]
 > **阅读指南**
 >
 > 这篇文章讲什么？
@@ -16,9 +16,9 @@
 > - 掌握 3 条常用实战链路：新服务接入、线上排障、采集异常修复
 > - 明白 Agent 接入 `volclog` 后到底少猜了什么、少踩了什么坑
 >
-> **预计阅读时间：**通读 `18` 分钟 / 快速浏览 `8` 分钟 / 只看工作流 `10` 分钟
+> \*\*预计阅读时间：\*\*通读 `18` 分钟 / 快速浏览 `8` 分钟 / 只看工作流 `10` 分钟
 
----
+***
 
 ## 概述
 
@@ -48,7 +48,7 @@ flowchart LR
     B --> B2["index"]
     B --> B3["collector"]
     B --> B4["host-group"]
-    B --> B5["log search / put"]
+    B --> B5["log search / ingest"]
 
     C --> C1["log search"]
     C --> C2["log histogram"]
@@ -57,8 +57,8 @@ flowchart LR
 
     D --> D1["host-group list/get"]
     D --> D2["collector list/get"]
-    D --> D3["bind / unbind"]
-    D --> D4["delete-host"]
+    D --> D3["bind / unbind (api fallback)"]
+    D --> D4["host cleanup (api fallback)"]
 
     E["执行保障"] --> E1["capabilities"]
     E --> E2["--describe"]
@@ -70,20 +70,20 @@ flowchart LR
 
 一句话概括：
 
-**如果只是查一个资源，很多工具都能做；如果你经常要把几步 TLS 操作串起来做，`volclog` 会更顺手一些。**
+**如果只是查一个资源，很多工具都能做；如果你经常要把几步 TLS 操作串起来做，`volclog`** **会更顺手一些。**
 
 ## 为什么可能值得试试
 
 和常见的 TLS CLI、Shell 脚本相比，`volclog` 的差异不在覆盖范围，而在执行体验和失败成本。
 
-| 维度 | 常见 CLI / Bash 脚本 | `volclog` |
-| --- | --- | --- |
-| 高阶入口 | 通常只有资源 CRUD | 有 `shortcut`，直接对准高频任务 |
-| 复杂请求体 | 需要翻 API 文档、手写 JSON | `--describe` + `--print-request-template` 直接给约束和模板 |
-| 执行前校验 | 往往直接发请求 | `--dry-run` 先在本地校验 |
-| 大结果处理 | 容易直接打 stdout 或自己分页导出 | `--output-mode file` 适合大结果，`log export` 已支持分页批次写文件 |
-| Agent 接入 | 需要额外写 prompt/胶水层 | 内置 `skills/`，能把最佳实践直接交给 Agent |
-| 发现能力 | 靠文档和记忆 | `capabilities --view groups` / `--group <x>` 可直接探索 |
+| 维度       | 常见 CLI / Bash 脚本     | `volclog`                                          |
+| -------- | -------------------- | -------------------------------------------------- |
+| 高阶入口     | 通常只有资源 CRUD          | 有 `shortcut`，直接对准高频任务                              |
+| 复杂请求体    | 需要翻 API 文档、手写 JSON   | `--describe` + `--print-request-template` 直接给约束和模板 |
+| 执行前校验    | 往往直接发请求              | `--dry-run` 先在本地校验                                 |
+| 大结果处理    | 容易直接打 stdout 或自己分页导出 | `--output-mode file` 适合大结果，`log export` 已支持分页批次写文件 |
+| Agent 接入 | 需要额外写 prompt/胶水层     | 内置 `skills/`，能把最佳实践直接交给 Agent                      |
+| 发现能力     | 靠文档和记忆               | `capabilities --view groups` / `--group <x>` 可直接探索 |
 
 如果你的现状是：
 
@@ -93,7 +93,7 @@ flowchart LR
 
 那 `volclog` 更适合补上的是后两者。
 
----
+***
 
 ## 5 分钟完成可用环境
 
@@ -198,7 +198,7 @@ volclog skill install --dir ./skills
 - 正式执行前先 `--dry-run`
 - 结果过大时优先 `--output-mode file`
 
----
+***
 
 ## 三层命令架构
 
@@ -214,7 +214,7 @@ volclog skill install --dir ./skills
 volclog project list --all
 volclog topic create --describe
 volclog log export --describe
-volclog collector bind-host-groups --describe
+volclog collector create --describe
 ```
 
 特点：
@@ -257,9 +257,9 @@ volclog api call --method GET --path /DescribeProjects
 
 选择策略只有一句话：
 
-**先 shortcut，再 `api --describe`，最后才是 `api call`。**
+**先 shortcut，再** **`api --describe`，最后才是** **`api call`。**
 
----
+***
 
 ## 三个实用工作流
 
@@ -323,21 +323,25 @@ volclog collector create --print-request-template=full > collector_req.json
 volclog --dry-run collector create --request file://collector_req.json
 volclog collector create --request file://collector_req.json
 
-volclog collector bind-host-groups --describe
-volclog collector bind-host-groups --rule-id <RuleId> --host-group-ids '["<HostGroupId>"]'
+volclog api collector ApplyRuleToHostGroups --describe
+volclog api collector ApplyRuleToHostGroups --print-request-template=full > bind_req.json
+volclog --dry-run api collector ApplyRuleToHostGroups --request file://bind_req.json
+volclog api collector ApplyRuleToHostGroups --request file://bind_req.json
 ```
 
 #### Step 6：先验证索引是否生效，再判断采集是否正常
 
 这里最好把两件事分开看：
 
-- `log put` 适合验证 topic 写入链路和索引检索是否正常
-- 采集规则是否真的采到了机器日志，不能只靠 `log put` 判断
+ - `log ingest` 适合快速验证 topic 写入链路和索引检索是否正常
+ - `log put` 更适合你已经按 PutLogs 结构准备好原始请求体的场景
+ - 采集规则是否真的采到了机器日志，不能只靠手动写入判断
 
 如果你刚完成的是 `topic + index` 配置，最直接的办法是先手动写一条测试日志，确认这条日志能被检索到：
 
 ```bash
-volclog log put --topic-id <TopicId> --request-format jsonl --request file://./smoke.jsonl
+printf 'volclog-smoke-check trace_id=smoke-001 status=ok\n' | \
+  volclog log ingest --topic-id <TopicId> --input - --input-format lines
 ```
 
 然后马上检索确认：
@@ -392,13 +396,12 @@ volclog host-group get --host-group-id <HostGroupId> --output-mode file --output
 安装好 `skills` 后，Agent 的典型执行顺序应该是：
 
 ```bash
-volclog capabilities --view groups
 volclog project list --describe
 volclog topic create --describe
 volclog index create --describe
 volclog host-group list --describe
 volclog collector create --describe
-volclog collector bind-host-groups --describe
+volclog api collector ApplyRuleToHostGroups --describe
 volclog log search --describe
 ```
 
@@ -531,28 +534,28 @@ volclog --output-mode file --output-file ./collector-rule.json \
 从规则侧绑定机器组：
 
 ```bash
-volclog collector bind-host-groups --describe
-volclog collector bind-host-groups --rule-id <RuleId> --host-group-ids '["<HostGroupId>"]'
+volclog api collector ApplyRuleToHostGroups --describe
+volclog api collector ApplyRuleToHostGroups --print-request-template=full > bind_req.json
 ```
 
 从机器组侧绑定规则：
 
 ```bash
-volclog host-group bind-rules --describe
-volclog host-group bind-rules --host-group-id <HostGroupId> --rule-ids '["<RuleId>"]'
+volclog api host-group ApplyHostGroupToRules --describe
+volclog api host-group ApplyHostGroupToRules --print-request-template=full > host_group_bind_req.json
 ```
 
 解绑同理：
 
 ```bash
-volclog collector unbind-host-groups --rule-id <RuleId> --host-group-ids file://./host_group_ids.json
-volclog host-group unbind-rules --host-group-id <HostGroupId> --rule-ids file://./rule_ids.json
+volclog api collector DeleteRuleFromHostGroups --describe
+volclog api host-group DeleteHostGroupFromRules --describe
 ```
 
 #### Step 4：必要时清理失效主机
 
 ```bash
-volclog host-group delete-host --host-group-id <HostGroupId> --ip <StaleIp>
+volclog api host-group DeleteHost --describe
 ```
 
 #### Step 5：回到日志层验证
@@ -573,17 +576,15 @@ volclog log search \
 这也是最适合交给 Agent 的场景之一。好的 Agent 不该直接猜 `/DescribeRules` 或随手拼 JSON，而应该：
 
 ```bash
-volclog capabilities --group host-group --view text
-volclog capabilities --group collector --view text
 volclog host-group list --describe
 volclog collector list --describe
-volclog collector bind-host-groups --describe
-volclog host-group bind-rules --describe
+volclog api collector ApplyRuleToHostGroups --describe
+volclog api host-group ApplyHostGroupToRules --describe
 ```
 
 这也是 `skills` 更实际的作用：不是替 Agent 执行，而是先把路走对。
 
----
+***
 
 ## Agent 在这里能帮上什么忙
 
@@ -645,7 +646,7 @@ volclog --output jsonl --output-mode file --output-file ./analysis.jsonl log exp
 
 这通常不是风格偏好，而是正确性问题。
 
----
+***
 
 ## Skills 与集成
 
@@ -697,7 +698,7 @@ volclog skill install \
 
 这组 skill 已经足够覆盖本文的三个核心工作流。
 
----
+***
 
 ## 常见误区
 
@@ -725,7 +726,7 @@ volclog skill install \
 
 `skill install` 的意义不只是把文件放进去，而是把“先 shortcut、再 describe、再 template、再 dry-run”这套顺序交给 Agent。
 
----
+***
 
 ## 如果你只记住 6 条命令
 
@@ -740,9 +741,9 @@ volclog skill install --dir ./skills
 
 这六条命令背后，其实是一种比较朴素的用法：
 
-**不要只把 `volclog` 当作一个“能查日志的 CLI”，更可以把它当作一套把 TLS 工作流走顺的执行面。**
+**不要只把** **`volclog`** **当作一个“能查日志的 CLI”，更可以把它当作一套把 TLS 工作流走顺的执行面。**
 
 ## 进一步阅读
 
-- 基础安装与能力总览：[README_CN.md](../README_CN.md)
+- 基础安装与能力总览：[README\_CN.md](../README_CN.md)
 - 参数、输出与自动化建议：[cli-best-practices.md](cli-best-practices.md)

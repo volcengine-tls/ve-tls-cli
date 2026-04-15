@@ -37,7 +37,7 @@ func isAnalysisQuery(cmd string) bool {
 }
 
 func runLog(ctx *Context, args []string) (any, error) {
-	return runSubcommandGroup(args, usageLog(), nil, func(command string, commandArgs []string) (any, error) {
+	return runSubcommandGroup(args, usageLog(), nil, shortcutCommandHelpLookup("log"), func(command string, commandArgs []string) (any, error) {
 		ctx.Action = "log." + strings.TrimSpace(command)
 		if out, handled, err := maybeHandleShortcutMeta("log", command, commandArgs); handled {
 			return out, err

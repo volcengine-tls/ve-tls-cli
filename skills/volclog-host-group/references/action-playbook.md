@@ -5,10 +5,9 @@
 先用：
 
 ```bash
-volclog api host-group DescribeHostGroupsV2 --all
-volclog capabilities --group host-group --view text
-volclog api host-group DescribeHostGroupsV2 --describe
-volclog api host-group DescribeHostGroupsV2 --jmes-filter "HostGroupHostsRulesInfos[].HostGroupInfo.{HostGroupId: HostGroupId, HostGroupName: HostGroupName}"
+volclog host-group list --all
+volclog host-group list --describe
+volclog host-group list --all --jmes-filter "HostGroupHostsRulesInfos[].HostGroupInfo.{HostGroupId: HostGroupId, HostGroupName: HostGroupName}"
 ```
 
 如果返回太深，先从 `HostGroupHostsRulesInfos[].HostGroupInfo` 开始裁剪，不要手翻整棵 JSON。
@@ -19,15 +18,17 @@ volclog api host-group DescribeHostGroupsV2 --jmes-filter "HostGroupHostsRulesIn
 先用：
 
 ```bash
-volclog api host-group CreateHostGroup --describe
-volclog api host-group ModifyHostGroup --describe
+volclog host-group create --describe
+volclog host-group modify --describe
 ```
 
 如果是写入型动作，再继续：
 
 ```bash
-volclog api host-group <Action> --print-request-template=full
-volclog --dry-run api host-group <Action> --request file://req.json
+volclog host-group create --print-request-template=full
+volclog --dry-run host-group create --request file://req.json
+volclog host-group modify --print-request-template=full
+volclog --dry-run host-group modify --request file://req.json
 ```
 
 ## 我想看机器组里的机器
@@ -45,7 +46,7 @@ volclog api host-group DescribeHosts --describe
 如果是单个对象详情较大，优先配合：
 
 ```bash
-volclog --output-mode file --output-file ./host-group-detail.json api host-group DescribeHostGroupV2 --HostGroupId <HostGroupId>
+volclog --output-mode file --output-file ./host-group-detail.json host-group get --host-group-id <HostGroupId>
 ```
 
 ## 我想把规则绑到机器组

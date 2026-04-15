@@ -7,16 +7,15 @@ description: Use when operating TLS collector rules with volclog, including Chin
 
 ## Overview
 
-这个 skill 负责 `collector` 组。它适合采集规则创建、修改、绑定机器组、导入配置，以及解析辅助动作。
+这个 skill 负责 `collector` 组。基础采集规则管理优先走 `collector` shortcut；绑定机器组、导入配置、解析辅助再升级到 `api`。
 
 > **前置条件：** 先阅读 [`../volclog-shared/SKILL.md`](../volclog-shared/SKILL.md)。
 
 ## Agent 快速执行顺序
 
-1. 先判断用户是在做规则管理、绑定机器组，还是解析辅助
-2. 先看 `volclog capabilities --group collector --view text`
-3. 再选 action，执行 `volclog api collector <Action> --describe`
-4. 写入动作先模板、再 `--dry-run`
+1. 基础采集规则管理先用 `collector list/get/create/modify/delete`
+2. 如果要绑定机器组、导入配置或做解析辅助，再进入 `capabilities -> api --describe`
+3. 写入动作先模板、再 `--dry-run`
 
 ## Agent 禁止行为
 
@@ -29,7 +28,9 @@ description: Use when operating TLS collector rules with volclog, including Chin
 - 看采集组能力：
   `volclog capabilities --group collector --view text`
 - 创建采集规则：
-  `volclog api collector CreateRule --describe`
+  `volclog collector create --describe`
+- 查看采集规则：
+  `volclog collector list --describe`
 - 绑定机器组：
   `volclog api collector ApplyRuleToHostGroups --describe`
 - 导入采集配置：
@@ -38,7 +39,7 @@ description: Use when operating TLS collector rules with volclog, including Chin
 ## 场景路由
 
 - 用户说“采集规则 / collection rule / 采集配置”：
-  先用 `volclog api collector CreateRule --describe` 或 `DescribeRulesV2` 风格 action
+  先用 `volclog collector list --describe`、`collector get --describe` 或 `collector create --describe`
 - 用户说“绑定机器组 / bind host group”：
   先用 `volclog api collector ApplyRuleToHostGroups --describe`
 - 用户说“导入配置 / import collector config”：
@@ -48,7 +49,8 @@ description: Use when operating TLS collector rules with volclog, including Chin
 
 ## Core Rules
 
-- `collector` 更偏采集规则、机器组绑定、解析辅助
+- `collector list/get/create/modify/delete` 是基础采集规则管理主路径
+- `collector` 也承接机器组绑定、导入配置、解析辅助
 - 当需求涉及路径解析、时间解析、拆分规则时，先找解析型 action，不要自己猜正则
 - 写入前先看 request template，避免把 `Pause`、`InputType`、`RuleType` 等关键字段猜错
 - `ParseTime` 对 `TimeFormat` 很敏感；不要默认按 Go time layout 传参

@@ -44,6 +44,51 @@ func TestFilterCapabilitiesActionAmbiguous(t *testing.T) {
 	}
 }
 
+func TestNormalizeLoadedAPICapabilitiesFiltersToPublishedOfficialCommands(t *testing.T) {
+	doc := apiCapabilitiesDoc{
+		Commands: []apiCapabilityCommand{
+			{
+				Group:   "project",
+				Action:  "DescribeProjects",
+				Summary: "DescribeProjects",
+				Path:    "/DescribeProjects",
+				RequestParamsDoc: []apiCapDocParam{
+					{Name: "ProjectId", In: "query"},
+				},
+			},
+			{Group: "account", Action: "ActiveTlsSvc", Summary: "ActiveTlsSvc", Path: "/ActiveTlsAccount"},
+			{Group: "account", Action: "GetAccountStatus", Summary: "GetAccountStatus", Path: "/GetAccountStatus"},
+			{Group: "log", Action: "DescribeCursorTime", Summary: "DescribeCursorTime", Path: "/DescribeCursorTime"},
+			{Group: "processor", Action: "DescribeProcessorFunctions", Summary: "DescribeProcessorFunctions", Path: "/DescribeProcessorFunctions"},
+			{Group: "internal", Action: "Undocumented", Summary: "Undocumented", Path: "/Undocumented"},
+		},
+	}
+
+	got := normalizeLoadedAPICapabilities(doc)
+	if len(got.Commands) != 5 {
+		t.Fatalf("expected 5 published commands, got %d: %+v", len(got.Commands), got.Commands)
+	}
+
+	seen := map[string]bool{}
+	for _, cmd := range got.Commands {
+		seen[cmd.Action] = true
+	}
+	for _, want := range []string{
+		"DescribeProjects",
+		"ActiveTlsSvc",
+		"GetAccountStatus",
+		"DescribeCursorTime",
+		"DescribeProcessorFunctions",
+	} {
+		if !seen[want] {
+			t.Fatalf("expected published command %q to remain: %+v", want, got.Commands)
+		}
+	}
+	if seen["Undocumented"] {
+		t.Fatalf("undocumented command should be filtered out: %+v", got.Commands)
+	}
+}
+
 func TestRunCapabilitiesIncludesV3MetaHints(t *testing.T) {
 	out, err := runCapabilities(nil, []string{"--group", "project", "--action", "CreateProject"})
 	if err != nil {

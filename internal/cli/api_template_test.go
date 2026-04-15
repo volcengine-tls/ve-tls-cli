@@ -75,18 +75,16 @@ func TestDescribeOperationOutput(t *testing.T) {
 		`"description":`,
 		`"method": "POST"`,
 		`"input_mode":`,
-		`"required_flags":`,
-		`"request_body"`,
-		`"template_guidance"`,
-		`"use_required_when":`,
-		`"use_full_when":`,
-		`"skip_when":`,
-		`"request_params_doc"`,
+		`"input": {`,
+		`"flags": {`,
+		`"fields": [`,
+		`"request_body": {`,
+		`"required": true`,
+		`"print_template":`,
+		`"note":`,
 		`"output_filter_scope"`,
 		`"output_filter_examples"`,
 		`"shell_quoting"`,
-		`"template_required"`,
-		`"template_full"`,
 		`"min_length": 1`,
 		`"cli_flag": "--project-name"`,
 		`"guidance"`,
@@ -97,6 +95,16 @@ func TestDescribeOperationOutput(t *testing.T) {
 		}
 	}
 	for _, notWant := range []string{
+		`"params":`,
+		`"required_flags":`,
+		`"required_params":`,
+		`"optional_params":`,
+		`"param_guidance":`,
+		`"template_guidance":`,
+		`"body_params_doc":`,
+		`"query_params_doc":`,
+		`"template_required":`,
+		`"template_full":`,
 		`"name": "data"`,
 		`"summary":`,
 		`"swagger_tag"`,
@@ -198,10 +206,7 @@ func TestDescribeOperationOutputStableFieldOrder(t *testing.T) {
 		`"method":`,
 		`"path":`,
 		`"input_mode":`,
-		`"required_flags":`,
-		`"params":`,
-		`"request_body":`,
-		`"template_guidance":`,
+		`"input":`,
 		`"output_filter_scope":`,
 		`"output_filter_examples":`,
 		`"shell_quoting":`,
@@ -210,6 +215,9 @@ func TestDescribeOperationOutputStableFieldOrder(t *testing.T) {
 	last := -1
 	for _, key := range order {
 		idx := strings.Index(s, key)
+		if key == `"guidance":` {
+			idx = strings.LastIndex(s, key)
+		}
 		if idx == -1 {
 			t.Fatalf("missing key %s in output: %s", key, s)
 		}
@@ -218,9 +226,60 @@ func TestDescribeOperationOutputStableFieldOrder(t *testing.T) {
 		}
 		last = idx
 	}
-	if idxReqDoc := strings.Index(s, `"request_params_doc":`); idxReqDoc != -1 {
-		if idxGuide := strings.Index(s, `"guidance":`); idxReqDoc > idxGuide {
-			t.Fatalf("request_params_doc should appear before guidance: %s", s)
+}
+
+func TestGeneratedDescribeSeparatesOptionalParamsAndUsageGuidance(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"api", "topic", "DescribeTopics", "--describe"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		`"input": {`,
+		`"flags": {`,
+		`"fields": [`,
+		`"required": false`,
+		`"optional": "只在用户明确给出过滤、分页、排序、范围或额外约束时，再填写 optional；不填表示按接口默认行为执行，不要从示例或历史请求里补齐。`,
+		`"--project-id"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in output: %s", want, out)
+		}
+	}
+	for _, notWant := range []string{
+		`"Cursor"`,
+		`"--cursor"`,
+		`"Region"`,
+		`"--region"`,
+		`"FuzzySearchKey"`,
+		`"--fuzzy-search-key"`,
+		`"Favourite"`,
+		`"--favourite"`,
+		`"OrderByProject"`,
+		`"--order-by-project"`,
+		`"IsFullName"`,
+		`"--is-full-name"`,
+		`"Description"`,
+		`"--description"`,
+	} {
+		if strings.Contains(out, notWant) {
+			t.Fatalf("describe output should hide undocumented param %q: %s", notWant, out)
+		}
+	}
+	for _, notWant := range []string{
+		`"params":`,
+		`"request_body":`,
+		`"required_flags":`,
+		`"required_params":`,
+		`"optional_params":`,
+		`"param_guidance":`,
+		`"template_guidance":`,
+		`"body_params_doc":`,
+		`"query_params_doc":`,
+	} {
+		if strings.Contains(out, notWant) {
+			t.Fatalf("describe output should omit legacy field %q: %s", notWant, out)
 		}
 	}
 }
@@ -233,10 +292,10 @@ func TestGeneratedDescribeIncludesTemplateGuidance(t *testing.T) {
 	}
 	out := stdout.String()
 	for _, want := range []string{
-		`"template_guidance":`,
-		`"use_required_when":`,
-		`"use_full_when":`,
-		`"after_generate":`,
+		`"input": {`,
+		`"request_body": {`,
+		`"print_template":`,
+		`"note":`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in output: %s", want, out)
@@ -252,13 +311,34 @@ func TestGeneratedDescribePutLogsMentionsMillisecondTimestamp(t *testing.T) {
 	}
 	out := stdout.String()
 	for _, want := range []string{
-		`"template_guidance":`,
+		`"input": {`,
+		`"request_body": {`,
 		`毫秒`,
 		`1710374400000`,
 		`不要填秒级`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in output: %s", want, out)
+		}
+	}
+}
+
+func TestGeneratedDescribeOfficialNoParamTableOmitsSwaggerFallback(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"api", "log", "DescribeCursorTime", "--describe"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, notWant := range []string{
+		`"input": {`,
+		`"flags": {`,
+		`"request_body": {`,
+		`"Cursor"`,
+		`"--cursor"`,
+	} {
+		if strings.Contains(out, notWant) {
+			t.Fatalf("official no-table describe should not fall back to swagger param %q: %s", notWant, out)
 		}
 	}
 }
@@ -350,7 +430,7 @@ func TestRequestTemplateOutputUsesMillisecondPutLogsTimestamp(t *testing.T) {
 	}
 }
 
-func TestGeneratedDescribeIncludesRequestParamsDoc(t *testing.T) {
+func TestGeneratedDescribeUsesLeanRequestBodyHint(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"api", "project", "CreateProject", "--describe"}, &stdout, &stderr)
 	if code != 0 {
@@ -359,14 +439,26 @@ func TestGeneratedDescribeIncludesRequestParamsDoc(t *testing.T) {
 	out := stdout.String()
 	for _, want := range []string{
 		`"group_title": "日志项目管理"`,
-		`"request_params_doc":`,
+		`"input": {`,
+		`"request_body": {`,
+		`"print_template":`,
+		`"note":`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in output: %s", want, out)
+		}
+	}
+	for _, notWant := range []string{
+		`"body": {`,
+		`"query": {`,
+		`"required_flags":`,
 		`"template_required":`,
 		`"template_full":`,
 		`"ProjectName"`,
 		`"Region"`,
 	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in output: %s", want, out)
+		if strings.Contains(out, notWant) {
+			t.Fatalf("create project describe should stay lean and omit %q: %s", notWant, out)
 		}
 	}
 }

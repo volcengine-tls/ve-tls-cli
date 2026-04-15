@@ -113,17 +113,18 @@
 - **--describe 探测 API 约束**
   在调用任何 `api` 命令前，加上 `--describe`，CLI 会直接输出该 API 的字段要求、输入方式以及推荐模板。
   ```bash
-  volclog api log PutLogs --describe
+  volclog log ingest --describe
   ```
 
 - **--print-request-template 生成请求骨架**
   当 API 需要复杂的 JSON 请求体时，CLI 支持一键生成。
   ```bash
-  # 仅生成必填字段的 JSON 骨架
-  volclog api log PutLogs --print-request-template=required > put_req.json
+  # 快捷写入优先看 ingest 的输入约束
+  volclog log ingest --describe
   
-  # 生成包含所有可能字段的完整 JSON 结构，供参考或修改
-  volclog api log PutLogs --print-request-template=full > put_full_req.json
+  # 如果你已经准备好了原始 PutLogs 请求体，再看低层模板
+  volclog log put --print-request-template=required > put_req.json
+  volclog log put --print-request-template=full > put_full_req.json
   ```
 
 - **--dry-run 本地校验载荷**

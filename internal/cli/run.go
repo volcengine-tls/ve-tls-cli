@@ -143,8 +143,6 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		out, err = runHostGroup(ctx, rest)
 	case "collector":
 		out, err = runCollector(ctx, rest)
-	case "assistant":
-		out, err = runAssistant(ctx, rest)
 	case "doctor":
 		out, exitCode, err = runDoctor(ctx, rest)
 	default:

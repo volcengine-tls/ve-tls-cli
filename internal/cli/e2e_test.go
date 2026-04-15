@@ -108,8 +108,6 @@ func TestCLIMinimalE2E_HTTPPathsAndShapes(t *testing.T) {
 		{name: "index create", args: []string{"index", "create", "--topic-id", "tid", "--body", "file://" + indexBodyPath}},
 		{name: "log search", args: []string{"log", "search", "--topic-id", "tid", "--query", "*", "--from", "1710374400000", "--to", "1710378000000"}},
 		{name: "log export", args: []string{"--output", "jsonl", "log", "export", "--topic-id", "tid", "--query", "*", "--from", "1710374400000", "--to", "1710378000000", "--max-pages", "2"}},
-		{name: "metric-topic prom query", args: []string{"metric-topic", "prom", "query", "--topic-id", "mtid", "--query", "up", "--time", "1710374400000"}},
-		{name: "assistant describe-session-answer", args: []string{"assistant", "describe-session-answer", "--topic-id", "tid", "--question", "q", "--account-id", "acc"}},
 	}
 
 	for _, tc := range cases {

@@ -137,6 +137,8 @@ The repository includes a set of Agent Skills under `skills/`:
 | **volclog-topic** | Topic configuration and constraint validation |
 | **volclog-index** | Index analysis and creation, auto-handles full-text and key-value index structures |
 | **volclog-log** | Core log search, SQL analytics, and big data export routing |
+| **volclog-host-group** | Host group CRUD and host group related API fallback guidance |
+| **volclog-collector** | Collector rule CRUD and collector related API fallback guidance |
 | **volclog-metric-topic** | Metric stream query and PromQL support |
 | **volclog-alarm** | Alarm rule troubleshooting and configuration |
 | **volclog-api-explorer** | Provides full detection and execution capabilities for underlying OpenAPIs |

@@ -3,19 +3,19 @@
 ## Rule Management
 
 ```bash
-volclog api collector DescribeRulesV2 --all
-volclog api collector DescribeRulesV2 --describe
-volclog --output-mode file --output-file ./collector-detail.json api collector DescribeRuleV2 --RuleId <RuleId>
-volclog api collector CreateRule --describe
-volclog api collector ModifyRule --describe
-volclog api collector DeleteRule --describe
+volclog collector list --all
+volclog collector list --describe
+volclog --output-mode file --output-file ./collector-detail.json collector get --rule-id <RuleId>
+volclog collector create --describe
+volclog collector modify --describe
+volclog collector delete --describe
 ```
 
 需要 body 时：
 
 ```bash
-volclog api collector CreateRule --print-request-template=full
-volclog --dry-run api collector CreateRule --request file://req.json
+volclog collector create --print-request-template=full
+volclog --dry-run collector create --request file://req.json
 ```
 
 ## Bind Host Groups

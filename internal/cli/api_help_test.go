@@ -160,11 +160,12 @@ func TestAPIDescribeIncludesShortcutFallbackGuidance(t *testing.T) {
 		`"volclog log search --describe"`,
 		`"volclog log export --describe"`,
 		`"fallback_discovery": "volclog capabilities --group log --view text"`,
-		`"scenario_routing": [`,
-		`"volclog log put --describe"`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in api describe output: %q", want, out)
 		}
+	}
+	if strings.Contains(out, `"scenario_routing":`) {
+		t.Fatalf("api action describe should omit scenario_routing: %q", out)
 	}
 }

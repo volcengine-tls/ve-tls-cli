@@ -14,7 +14,7 @@ func runConfigure(ctx *Context, args []string) (any, error) {
 	if err := ctx.LoadConfig(); err != nil {
 		return nil, err
 	}
-	return runSubcommandGroup(args, usageConfigure(), nil, func(command string, commandArgs []string) (any, error) {
+	return runSubcommandGroup(args, usageConfigure(), nil, nil, func(command string, commandArgs []string) (any, error) {
 		switch command {
 		case "set":
 			return configureSet(ctx, commandArgs)

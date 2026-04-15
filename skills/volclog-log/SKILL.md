@@ -1,19 +1,19 @@
 ---
 name: volclog-log
-description: Use when querying, searching, exporting, consuming, or analyzing logs with volclog, including Chinese intents such as 检索日志, 导出日志, 消费日志, 拉取原始日志, 游标消费, shard 日志 and English intents such as search logs, export logs, consume logs, pull logs by cursor, or analysis query.
+description: Use when querying, writing, exporting, consuming, or analyzing logs with volclog, including Chinese intents such as 检索日志, 写日志, 导出日志, 消费日志, 拉取原始日志, 游标消费, shard 日志 and English intents such as search logs, put logs, ingest logs, export logs, consume logs, pull logs by cursor, or analysis query.
 ---
 
 # volclog Log
 
 ## Overview
 
-这个 skill 负责把“查日志、导出日志、分析日志、消费日志”四类诉求稳定路由到 `log search`、`log export`、`log export-analysis`、`api log/shard Consume*`。
+这个 skill 负责把“查日志、写日志、导出日志、分析日志、消费日志”五类诉求稳定路由到 `log search`、`log ingest/log put`、`log export`、`log export-analysis`、`api log/shard Consume*`。
 
 > **前置条件：** 先阅读 [`../volclog-shared/SKILL.md`](../volclog-shared/SKILL.md)；如用户在排查环境问题，先跑 `doctor`。
 
 ## Agent 快速执行顺序
 
-1. 先判断是普通检索、原始导出、分析结果导出，还是消费日志
+1. 先判断是普通检索、日志写入、原始导出、分析结果导出，还是消费日志
 2. 普通检索先 `log search`
 3. 结果很大再切 `--output-mode file log export`
 4. 出现 `select/聚合/统计` 再切 `log export-analysis`
@@ -39,6 +39,10 @@ description: Use when querying, searching, exporting, consuming, or analyzing lo
 
 - 先看普通检索:
   `volclog log search --describe`
+- 批量写入文本或 JSON 日志:
+  `volclog log ingest --describe`
+- 已准备好原始 PutLogs 请求:
+  `volclog log put --describe`
 - 先消费原始日志:
   `volclog api shard DescribeShards --describe`
 - 大结果原始日志:
@@ -56,8 +60,10 @@ description: Use when querying, searching, exporting, consuming, or analyzing lo
   先用 `volclog --output-mode file log export --describe`
 - 用户说“SQL / 聚合 / count / group by / analysis result”：
   先用 `volclog --output-mode file log export-analysis --describe`
-- 用户说“写日志 / put logs / web tracking”：
-  先用 `volclog api log PutLogs --describe` 或 `volclog api log WebTracks --describe`
+- 用户说“写日志 / put logs / ingest logs”：
+  先用 `volclog log ingest --describe`
+- 用户说“WebTracking / 前端埋点”：
+  先用 `volclog api log WebTracks --describe`
 
 ## Core Rules
 
@@ -77,18 +83,24 @@ description: Use when querying, searching, exporting, consuming, or analyzing lo
 
 ## 日志写入说明
 
-`log` 组不只有检索，也包含写入类 API。用户说“写日志 / put logs / web tracking / 前端埋点”时，不要继续留在 `log search`。
+`log` 组不只有检索，也包含写入类 shortcut 和 API。用户说“写日志 / put logs / ingest logs / web tracking / 前端埋点”时，不要继续留在 `log search`。
 
-- 服务端或离线批量写入：
-  `volclog api log PutLogs --describe`
+- 批量导入文本或 JSON 日志：
+  `volclog log ingest --describe`
+- 已经准备好 PutLogs 原始请求体：
+  `volclog log put --describe`
 - 前端埋点或 WebTracking：
   `volclog api log WebTracks --describe`
-- 写入前先拿模板：
-  `volclog api log PutLogs --print-request-template=full`
+- 写入前需要看原始模板时：
+  `volclog log put --print-request-template=full`
 
 写入场景的关键提醒：
 
-- 写入通常直接走 `api log <Action>`，当前没有对应 shortcut
+- 文本行或结构化 JSON 批量写入，优先 `log ingest`
+- `log ingest` 默认按 500 条一批发送，默认压缩为 `lz4`
+- `lines` 输入会把每行文本写入 `__content__`
+- `jsonl/json-array` 会保留用户原始字段；未指定 `--time-field` 时会自动补本次命令启动时的毫秒时间戳
+- 已经准备好原始 PutLogs 请求体时，再用 `log put`
 - `PutLogs` 的请求体结构和普通查询完全不同，先看模板，不要凭记忆硬写
 - 如果用户只是“验证能不能写进去”，先构造最小样例，再决定是否批量化
 

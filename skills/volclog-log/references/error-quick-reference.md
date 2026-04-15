@@ -56,7 +56,8 @@ volclog log search --topic-id <TopicId> --query "*" --from "2026-03-14 00:00:00"
 - 普通检索：`volclog log search --describe`
 - 原始导出：`volclog --output-mode file log export --describe`
 - 分析导出：`volclog --output-mode file log export-analysis --describe`
-- 写日志：`volclog api log PutLogs --describe`
+- 写日志：`volclog log ingest --describe`
+- 原始 PutLogs 请求：`volclog log put --describe`
 
 ## stdout 结果过大
 

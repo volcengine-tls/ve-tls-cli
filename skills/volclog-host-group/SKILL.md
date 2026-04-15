@@ -7,16 +7,15 @@ description: Use when operating TLS host groups with volclog, including Chinese 
 
 ## Overview
 
-这个 skill 负责 `host-group` 组。它适合机器组创建、修改、删除、查看成员、绑定采集规则，以及自动更新相关操作。
+这个 skill 负责 `host-group` 组。基础机器组管理优先走 `host-group` shortcut；查看成员、绑定采集规则、自动更新这类低频或更细动作，再升级到 `api`。
 
 > **前置条件：** 先阅读 [`../volclog-shared/SKILL.md`](../volclog-shared/SKILL.md)。
 
 ## Agent 快速执行顺序
 
-1. 先判断是在做机器组管理、查看机器状态，还是规则绑定
-2. 先看 `volclog capabilities --group host-group --view text`
-3. 再选 action，执行 `volclog api host-group <Action> --describe`
-4. 写入型动作先模板、再 `--dry-run`
+1. 基础机器组管理先用 `host-group list/get/create/modify/delete`
+2. 如果要看主机成员、规则绑定或自动更新，再进入 `capabilities -> api --describe`
+3. 写入型动作先模板、再 `--dry-run`
 
 ## Agent 禁止行为
 
@@ -29,22 +28,22 @@ description: Use when operating TLS host groups with volclog, including Chinese 
 - 看机器组能力：
   `volclog capabilities --group host-group --view text`
 - 列机器组：
-  `volclog api host-group DescribeHostGroupsV2 --describe`
+  `volclog host-group list --describe`
 - 列机器组时先裁剪深层输出：
-  `volclog api host-group DescribeHostGroupsV2 --jmes-filter "HostGroupHostsRulesInfos[].HostGroupInfo.{HostGroupId: HostGroupId, HostGroupName: HostGroupName}"`
+  `volclog host-group list --all --jmes-filter "HostGroupHostsRulesInfos[].HostGroupInfo.{HostGroupId: HostGroupId, HostGroupName: HostGroupName}"`
 - 创建机器组：
-  `volclog api host-group CreateHostGroup --describe`
+  `volclog host-group create --describe`
 - 修改机器组：
-  `volclog api host-group ModifyHostGroup --describe`
+  `volclog host-group modify --describe`
 - 绑定规则：
   `volclog api host-group ApplyHostGroupToRules --describe`
 
 ## 场景路由
 
 - 用户说“机器组 / machine group / host group”：
-  先用 `volclog api host-group DescribeHostGroupsV2 --describe`
+  先用 `volclog host-group list --describe`
 - 用户说“创建机器组 / 修改机器组”：
-  先用 `volclog api host-group CreateHostGroup --describe` 或 `ModifyHostGroup --describe`
+  先用 `volclog host-group create --describe` 或 `host-group modify --describe`
 - 用户说“看机器组里的主机 / 机器状态 / hosts”：
   先用 `volclog api host-group DescribeHosts --describe`
 - 用户说“把规则绑到机器组”：
@@ -54,7 +53,8 @@ description: Use when operating TLS host groups with volclog, including Chinese 
 
 ## Core Rules
 
-- `DescribeHostGroupsV2 / DescribeHostGroupV2` 偏资源查看
+- `host-group list/get/create/modify/delete` 是基础机器组管理主路径
+- `DescribeHostGroupsV2 / DescribeHostGroupV2` 偏底层资源查看
 - `DescribeHosts` 偏机器成员与在线情况查看
 - `ApplyHostGroupToRules` 偏规则绑定，不是机器组属性修改
 - 自动更新类操作先看 `ModifyHostGroupsAutoUpdate`，不要自己猜字段

@@ -8,7 +8,7 @@
 |---|---|---|
 | 看项目清单 | `volclog project list --describe`，全量时继续 `--all` | 不要先跑 `capabilities` |
 | 拿 `ProjectId` | `volclog project list --all --jmes-filter "Projects[].{ProjectId: ProjectId, ProjectName: ProjectName}"` | 不要先跑 `project get` |
-| 模糊找项目 | `volclog project list --fuzzy-search-key <keyword>` | 不要直接猜 `ProjectId` |
+| 按完整项目名过滤 | `volclog project list --project-name <name> --all` | 不要直接猜 `ProjectId` |
 | 看单个项目详情 | `volclog project get --describe`，详情大时配合 `--output-mode file` | 不要继续在 list 结果里猜字段 |
 | 创建项目 | `volclog project create --describe` | 不要先退化成 `api project CreateProject` |
 
@@ -26,11 +26,13 @@ volclog project list --all --jmes-filter "Projects[].{ProjectId: ProjectId, Proj
 volclog project list --jmes-filter "Projects[0].ProjectId"
 ```
 
-如果用户是模糊找项目：
+如果用户已知完整项目名：
 
 ```bash
-volclog project list --fuzzy-search-key <keyword>
+volclog project list --project-name <name> --all
 ```
+
+如果只知道关键片段，先把完整列表收回来，再用 `--jmes-filter` 或本地过滤。
 
 看详情时，如果返回层级较深，优先直接落文件：
 

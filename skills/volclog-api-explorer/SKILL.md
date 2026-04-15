@@ -17,7 +17,7 @@ description: Use when volclog shortcuts do not cover the task, when a user asks 
 
 - 这是 fallback skill，不是默认入口。
 - 只有 domain skill 明确不覆盖，或用户明确点名某个 OpenAPI action 时，才进入这里。
-- 能用 `project/topic/index/log/metric-topic/assistant` shortcut 解决的事，不要先来这里重新探索一遍。
+- 能用 `project/topic/index/log/host-group/collector/metric-topic` shortcut 解决的事，不要先来这里重新探索一遍。
 - 进入这里之后，也不要重新发明流程；优先照抄 CLI 原生提示字段里的命令。
 
 ## 执行前必做
@@ -69,7 +69,7 @@ description: Use when volclog shortcuts do not cover the task, when a user asks 
 - 普通 topic/index 创建或修改
 - 普通日志检索、原始日志导出、分析结果导出
 - 常见 metric topic 查询
-- 常见 assistant answer 查询
+- 常见 host-group / collector CRUD
 
 这些场景优先回到对应 domain skill 的默认配方。
 

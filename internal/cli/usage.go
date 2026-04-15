@@ -204,22 +204,9 @@ Commands:
 
 场景速选:
   - 列项目/拿 ProjectId: volclog project list --describe
-  - 模糊找项目: volclog project list --fuzzy-search-key <keyword>
+  - 按项目名过滤: volclog project list --project-name <name>
   - 看单项目详情: volclog project get --describe
   - 创建或修改项目: volclog project create --describe / volclog project modify --describe
-
-Examples:
-  tlsctl project list --page-size 20 --project-name test
-  tlsctl project list --all
-  tlsctl project get --project-id <pid>
-  tlsctl project create --describe
-  tlsctl project create --print-request-template=full
-  tlsctl project create --project-name demo --description test
-  tlsctl project modify --project-id <pid> --description updated --favourite
-  tlsctl project delete --project-id <pid>
-  tlsctl --output table project list
-  tlsctl --output-mode file project list
-  tlsctl --trace-dir ./.tlsctl/traces project list
 
 Exit Code:
   0 success
@@ -260,21 +247,6 @@ Notes:
   - Complex request bodies can be passed via --request file://...
   - --request also accepts "-" to read JSON from stdin.
 
-Examples:
-  tlsctl topic list --project-id <pid> --page-size 20
-  tlsctl topic list --project-id <pid> --all
-  tlsctl topic get --topic-id <tid>
-  tlsctl topic create --describe
-  tlsctl topic create --print-request-template=full
-  tlsctl topic create --project-id <pid> --topic-name demo-topic --ttl 30 --shard-count 2 --auto-split --max-split-shard 10
-  tlsctl topic modify --topic-id <tid> --description updated --ttl 60
-  tlsctl topic delete --topic-id <tid>
-  tlsctl topic create --request file://./create_topic.json
-  cat ./create_topic.json | tlsctl topic create --request -
-  tlsctl --output table topic list --project-id <pid>
-  tlsctl --output-mode file topic list --project-id <pid>
-  tlsctl --trace-dir ./.tlsctl/traces topic list --project-id <pid>
-
 Exit Code:
   0 success
   1 usage / invalid args
@@ -303,7 +275,6 @@ Commands:
   modify   Modify a metric topic
   delete   Delete a metric topic
   search   Query metric data via /SearchLogs (SQL/PromQL/PromQL+SQL in Query)
-  prom     Prometheus HTTP API compatible calls
 
 场景速选:
   - 列指标主题: volclog metric-topic list --describe
@@ -314,23 +285,7 @@ Notes:
   - TopicName and TopicId cannot be provided together for list.
   - --all 会自动翻完分页；不要与 --page-number 混用。
   - Complex request bodies can be passed via --request file://...
-  - Prom endpoints support GET and POST (application/x-www-form-urlencoded).
   - --request also accepts "-" to read JSON from stdin.
-
-Examples:
-  tlsctl metric-topic list --project-id <pid> --page-size 20
-  tlsctl metric-topic list --project-id <pid> --all
-  tlsctl metric-topic get --topic-id <metric_tid>
-  tlsctl metric-topic create --describe
-  tlsctl metric-topic create --print-request-template=full
-  tlsctl metric-topic create --project-id <pid> --topic-name demo-metric --ttl 30 --shard-count 2
-  tlsctl --output table metric-topic list --project-id <pid>
-  tlsctl metric-topic modify --topic-id <metric_tid> --description updated --ttl 60
-  tlsctl metric-topic delete --topic-id <metric_tid>
-  tlsctl metric-topic search --topic-id <metric_tid> --query 'avg(rate(http_requests_total[5m]))' --from 1710374400000 --to 1710378000000
-  tlsctl metric-topic prom --help
-  tlsctl --output-mode file metric-topic search --topic-id <metric_tid> --query 'up' --from 1710374400000 --to 1710378000000
-  tlsctl --trace-dir ./.tlsctl/traces metric-topic search --topic-id <metric_tid> --query 'up' --from 1710374400000 --to 1710378000000
 
 Exit Code:
   0 success
@@ -394,15 +349,6 @@ Commands:
   - 创建或修改索引: volclog index create --describe / volclog index modify --describe
   - 不确定 body 怎么写: volclog index create --print-request-template=full
 
-Examples:
-  tlsctl index get --topic-id <tid>
-  tlsctl index create --describe
-  tlsctl index create --print-request-template=full
-  tlsctl index create --topic-id <tid> --request file://./index.json
-  tlsctl index modify --topic-id <tid> --request file://./index.json
-  cat ./index.json | tlsctl index create --topic-id <tid> --request -
-  tlsctl --trace-dir ./.tlsctl/traces index get --topic-id <tid>
-
 Exit Code:
   0 success
   1 usage / invalid args
@@ -452,24 +398,6 @@ Notes:
   - For analysis (query contains "|"), Context/Sort/Limit/Offset in body are not effective; use SQL limit/offset in Query. Analysis does not support Context pagination.
   - Analysis/export-analysis column availability depends on current index config and usually applies incrementally; old logs may still show null for newly indexed fields.
 
-Examples:
-  tlsctl log search --describe
-  tlsctl log search --print-request-template=full
-  tlsctl log histogram --topic-id <tid> --query "*" --from 1710374400000 --to 1710378000000 --interval 60
-  tlsctl log context --topic-id <tid> --context-flow <flow> --package-offset 66 --source 127.0.0.1 --prev-logs 20 --next-logs 20
-  tlsctl log put --describe
-  tlsctl log put --print-request-template=full
-  tlsctl log put --topic-id <tid> --request file://./put_logs.json
-  tlsctl log ingest --describe
-  tlsctl log ingest --topic-id <tid> --input file://./app.log --input-format lines --source host-a --file-name app.log
-  tlsctl log ingest --topic-id <tid> --input file://./events.jsonl --input-format jsonl --time-field ts --time-format unix_ms
-  tlsctl log search --topic-id <tid> --query "*" --from 1710374400000 --to 1710378000000 --limit 100 --sort desc
-  tlsctl log search --request file://./search_logs.json
-  tlsctl --output jsonl log export --topic-id <tid> --query "*" --from 1710374400000 --to 1710378000000 --max-pages 10
-  tlsctl log export-analysis --topic-id <tid> --query "*|select count(*) as cnt group by __time__ limit 100" --from 1710374400000 --to 1710378000000
-  tlsctl --output-mode file log search --topic-id <tid> --query "*" --from 1710374400000 --to 1710378000000
-  tlsctl --trace-dir ./.tlsctl/traces log search --topic-id <tid> --query "*" --from 1710374400000 --to 1710378000000
-
 Exit Code:
   0 success
   1 usage / invalid args
@@ -496,9 +424,6 @@ Agent First:
 Commands:
   list     List host groups
   get      Get a host group by id
-  bind-rules   Bind a host group to rules
-  unbind-rules Unbind a host group from rules
-  delete-host  Delete a host from a host group
   create   Create a host group
   modify   Modify a host group
   delete   Delete a host group
@@ -506,22 +431,7 @@ Commands:
 场景速选:
   - 列机器组/拿 HostGroupId: volclog host-group list --describe
   - 看单机器组详情: volclog host-group get --describe
-  - 绑定/解绑规则: volclog host-group bind-rules --describe / volclog host-group unbind-rules --describe
-  - 删除机器组里的主机: volclog host-group delete-host --describe
   - 创建或修改机器组: volclog host-group create --describe / volclog host-group modify --describe
-
-Examples:
-  tlsctl host-group list --all
-  tlsctl host-group get --host-group-id <hid>
-  tlsctl host-group bind-rules --describe
-  tlsctl host-group bind-rules --host-group-id <hid> --rule-ids '["rid-1","rid-2"]'
-  tlsctl host-group unbind-rules --host-group-id <hid> --rule-ids file://./rule_ids.json
-  tlsctl host-group delete-host --host-group-id <hid> --ip 1.1.1.1
-  tlsctl host-group create --describe
-  tlsctl host-group create --print-request-template=full
-  tlsctl host-group create --host-group-name demo --host-group-type Label --host-identifier app-prod
-  tlsctl host-group modify --host-group-id <hid> --host-group-name demo-v2 --service-logging
-  tlsctl host-group delete --host-group-id <hid>
 
 Exit Code:
   0 success
@@ -544,8 +454,6 @@ Agent First:
 Commands:
   list     List collector rules
   get      Get a collector rule by id
-  bind-host-groups   Bind a rule to host groups
-  unbind-host-groups Unbind a rule from host groups
   create   Create a collector rule
   modify   Modify a collector rule
   delete   Delete a collector rule
@@ -553,20 +461,7 @@ Commands:
 场景速选:
   - 列采集规则/拿 RuleId: volclog collector list --describe
   - 看单规则详情: volclog collector get --describe
-  - 绑定/解绑机器组: volclog collector bind-host-groups --describe / volclog collector unbind-host-groups --describe
   - 创建或修改规则: volclog collector create --describe / volclog collector modify --describe
-
-Examples:
-  tlsctl collector list --project-id <pid> --all
-  tlsctl collector get --rule-id <rid>
-  tlsctl collector bind-host-groups --describe
-  tlsctl collector bind-host-groups --rule-id <rid> --host-group-ids '["hid-1","hid-2"]'
-  tlsctl collector unbind-host-groups --rule-id <rid> --host-group-ids file://./host_group_ids.json
-  tlsctl collector create --describe
-  tlsctl collector create --print-request-template=full
-  tlsctl collector create --topic-id <tid> --rule-name demo-rule --paths file:///var/log/app.log
-  tlsctl collector modify --rule-id <rid> --request file://./rule.json
-  tlsctl collector delete --rule-id <rid>
 
 Exit Code:
   0 success
@@ -595,12 +490,6 @@ Commands:
 Notes:
   - If --instance-id is not provided, TLS_AI_ASSISTANT_INSTANCE_ID will be used.
   - If instance id is missing, --account-id (or LOG_SERVICE_ACCOUNT_ID) is required to find/create one.
-
-Examples:
-  tlsctl assistant describe-session-answer --describe
-  tlsctl assistant describe-session-answer --topic-id <tid> --question 'What happened?'
-  TLS_AI_ASSISTANT_INSTANCE_ID=<id> tlsctl assistant describe-session-answer --topic-id <tid> --question file://./q.txt
-  LOG_SERVICE_ACCOUNT_ID=<account> tlsctl assistant describe-session-answer --topic-id <tid> --question '...'
 
 Exit Code:
   0 success

@@ -36,7 +36,7 @@ description: Use when creating, listing, reading, updating, or deleting TLS proj
 - 用户说“看看有哪些项目 / list projects / 项目清单”：
   先用 `volclog project list --describe`；如果目标是“把项目都看全”，继续用 `volclog project list --all`
 - 用户说“拿项目 ID / 找项目 / 模糊搜项目”：
-  先用 `volclog project list --fuzzy-search-key <keyword>`
+  先用 `volclog project list --all`；如果已知完整项目名，再补 `--project-name <name>`
 - 用户说“看某个项目详情”：
   先用 `volclog project get --describe`
 - 用户说“创建项目 / 修改项目”：
@@ -50,8 +50,8 @@ description: Use when creating, listing, reading, updating, or deleting TLS proj
   `volclog project list --all --jmes-filter "Projects[].{ProjectId: ProjectId, ProjectName: ProjectName}"`
 - 只想拿第一个项目 ID:
   `volclog project list --jmes-filter "Projects[0].ProjectId"`
-- 模糊找项目:
-  `volclog project list --fuzzy-search-key <keyword>`
+- 按完整项目名过滤:
+  `volclog project list --project-name <name> --all`
 - 看单个项目详情并直接落文件：
   `volclog --output-mode file --output-file ./project-detail.json project get --project-id <ProjectId>`
 - 创建前先看约束:
@@ -85,10 +85,10 @@ description: Use when creating, listing, reading, updating, or deleting TLS proj
 - 列表场景默认先把结果裁成 `ProjectId/ProjectName`
 - 普通项目管理优先留在 shortcut 层
 
-## 模糊搜索与分页
+## 按名称过滤与分页
 
-- 已知部分名称但不确定全名时，优先 `--fuzzy-search-key`
-- 需要精确匹配名称时，再用 `--project-name`
+- 已知完整名称时，优先 `--project-name`
+- 只知道关键片段时，先 `volclog project list --all` 再配合 `--jmes-filter` 或本地过滤；shortcut 不够时再升级到 `api project DescribeProjects --describe`
 - 需要全量结果时，优先 `volclog project list --all`
 - 如果用户自己控制翻页，再用 `--page-number` + `--page-size`
 - `--all` 不要和 `--page-number` 混用
@@ -96,7 +96,7 @@ description: Use when creating, listing, reading, updating, or deleting TLS proj
 ## 参数一致性提醒
 
 - 同一个 group 下不同 action 的必填参数不继承
-- `list` 偏查询条件，例如 `--project-name`、`--fuzzy-search-key`
+- `list` 偏查询条件，例如 `--project-name`
 - `get/modify/delete` 更偏稳定 ID，例如 `--project-id`
 - 不要把一个命令记住的 flags 直接迁移到另一个命令；先看 `--describe`
 
@@ -104,7 +104,7 @@ description: Use when creating, listing, reading, updating, or deleting TLS proj
 
 ```bash
 volclog project list --page-size 20
-volclog project list --fuzzy-search-key prod --all
+volclog project list --project-name demo --all
 volclog project list --project-name demo --jmes-filter "Projects[].ProjectId"
 ```
 

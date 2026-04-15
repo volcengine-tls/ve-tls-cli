@@ -151,7 +151,7 @@ func allowsTrailingGlobalsForGroup(group string) bool {
 	switch strings.TrimSpace(group) {
 	case "api":
 		return true
-	case "project", "topic", "metric-topic", "index", "log", "assistant", "host-group", "collector":
+	case "project", "topic", "metric-topic", "index", "log", "host-group", "collector":
 		return true
 	default:
 		return false

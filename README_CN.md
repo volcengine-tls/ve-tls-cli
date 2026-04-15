@@ -137,6 +137,8 @@ volclog project list --jmes-filter "Projects[].{Id: ProjectId, Name: ProjectName
 | **volclog-topic** | 主题配置与约束校验 |
 | **volclog-index** | 索引分析与创建，自动处理全文与键值索引结构 |
 | **volclog-log** | 核心日志检索、SQL 分析与大数据导出路由 |
+| **volclog-host-group** | 机器组 CRUD 与机器组相关 API fallback 指引 |
+| **volclog-collector** | 采集规则 CRUD 与采集规则相关 API fallback 指引 |
 | **volclog-metric-topic** | 指标流查询与 PromQL 支持 |
 | **volclog-alarm** | 告警规则排查与配置 |
 | **volclog-api-explorer** | 提供底层 OpenAPI 的全量探测与调用能力 |

@@ -73,6 +73,7 @@ description: Use when operating volclog global workflows such as configure or do
 - 消费原始日志：`volclog api shard DescribeShards --describe`
 - 导出原始日志：`volclog --output-mode file log export --describe`
 - 导出分析结果：`volclog --output-mode file log export-analysis --describe`
+- 批量写日志：`volclog log ingest --describe`
 
 ## Intent Routing
 
@@ -109,7 +110,7 @@ description: Use when operating volclog global workflows such as configure or do
 
 - 用户只是要列资源、拿 ID、创建 topic、查看索引、检索日志
 - skill 已经给了默认命令配方
-- 需求明显落在 `project/topic/index/log/metric-topic/assistant` 高频 shortcut 里
+- 需求明显落在 `project/topic/index/log/host-group/collector/metric-topic` 高频 shortcut 里
 
 只有这些情况才升级：
 

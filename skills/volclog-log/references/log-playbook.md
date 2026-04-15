@@ -10,7 +10,7 @@
 | 按游标或 shard 消费日志 | `volclog api shard DescribeShards --describe` | 不要先跑 `search/export` |
 | 导出很多原始日志 | `volclog --output-mode file log export --describe` | 不要先跑分析导出 |
 | 做统计/聚合/分析 | `volclog --output-mode file log export-analysis --describe` | 不要继续用 `log export` |
-| 写日志 / put logs | `volclog api log PutLogs --describe` | 不要继续留在 shortcut |
+| 写日志 / put logs | `volclog log ingest --describe` | 不要继续留在检索路径 |
 
 ## Plain Search
 
@@ -28,6 +28,20 @@ volclog log search --describe
 
 ```bash
 volclog --output-mode file log export --describe
+```
+
+## Write Logs
+
+用户说“写日志 / put logs / ingest logs”时，先用：
+
+```bash
+volclog log ingest --describe
+```
+
+如果已经准备好了原始 PutLogs 请求体，再改用：
+
+```bash
+volclog log put --describe
 ```
 
 ## Consume
