@@ -15,7 +15,7 @@ Treat this skill as the thin delta above runtime contracts:
 
 - `routing`: natural-language intent to `tool / workflow / raw`
 - `sops`: reusable cross-group workflows and stop conditions
-- `best-practices`: recovery recipes, token control, profile switching, and known traps
+- `best-practices`: recovery recipes, token control, profile switching, stateless credential injection, and known traps
 
 ## Load Order
 
@@ -23,7 +23,7 @@ Treat this skill as the thin delta above runtime contracts:
 2. When `tool describe` or `workflow describe` returns `contract_cache_hint`, reuse the cached contract only while the same CLI build still reports the same contract_digest; refresh immediately after digest changes, CLI/build changes, or contract-mismatch style execution errors.
 3. Read [references/routing.md](references/routing.md) when natural-language intent does not obviously map to a `tool` or `workflow` id.
 4. Read [references/sops.md](references/sops.md) for multi-step tasks that span more than one group.
-5. Read [references/best-practices.md](references/best-practices.md) for token control, profile switching, recovery recipes, and known traps.
+5. Read [references/best-practices.md](references/best-practices.md) for token control, profile switching, stateless agent/CI credential injection, recovery recipes, and known traps.
 
 ## Hard Rules
 
@@ -32,6 +32,7 @@ Treat this skill as the thin delta above runtime contracts:
 - Prefer `tool` for published public APIs, `workflow` for CLI-owned high-level flows, and `raw` only when method/path is already known or no public contract exists.
 - Prefer `--dry-run` before any write or destructive change.
 - Prefer file or artifact output for large responses.
+- Never persist AK/SK or token values in the skill, prompt, session memory, or request artifacts. For stateless agents and CI, ask the host or broker for a one-shot `--secrets-file` or process-scoped environment injection instead.
 
 ## First Response Checklist
 
@@ -49,6 +50,7 @@ Treat this skill as the thin delta above runtime contracts:
 | Execute public API contract | `volclog tool exec <group.action>` |
 | Use CLI-owned ingest/export workflow | `volclog workflow describe/exec <group.command>` |
 | Call an exact method/path | `volclog raw --method ... --path ...` |
+| Authenticate a stateless agent/CI run | host-selected local profile -> one-shot `--secrets-file` or `context.secrets_file` |
 
 ## Common Mistakes
 
@@ -57,3 +59,4 @@ Treat this skill as the thin delta above runtime contracts:
 - Writing `data.Total` in `projection`; filters run on the raw result, not the CLI envelope.
 - Forgetting `tool describe --view full` when compact output omits low-frequency optional nesting.
 - Guessing `ingest` or `export` as `tool` ids; these belong to the `workflow` surface.
+- Injecting broad environment variables into the whole sandbox and assuming `profile` still chooses the account. Environment credentials override profile resolution.

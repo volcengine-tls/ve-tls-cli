@@ -10,14 +10,19 @@ Use this table only when the user intent is still ambiguous after checking `tool
 | Inspect host groups or machine membership | host-group, machine group, agent list, inspect hosts | `tool list host-group --verb list` | `volclog tool list host-group --verb list` | `volclog tool describe host-group.describe-host-groups-v2` |
 | Inspect or troubleshoot alarm rules | alarm, alert, notification policy, incident rule | `tool list alarm --verb list` | `volclog tool list alarm --verb list` | `volclog tool describe alarm.describe-alarms` |
 | Ingest local lines, jsonl, or json-array into a topic | ingest, upload, ship, write logs, put logs | `workflow describe/exec log.ingest` | `volclog workflow describe log.ingest` | `volclog workflow describe log.ingest` |
+| Preview time distribution before narrowing a search window | histogram, trend over time, time buckets, peak window, count over time | `tool describe/exec log.describe-histogram-v1` | `volclog tool describe log.describe-histogram-v1` | `volclog tool exec log.describe-histogram-v1 --input '{"TopicId":"<TopicId>","Query":"error","StartTime":1700000000000,"EndTime":1700003600000}'` |
 | Export many raw search rows | export, download logs, dump search results | `workflow describe/exec log.export` | `volclog workflow describe log.export` | `volclog workflow describe log.export` |
-| Export SQL/analysis rows | analyze, sql export, export analysis | `workflow describe/exec log.export-analysis` | `volclog workflow describe log.export-analysis` | `volclog workflow describe log.export-analysis` |
+| Export large SQL/analysis row sets | analyze, sql export, export analysis, full analysis rows | `workflow describe/exec log.export-analysis` | `volclog workflow describe log.export-analysis` | `volclog workflow describe log.export-analysis` |
 | Exact method/path is already known | raw, method, path, transport | `raw` | `volclog raw --method <METHOD> --path <PATH>` | `volclog raw --method POST --path /SearchLogs` |
 
 ## Decision Tree
 
 - If the target is a published public API and you do not yet know the exact action id, start with `tool list`.
 - If the user intent says ingest, export, or another CLI-owned orchestration, prefer `workflow`.
+- If the user first needs to know when the hits are concentrated or how large the whole search window is, start from `tool describe/exec log.describe-histogram-v1`.
+- If the user wants interactive analysis, SQL exploration, or only a small preview, prefer `tool describe/exec log.search` before any export workflow.
+- If the user wants the full analysis row set, an offline file, or a result that may exceed stdout/token budget, prefer `workflow describe/exec log.export-analysis`.
+- If the user wants rows after looking at time buckets, use `log.describe-histogram-v1` to choose a narrower time range, then switch to `log.search`.
 - If the user already supplied exact method and path, use `raw`.
 - If two surfaces seem possible, prefer `tool`, then `workflow`, and keep `raw` as the last resort.
 

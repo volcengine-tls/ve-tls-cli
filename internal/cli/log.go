@@ -84,7 +84,7 @@ func logHistogram(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ctx.Do("POST", "/DescribeHistogram", nil, nil, body)
+	return ctx.Do("POST", "/DescribeHistogramV1", nil, nil, body)
 }
 
 func logContext(ctx *Context, args []string) (any, error) {

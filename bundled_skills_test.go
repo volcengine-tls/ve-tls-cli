@@ -36,6 +36,8 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"Prefer file or artifact output for large responses.",
 		"contract_cache_hint",
 		"reuse the cached contract only while the same CLI build still reports the same contract_digest",
+		"one-shot `--secrets-file`",
+		"host-selected local profile",
 	} {
 		if !strings.Contains(skill, want) {
 			t.Fatalf("SKILL.md missing %q", want)
@@ -46,13 +48,17 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 	for _, want := range []string{
 		"Ingest local lines, jsonl, or json-array into a topic",
 		"workflow describe/exec log.ingest",
-		"Export SQL/analysis rows",
+		"Export large SQL/analysis row sets",
+		"Preview time distribution before narrowing a search window",
+		"tool describe/exec log.describe-histogram-v1",
 		"Exact method/path is already known",
 		"host-group",
 		"alarm",
 		"--verb list",
 		"re-run `volclog tool list <group> --verb <verb>`",
 		"Human shortcut groups are for humans.",
+		"interactive analysis",
+		"log.export-analysis",
 	} {
 		if !strings.Contains(routing, want) {
 			t.Fatalf("routing.md missing %q", want)
@@ -64,6 +70,10 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"log.ingest",
 		"log.export",
 		"log.export-analysis",
+		"log.describe-histogram-v1",
+		"HitCount",
+		"Histogram.TotalCount",
+		"interactive SQL exploration",
 		"10-30 seconds",
 		"Status",
 		"Stop when",
@@ -78,13 +88,24 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 	for _, want := range []string{
 		"Token Control",
 		"Profile And Credential Selection",
+		"Stateless Agent / CI Credential Injection",
 		"403 Forbidden",
 		"errorCode",
 		"filter matched no value",
 		"workflow` ids such as `log.ingest` and `log.export` are not public API tool ids",
 		"tool / workflow / raw",
+		"`log.search` itself supports plain search and SQL/analysis queries",
+		"`log.describe-histogram-v1` is for time-distribution preview and total hit estimation only for pure search queries before widening or narrowing a search window",
+		"only for pure search queries",
+		"`HitCount` is only the count returned in the current `SearchLogs` response",
+		"`Histogram.TotalCount` is the better whole-window hit count",
+		"`ResultStatus=incomplete` means the service returned only a partial scan",
+		"`log.export-analysis` is for large SQL/analysis row exports",
 		`volclog tool exec project.create --input '{"ProjectName":"test","Region":"cn-guilin-boe"}'`,
 		`volclog --dry-run tool exec project.describe-projects --input '{"ProjectName":"demo"}'`,
+		"`--secrets-file`",
+		"`context.secrets_file`",
+		"VOLCENGINE_ACCESS_KEY_ID",
 	} {
 		if !strings.Contains(bestPractices, want) {
 			t.Fatalf("best-practices.md missing %q", want)
@@ -132,14 +153,20 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 		t.Fatalf("unexpected target dir: %+v", m)
 	}
 	foundCachePrinciple := false
+	foundStatelessSecretPrinciple := false
 	for _, principle := range m.Principles {
 		if principle == "respect_contract_cache_hint" {
 			foundCachePrinciple = true
-			break
+		}
+		if principle == "host_managed_secret_injection_for_stateless_agents" {
+			foundStatelessSecretPrinciple = true
 		}
 	}
 	if !foundCachePrinciple {
 		t.Fatalf("manifest missing respect_contract_cache_hint principle: %+v", m)
+	}
+	if !foundStatelessSecretPrinciple {
+		t.Fatalf("manifest missing host_managed_secret_injection_for_stateless_agents principle: %+v", m)
 	}
 	for _, want := range []string{"routing", "workflows", "recovery", "traps"} {
 		if _, ok := m.Sources[want]; !ok {
@@ -216,5 +243,15 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 		if _, ok := entry["fix"]; !ok {
 			t.Fatalf("trap missing fix: %+v", entry)
 		}
+	}
+	foundEnvOverrideTrap := false
+	for _, entry := range traps.Traps {
+		if trap, _ := entry["trap"].(string); trap == "env-creds-override-profile" {
+			foundEnvOverrideTrap = true
+			break
+		}
+	}
+	if !foundEnvOverrideTrap {
+		t.Fatalf("traps template missing env-creds-override-profile: %+v", traps)
 	}
 }

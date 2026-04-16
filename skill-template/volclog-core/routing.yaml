@@ -36,6 +36,13 @@ intents:
     first_command: volclog workflow describe log.ingest
     fallback: volclog tool describe log.put
     retry_with_verb: volclog tool list log --verb put
+  - intent: preview-search-volume
+    keywords: [histogram, trend over time, time buckets, peak window, count over time]
+    preferred_surface: tool
+    preferred_id: log.describe-histogram-v1
+    first_command: volclog tool describe log.describe-histogram-v1
+    fallback: volclog tool describe log.search
+    retry_with_verb: volclog tool list log --verb describe
   - intent: export-search-results
     keywords: [export, download logs, dump search results]
     preferred_surface: workflow
@@ -44,7 +51,7 @@ intents:
     fallback: volclog tool describe log.search
     retry_with_verb: volclog tool list log --verb search
   - intent: export-analysis-results
-    keywords: [analyze, sql export, export analysis]
+    keywords: [analyze, sql export, export analysis, full analysis rows]
     preferred_surface: workflow
     preferred_id: log.export-analysis
     first_command: volclog workflow describe log.export-analysis

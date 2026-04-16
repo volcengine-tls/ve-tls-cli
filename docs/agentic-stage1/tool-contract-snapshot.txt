@@ -192,7 +192,6 @@ log	DescribeCursorTime	POST	/DescribeCursorTime
 log	DescribeDownloadTasks	GET	/DescribeDownloadTasks
 log	DescribeDownloadUrl	GET	/DescribeDownloadUrl
 log	DescribeFavourites	GET	/DescribeFavourites
-log	DescribeHistogram	POST	/DescribeHistogram
 log	DescribeHistogramV1	POST	/DescribeHistogramV1
 log	DescribeKafkaOffset	POST	/DescribeKafkaOffset
 log	DescribeLatestLog	POST	/DescribeLatestLog

@@ -47,3 +47,26 @@ func TestShortcutPrintRequestTemplateTopicCreateFull(t *testing.T) {
 		}
 	}
 }
+
+func TestShortcutDescribeLogHistogramUsesDescribeHistogramV1(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"log", "histogram", "--describe"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		`"command": "histogram"`,
+		`"action": "log.histogram"`,
+		`"path": "/DescribeHistogramV1"`,
+		`"api_action": "DescribeHistogramV1"`,
+		`"DescribeHistogramV1"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in stdout: %q", want, out)
+		}
+	}
+	if strings.Contains(out, `"api_action": "DescribeHistogram"`) {
+		t.Fatalf("unexpected legacy api_action in stdout: %q", out)
+	}
+}

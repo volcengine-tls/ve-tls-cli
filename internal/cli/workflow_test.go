@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -102,6 +103,39 @@ func TestWorkflowDescribeReturnsWorkflowContract(t *testing.T) {
 		if _, ok := props[key]; !ok {
 			t.Fatalf("expected workflow input schema to contain %q, got %#v", key, props)
 		}
+	}
+}
+
+func TestWorkflowDescribeLogExportAnalysisExplainsLargeAnalysisExportUseCase(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"--output", "json", "workflow", "describe", "log.export-analysis"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v", err)
+	}
+	desc, _ := out["description"].(string)
+	if !strings.Contains(strings.ToLower(desc), "large") && !strings.Contains(desc, "大量") {
+		t.Fatalf("expected description to mention large-result export boundary, got %q", desc)
+	}
+	notes, ok := out["notes"].([]any)
+	if !ok || len(notes) == 0 {
+		t.Fatalf("expected notes array, got %#v", out["notes"])
+	}
+	foundBoundary := false
+	for _, note := range notes {
+		text, _ := note.(string)
+		lower := strings.ToLower(text)
+		if strings.Contains(lower, "log.search") && (strings.Contains(lower, "interactive") || strings.Contains(text, "交互式")) {
+			foundBoundary = true
+			break
+		}
+	}
+	if !foundBoundary {
+		t.Fatalf("expected notes to mention interactive log.search boundary, got %#v", notes)
 	}
 }
 

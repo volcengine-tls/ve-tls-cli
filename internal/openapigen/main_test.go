@@ -720,7 +720,7 @@ func TestBuildToolCatalogExpandsNestedArrayItemSchemasInsideAllOfRefs(t *testing
 				Type: "object",
 				Properties: map[string]swaggerSchema{
 					"Keys": {
-						Type: "array",
+						Type:  "array",
 						Items: &swaggerSchema{Type: "string"},
 					},
 				},
@@ -730,7 +730,7 @@ func TestBuildToolCatalogExpandsNestedArrayItemSchemasInsideAllOfRefs(t *testing
 				Type: "object",
 				Properties: map[string]swaggerSchema{
 					"Keys": {
-						Type: "array",
+						Type:  "array",
 						Items: &swaggerSchema{Type: "string"},
 					},
 				},
@@ -739,7 +739,7 @@ func TestBuildToolCatalogExpandsNestedArrayItemSchemasInsideAllOfRefs(t *testing
 				Type: "object",
 				Properties: map[string]swaggerSchema{
 					"Fields": {
-						Type: "array",
+						Type:  "array",
 						Items: &swaggerSchema{Ref: "#/definitions/dao.ParquetField"},
 					},
 				},

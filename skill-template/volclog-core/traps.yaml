@@ -7,6 +7,14 @@ traps:
     symptom: data.Total or data.items style paths return null
     why: data.Total is wrong because filtering happens before the CLI envelope
     fix: rebuild the filter against raw keys such as Total or Results
+  - trap: hitcount-is-not-whole-window-total
+    symptom: SearchLogs.HitCount is used as the total count for the whole time window
+    why: HitCount only reflects the rows returned in the current SearchLogs response window
+    fix: for pure search queries use log.describe-histogram-v1 and read Histogram.TotalCount before deciding how to narrow or export
+  - trap: incomplete-means-partial-scan
+    symptom: ResultStatus=incomplete is treated as final evidence
+    why: incomplete means the service returned a partial scan to keep latency short
+    fix: narrow the time range and rerun before trusting counts, empty results, or histogram buckets
   - trap: workflow-ids-are-not-tool-ids
     symptom: log.ingest or log.export returns unknown tool
     why: log.ingest and log.export belong to workflow, not tool
@@ -15,3 +23,7 @@ traps:
     symptom: agent starts from project/topic/log shortcut commands
     why: agent flows should start from tool or workflow instead of shortcut groups
     fix: rediscover with tool list or workflow list and re-enter through the contract surface
+  - trap: env-creds-override-profile
+    symptom: a stateless sandbox run selects profile A but appears to use another account
+    why: process-wide environment credentials override local profile resolution
+    fix: remove broad env injection and switch to a host-generated one-shot secrets file plus an explicit non-secret profile selector

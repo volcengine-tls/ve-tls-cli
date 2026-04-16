@@ -128,9 +128,9 @@ func workflowDescribeOutput(spec workflowCatalog) map[string]any {
 			"transport":   "--input accepts file://req.json, -, or inline JSON object.",
 			"recommended": "Workflow input is a flat JSON object; keep fields like TopicId, Query, StartTime, EndTime at the top level.",
 		},
-		"context_schema":           contextSchema,
-		"execution_schema":         compactToolExecutionSchema(executionSchema),
-		"notes":                    workflowNotes(spec),
+		"context_schema":   contextSchema,
+		"execution_schema": compactToolExecutionSchema(executionSchema),
+		"notes":            workflowNotes(spec),
 		"guidance": apiDescribeGuidance{
 			ListGroup:         "volclog workflow list " + spec.Group,
 			Describe:          "volclog workflow describe " + spec.ID,

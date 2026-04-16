@@ -47,6 +47,12 @@ recipes:
     likely_cause: create request is targeting an existing project
     exact_fix: re-list projects, then switch to get or modify instead of repeating create
     retry_command: volclog tool list project --verb list
+  - error_signature: ResultStatus=incomplete
+    http_status: 0
+    error_code: ""
+    likely_cause: service returned only a partial scan to keep latency short
+    exact_fix: narrow the time range and rerun before trusting counts, returned rows, empty results, or histogram buckets; this can happen for SearchLogs in both search and analysis mode
+    retry_command: rerun the same query on a narrower time window
   - error_signature: search returned empty after write
     http_status: 0
     error_code: ""

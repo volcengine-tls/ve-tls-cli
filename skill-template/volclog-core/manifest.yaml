@@ -8,6 +8,7 @@ principles:
   - public_api_first
   - workflow_for_cli_orchestration
   - respect_contract_cache_hint
+  - host_managed_secret_injection_for_stateless_agents
 sources:
   routing: routing.yaml
   workflows: workflows.yaml

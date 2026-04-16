@@ -985,6 +985,124 @@ func TestToolDescribeRecommendsArtifactAndClarifiesPageAllPayload(t *testing.T) 
 	}
 }
 
+func TestToolDescribeLogSearchExplainsInteractiveAnalysisVsExportAnalysis(t *testing.T) {
+	out, err := runTool(nil, []string{"describe", "log.search"})
+	if err != nil {
+		t.Fatalf("runTool describe failed: %v", err)
+	}
+	got := out.(map[string]any)
+	notes, ok := got["usage_notes"].([]any)
+	if !ok || len(notes) == 0 {
+		t.Fatalf("expected usage_notes list, got %#v", got["usage_notes"])
+	}
+
+	foundSQLSupport := false
+	foundExportBoundary := false
+	for _, note := range notes {
+		text := strings.ToLower(asStringOrEmpty(note))
+		if strings.Contains(text, "sql/analysis") || strings.Contains(text, "select") {
+			foundSQLSupport = true
+		}
+		if strings.Contains(text, "export-analysis") && strings.Contains(text, "interactive analysis") {
+			foundExportBoundary = true
+		}
+	}
+	if !foundSQLSupport {
+		t.Fatalf("expected usage_notes to explain log.search sql/analysis support, got %#v", notes)
+	}
+	if !foundExportBoundary {
+		t.Fatalf("expected usage_notes to explain when to switch to export-analysis, got %#v", notes)
+	}
+}
+
+func TestToolDescribeLogSearchExplainsCountSemantics(t *testing.T) {
+	out, err := runTool(nil, []string{"describe", "log.search"})
+	if err != nil {
+		t.Fatalf("runTool describe failed: %v", err)
+	}
+	got := out.(map[string]any)
+	notes, ok := got["usage_notes"].([]any)
+	if !ok || len(notes) == 0 {
+		t.Fatalf("expected usage_notes list, got %#v", got["usage_notes"])
+	}
+
+	foundHitCount := false
+	foundHistogramTotal := false
+	foundIncomplete := false
+	for _, note := range notes {
+		text := strings.ToLower(asStringOrEmpty(note))
+		if strings.Contains(text, "hitcount") && (strings.Contains(text, "current response") || strings.Contains(text, "当前返回")) {
+			foundHitCount = true
+		}
+		if strings.Contains(text, "histogram.totalcount") || (strings.Contains(text, "totalcount") && strings.Contains(text, "histogram")) {
+			foundHistogramTotal = true
+		}
+		if strings.Contains(text, "resultstatus") && strings.Contains(text, "incomplete") {
+			foundIncomplete = true
+		}
+	}
+	if !foundHitCount {
+		t.Fatalf("expected usage_notes to explain HitCount semantics, got %#v", notes)
+	}
+	if !foundHistogramTotal {
+		t.Fatalf("expected usage_notes to explain Histogram.TotalCount semantics, got %#v", notes)
+	}
+	if !foundIncomplete {
+		t.Fatalf("expected usage_notes to explain incomplete semantics, got %#v", notes)
+	}
+}
+
+func TestToolDescribeLogHistogramExplainsWhenToUseWithSearch(t *testing.T) {
+	out, err := runTool(nil, []string{"describe", "log.describe-histogram-v1"})
+	if err != nil {
+		t.Fatalf("runTool describe failed: %v", err)
+	}
+	got := out.(map[string]any)
+	notes, ok := got["usage_notes"].([]any)
+	if !ok || len(notes) == 0 {
+		t.Fatalf("expected usage_notes list, got %#v", got["usage_notes"])
+	}
+
+	foundTimeDistribution := false
+	foundSearchBridge := false
+	foundCountSemantics := false
+	foundPureSearchBoundary := false
+	foundIncomplete := false
+	for _, note := range notes {
+		text := strings.ToLower(asStringOrEmpty(note))
+		if strings.Contains(text, "time distribution") || strings.Contains(text, "时间分布") {
+			foundTimeDistribution = true
+		}
+		if strings.Contains(text, "log.search") && (strings.Contains(text, "narrow") || strings.Contains(text, "缩小") || strings.Contains(text, "preview")) {
+			foundSearchBridge = true
+		}
+		if strings.Contains(text, "totalcount") && (strings.Contains(text, "hits") || strings.Contains(text, "命中")) {
+			foundCountSemantics = true
+		}
+		if strings.Contains(text, "pure search") || strings.Contains(text, "纯检索") {
+			foundPureSearchBoundary = true
+		}
+		if strings.Contains(text, "resultstatus") && strings.Contains(text, "incomplete") {
+			foundIncomplete = true
+		}
+	}
+	if !foundTimeDistribution {
+		t.Fatalf("expected usage_notes to explain histogram time-distribution role, got %#v", notes)
+	}
+	if !foundSearchBridge {
+		t.Fatalf("expected usage_notes to bridge histogram and log.search usage, got %#v", notes)
+	}
+	if !foundCountSemantics {
+		t.Fatalf("expected usage_notes to explain histogram count semantics, got %#v", notes)
+	}
+	if !foundPureSearchBoundary {
+		t.Fatalf("expected usage_notes to explain histogram pure-search boundary, got %#v", notes)
+	}
+	if !foundIncomplete {
+		t.Fatalf("expected usage_notes to explain histogram incomplete semantics, got %#v", notes)
+	}
+}
+
 func TestToolDescribeCompactAvoidsDuplicatingExecutionProperties(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"tool", "describe", "topic.create"}, &stdout, &stderr)

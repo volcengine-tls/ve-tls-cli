@@ -27,6 +27,16 @@ workflows:
     output_strategy: keep time range narrow and use projection before widening the query
     fallback: raw.SearchLogs
     stop_condition: wrong target identified or search starts returning rows
+  - name: preview-search-volume
+    when_to_use: decide whether to narrow time range, preview rows, or switch to export
+    steps:
+      - tool.log.describe-histogram-v1
+      - tool.log.search
+      - workflow.log.export
+      - workflow.log.export-analysis
+    output_strategy: use histogram stdout for pure-search bucket preview first, then choose preview rows or file export
+    fallback: raw.SearchLogs
+    stop_condition: bucket distribution and next execution surface are both clear
   - name: export-large-results
     when_to_use: result set is too large for stdout or token budget
     steps:

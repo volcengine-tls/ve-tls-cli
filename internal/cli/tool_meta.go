@@ -386,6 +386,7 @@ func buildToolDescribeCommon(contract toolCatalog) toolDescribeCommon {
 	if contract.SupportsAll {
 		usageNotes = append(usageNotes, "execution.page.all increases completeness and may increase payload size; pair it with execution.artifact or execution.projection for large results.")
 	}
+	usageNotes = append(usageNotes, toolSpecificUsageNotes(contract)...)
 	return toolDescribeCommon{
 		inputSchema:     inputSchema,
 		inputFlatSchema: buildToolFlatInputSchema(inputSchema),
@@ -434,24 +435,49 @@ func buildToolDescribeCommon(contract toolCatalog) toolDescribeCommon {
 	}
 }
 
+func toolSpecificUsageNotes(contract toolCatalog) []any {
+	switch strings.TrimSpace(contract.ID) {
+	case "log.search":
+		return []any{
+			"SearchLogs Query supports both plain search syntax and SQL/analysis syntax such as '* | select ...'.",
+			"HitCount is only the count returned in the current response window of SearchLogs; do not treat it as the whole-window total hit count.",
+			"Use log.describe-histogram-v1 only for pure search queries when you need time-distribution preview or a better whole-window hit estimate before narrowing or widening a search window; Histogram.TotalCount is the better whole-window hit count in that pure-search case.",
+			"For SQL/analysis queries, body fields such as Context, Sort, Limit, and Offset do not page analysis rows; use SQL limit/offset inside Query instead.",
+			"If SearchLogs returns ResultStatus=incomplete, the service returned only a partial scan; this can happen for both search and analysis queries, so narrow the time range and rerun before trusting counts, rows, or absence of hits.",
+			"Prefer log.search for interactive analysis, quick previews, and smaller result sets; switch to workflow log.export-analysis when analysis rows may exceed stdout or token budget.",
+		}
+	case "log.describe-histogram-v1":
+		return []any{
+			"DescribeHistogramV1 is for time distribution preview before deciding whether to narrow, widen, or export a search window.",
+			"Use DescribeHistogramV1 only for pure search queries; for search+analysis or pure analysis queries, do not treat histogram counts as analysis result counts.",
+			"Histogram.TotalCount is the better whole-window hits count for pure search; use it when HitCount from SearchLogs only reflects the current response window.",
+			"Start with log.describe-histogram-v1 to find hot buckets for pure search, then re-run log.search on a narrower time range for row preview or switch to workflow export when results stay large.",
+			"If ResultStatus=incomplete, the service returned only a partial scan; narrow the time range and rerun before trusting bucket counts or total hits.",
+			"Omit Interval unless you need a stable bucket width; when omitted, the server derives bucket size from the requested time range.",
+		}
+	default:
+		return nil
+	}
+}
+
 func buildToolDescribeFullOutput(contract toolCatalog, common toolDescribeCommon) map[string]any {
 	target := map[string]any{
-		"identity":          common.identity,
-		"input":             common.inputSchema,
-		"context":           common.contextSchema,
-		"execution":         common.execution,
-		"input_schema":      common.inputSchema,
-		"context_schema":    common.contextSchema,
-		"execution_schema":  common.executionSchema,
-		"usage_notes":       common.usageNotes,
-		"usage_constraints": common.usageConstraints,
-		"behavior":          common.behavior,
-		"output":            common.output,
-		"output_policy":     strings.TrimSpace(contract.OutputPolicy),
-		"risk":              strings.TrimSpace(contract.RiskLevel),
-		"recovery":          strings.TrimSpace(contract.ErrorRecovery),
-		"source":            strings.TrimSpace(contract.DocSource),
-		"contract_digest":   common.contractDigest,
+		"identity":            common.identity,
+		"input":               common.inputSchema,
+		"context":             common.contextSchema,
+		"execution":           common.execution,
+		"input_schema":        common.inputSchema,
+		"context_schema":      common.contextSchema,
+		"execution_schema":    common.executionSchema,
+		"usage_notes":         common.usageNotes,
+		"usage_constraints":   common.usageConstraints,
+		"behavior":            common.behavior,
+		"output":              common.output,
+		"output_policy":       strings.TrimSpace(contract.OutputPolicy),
+		"risk":                strings.TrimSpace(contract.RiskLevel),
+		"recovery":            strings.TrimSpace(contract.ErrorRecovery),
+		"source":              strings.TrimSpace(contract.DocSource),
+		"contract_digest":     common.contractDigest,
 		"contract_cache_hint": common.contractCache,
 	}
 	if common.inputFlatSchema != nil {
