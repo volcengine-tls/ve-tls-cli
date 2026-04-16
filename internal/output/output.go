@@ -90,7 +90,224 @@ func ApplyFilter(v any, expr string) (any, error) {
 	if err != nil {
 		return nil, errors.New("invalid jmes-filter expression: " + err.Error())
 	}
+	if out == nil {
+		return nil, errors.New(buildNilFilterMessage(v, e))
+	}
 	return out, nil
+}
+
+func buildNilFilterMessage(raw any, expr string) string {
+	parts := []string{
+		"filter matched no value: " + expr,
+		"raw result scope: " + describeScope(raw),
+	}
+	if keys, ok := scopeKeys(raw); ok {
+		parts = append(parts, "available keys: "+formatDiagnosticKeys(keys))
+	}
+	if pathDiag := diagnosePathMatch(raw, expr); pathDiag != "" {
+		parts = append(parts, pathDiag)
+	}
+	return strings.Join(parts, "; ")
+}
+
+func describeScope(v any) string {
+	switch vv := v.(type) {
+	case nil:
+		return "nil"
+	case map[string]any:
+		return fmt.Sprintf("object(len=%d)", len(vv))
+	case []any:
+		return fmt.Sprintf("array(len=%d)", len(vv))
+	case []map[string]any:
+		return fmt.Sprintf("array(len=%d)", len(vv))
+	default:
+		return fmt.Sprintf("%T", v)
+	}
+}
+
+func scopeKeys(v any) ([]string, bool) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys, true
+}
+
+func formatDiagnosticKeys(keys []string) string {
+	if len(keys) == 0 {
+		return "[]"
+	}
+	const maxKeys = 8
+	display := keys
+	rest := 0
+	if len(display) > maxKeys {
+		display = display[:maxKeys]
+		rest = len(keys) - maxKeys
+	}
+	if rest == 0 {
+		return "[" + strings.Join(display, ", ") + "]"
+	}
+	return "[" + strings.Join(display, ", ") + fmt.Sprintf(", ... (+%d more)]", rest)
+}
+
+type diagToken struct {
+	key   string
+	index int
+	isIdx bool
+}
+
+func diagnosePathMatch(raw any, expr string) string {
+	tokens, full := parseDiagTokens(expr)
+	if len(tokens) == 0 {
+		return ""
+	}
+	cur := raw
+	matched := 0
+	for i, tok := range tokens {
+		if !tok.isIdx {
+			obj, ok := cur.(map[string]any)
+			if !ok {
+				return "matched prefix: " + formatMatchedPrefix(tokens, matched) + "; matched scope: " + describeScope(cur)
+			}
+			next, ok := obj[tok.key]
+			if !ok {
+				return "matched prefix: " + formatMatchedPrefix(tokens, matched) + "; available keys: " + formatDiagnosticKeys(sortedKeysFromMap(obj)) + "; missing segment: " + tok.key
+			}
+			cur = next
+			matched = i + 1
+			continue
+		}
+
+		arr, ok := asAnySlice(cur)
+		if !ok {
+			return "matched prefix: " + formatMatchedPrefix(tokens, matched) + "; matched scope: " + describeScope(cur)
+		}
+		if tok.index < 0 || tok.index >= len(arr) {
+			return "matched prefix: " + formatMatchedPrefix(tokens, matched) + "; array len: " + fmt.Sprint(len(arr)) + "; missing segment: " + fmt.Sprintf("[%d]", tok.index)
+		}
+		cur = arr[tok.index]
+		matched = i + 1
+	}
+
+	if !full {
+		return "matched prefix: " + formatMatchedPrefix(tokens, matched)
+	}
+	if cur == nil {
+		return "matched prefix: " + formatMatchedPrefix(tokens, matched) + "; resolved value: nil"
+	}
+	return "matched prefix: " + formatMatchedPrefix(tokens, matched)
+}
+
+func sortedKeysFromMap(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func asAnySlice(v any) ([]any, bool) {
+	switch vv := v.(type) {
+	case []any:
+		return vv, true
+	case []map[string]any:
+		out := make([]any, 0, len(vv))
+		for _, item := range vv {
+			out = append(out, item)
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
+func formatMatchedPrefix(tokens []diagToken, matched int) string {
+	if matched <= 0 {
+		return "<root>"
+	}
+	var b strings.Builder
+	for i := 0; i < matched && i < len(tokens); i++ {
+		tok := tokens[i]
+		if tok.isIdx {
+			b.WriteString(fmt.Sprintf("[%d]", tok.index))
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte('.')
+		}
+		b.WriteString(tok.key)
+	}
+	if b.Len() == 0 {
+		return "<root>"
+	}
+	return b.String()
+}
+
+func parseDiagTokens(expr string) ([]diagToken, bool) {
+	e := strings.TrimSpace(expr)
+	if e == "" {
+		return nil, false
+	}
+	tokens := make([]diagToken, 0, 4)
+	i := 0
+	for i < len(e) {
+		ch := e[i]
+		switch {
+		case isDiagIdentStart(ch):
+			start := i
+			i++
+			for i < len(e) && isDiagIdentPart(e[i]) {
+				i++
+			}
+			tokens = append(tokens, diagToken{key: e[start:i]})
+		case ch == '[':
+			i++
+			start := i
+			for i < len(e) && e[i] >= '0' && e[i] <= '9' {
+				i++
+			}
+			if start == i || i >= len(e) || e[i] != ']' {
+				return tokens, false
+			}
+			idx := 0
+			for _, c := range e[start:i] {
+				idx = idx*10 + int(c-'0')
+			}
+			tokens = append(tokens, diagToken{index: idx, isIdx: true})
+			i++
+		default:
+			return tokens, false
+		}
+		if i >= len(e) {
+			break
+		}
+		if e[i] == '.' {
+			i++
+			if i >= len(e) {
+				return tokens, false
+			}
+			continue
+		}
+		if e[i] == '[' {
+			continue
+		}
+		return tokens, false
+	}
+	return tokens, true
+}
+
+func isDiagIdentStart(ch byte) bool {
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_'
+}
+
+func isDiagIdentPart(ch byte) bool {
+	return isDiagIdentStart(ch) || (ch >= '0' && ch <= '9')
 }
 
 func writeTable(w io.Writer, v any) error {

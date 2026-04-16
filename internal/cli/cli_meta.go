@@ -16,17 +16,18 @@ type cliGlobalFlagSpec struct {
 func cliGroups() []cliGroupSpec {
 	return []cliGroupSpec{
 		{Name: "configure", Description: "配置本地凭证与默认参数", Primary: true},
-		{Name: "capabilities", Description: "发现 API 能力与调用语义", Primary: true},
-		{Name: "api", Description: "查看约束并直接调用 OpenAPI", Primary: true},
+		{Name: "tool", Description: "使用统一 tool 契约面发现与查看能力", Primary: true},
+		{Name: "workflow", Description: "使用 CLI workflow 合约面执行高层编排能力", Primary: true},
+		{Name: "raw", Description: "原始 transport 调用入口（仅在已明确 method/path 时使用）", Primary: true},
 		{Name: "doctor", Description: "诊断环境、鉴权与配置状态", Primary: true},
 		{Name: "skill", Description: "安装或列出内置 Agent skills", Primary: true},
-		{Name: "project", Description: "项目高频快捷命令（Agent/Human 一等入口）"},
-		{Name: "topic", Description: "主题高频快捷命令（Agent/Human 一等入口）"},
-		{Name: "metric-topic", Description: "指标主题高频快捷命令（Agent/Human 一等入口）"},
-		{Name: "index", Description: "索引高频快捷命令（Agent/Human 一等入口）"},
-		{Name: "log", Description: "日志高频快捷命令（Agent/Human 一等入口）"},
-		{Name: "host-group", Description: "机器组高频快捷命令（Agent/Human 一等入口）"},
-		{Name: "collector", Description: "采集规则高频快捷命令（Agent/Human 一等入口）"},
+		{Name: "project", Description: "项目人工快捷命令（仅供人工交互）"},
+		{Name: "topic", Description: "主题人工快捷命令（仅供人工交互）"},
+		{Name: "metric-topic", Description: "指标主题人工快捷命令（仅供人工交互）"},
+		{Name: "index", Description: "索引人工快捷命令（仅供人工交互）"},
+		{Name: "log", Description: "日志人工快捷命令（仅供人工交互）"},
+		{Name: "host-group", Description: "机器组人工快捷命令（仅供人工交互）"},
+		{Name: "collector", Description: "采集规则人工快捷命令（仅供人工交互）"},
 	}
 }
 
@@ -49,7 +50,7 @@ func cliGlobalFlagSpecs() []cliGlobalFlagSpec {
 		{Name: "--trace-dir", Usage: "--trace-dir <path>", Description: "trace 落盘目录", TakesValue: true},
 		{Name: "--trace-redact", Usage: "--trace-redact <strict|default>", Description: "trace 脱敏模式", TakesValue: true},
 		{Name: "--secrets-file", Usage: "--secrets-file <path>", Description: "dotenv 文件路径", TakesValue: true},
-		{Name: "--dry-run", Usage: "--dry-run", Description: "仅做请求规划，不真正发送（仅 api）"},
+		{Name: "--dry-run", Usage: "--dry-run", Description: "仅做请求规划，不真正发送（支持 raw、tool exec、workflow exec）"},
 		{Name: "--help", Usage: "--help", Description: "显示帮助"},
 		{Name: "-h", Usage: "-h", Description: "显示帮助"},
 		{Name: "--version", Usage: "--version", Description: "显示版本"},

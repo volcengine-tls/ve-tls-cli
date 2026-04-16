@@ -2,22 +2,22 @@
 
 [中文版](README_CN.md) | [English](README.md)
 
-The official Volcengine TLS (Tencent Log Service) CLI tool, built for both human developers and AI Agents. It covers the main TLS domains, including projects, topics, indexes, search & analysis, alarms, consumer groups, and data processing, with shortcuts, raw API access, and optional skills.
+The official Volcengine TLS (Tencent Log Service) CLI tool, built for both human developers and AI Agents. It covers the main TLS domains, including projects, topics, indexes, search & analysis, alarms, consumer groups, and data processing, with shortcuts, tool contracts, raw transport access, and optional skills.
 
 **What volclog provides**
 
 - **Agent integration** — Includes optional skills so common TLS workflows can be handed to LLM-driven tooling or automation.
-- **Broad coverage** — Covers 20+ domains; use shortcuts for common tasks and drop to raw OpenAPI when you need exact control.
-- **Clearer command constraints** — `--describe`, request templates, `--dry-run`, and structured output make it easier to inspect a call before sending it.
+- **Broad coverage** — Covers 20+ domains; use shortcuts for common tasks and drop to raw transport calls when you need exact method/path control.
+- **Clearer command constraints** — `tool/workflow describe`, shortcut request templates, `--dry-run`, and structured output make it easier to inspect a call before sending it.
 - **Straightforward setup** — Supports binary install, source build, local profiles, environment variables, and `--secrets-file`.
 - **Reasonable safety defaults** — Includes `--dry-run`, redacted trace output, and environment-isolation related options.
-- **Layered usage** — Shortcut / API / skills are all available, so you can pick the level you need.
+- **Layered usage** — shortcut / tool / workflow / raw / skills are all available, so you can pick the level you need.
 
 ---
 
 ## Features
 
-| Category | Capabilities |
+| Category | Highlights |
 | --- | --- |
 | 📁 **Project** | Create, query, update, and delete log projects |
 | 📚 **Topic** | Create, query, update, and delete log topics, manage log lifecycle |
@@ -100,23 +100,45 @@ If the npm package is available, you can also install it directly:
 npm install -g @volcengine-tls/volclog
 ```
 
-#### Step 2 — Discover Capabilities & Constraints
-For unfamiliar APIs, check constraints via `capabilities` and `--describe` before guessing parameters:
+#### Step 2 — Discover Tools & Contracts
+For unfamiliar work, prefer the `tool / workflow` contract surfaces first, then fall back to raw transport only when method/path is already known:
 ```bash
-# Check available domains
-volclog capabilities --view groups
-# Check specific domain interfaces
-volclog capabilities --group project --view text
-# Check input requirements, templates, and limits
-volclog api project CreateProject --describe
+# Check available tool groups (public API discovery)
+volclog tool list
+# Check action set in a group
+volclog tool list project
+# Check available workflow groups (CLI-owned orchestration)
+volclog workflow list
+# View the machine contract for one action
+volclog tool describe project.create
+# View the machine contract for one workflow
+volclog workflow describe log.export
+```
+
+If you already know the transport method/path, use the expert raw surface:
+```bash
+# Direct transport call:
+volclog raw --method POST --path /CreateProject --body file://req.json
 ```
 
 #### Step 3 — Dry Run & Execute
-Validate your request payload via `--dry-run`:
+Prepare `context` + `input` files and run with `execution.dry_run` in context first:
 ```bash
-volclog --dry-run api project CreateProject --request '{"ProjectName":"test", "Region": "cn-beijing"}'
+cat >ctx.json <<'EOF'
+{
+  "region": "cn-beijing",
+  "execution": {"dry_run": true}
+}
+EOF
+cat >req.json <<'EOF'
+{
+  "ProjectName": "test",
+  "Region": "cn-beijing"
+}
+EOF
+volclog tool exec project.create --context file://ctx.json --input file://req.json
 ```
-Once it looks correct, remove `--dry-run` and run it for real.
+Once it looks correct, remove `dry_run` from `ctx.json` and run it for real.
 
 #### Step 4 — Data Filtering
 Use `--jmes-filter` to extract key data and prevent long lists from blowing up your context window:
@@ -128,39 +150,36 @@ volclog project list --jmes-filter "Projects[].{Id: ProjectId, Name: ProjectName
 
 ## Agent Skills
 
-The repository includes a set of Agent Skills under `skills/`:
+The repository includes a directly installable Agent Skill under `skills/`:
 
 | Skill | Description |
 | --- | --- |
-| **volclog-shared** | Common config & diagnostics (base for all other skills), handles env, auth, and common queries |
-| **volclog-project** | Project lifecycle management and query planning |
-| **volclog-topic** | Topic configuration and constraint validation |
-| **volclog-index** | Index analysis and creation, auto-handles full-text and key-value index structures |
-| **volclog-log** | Core log search, SQL analytics, and big data export routing |
-| **volclog-host-group** | Host group CRUD and host group related API fallback guidance |
-| **volclog-collector** | Collector rule CRUD and collector related API fallback guidance |
-| **volclog-metric-topic** | Metric stream query and PromQL support |
-| **volclog-alarm** | Alarm rule troubleshooting and configuration |
-| **volclog-api-explorer** | Provides full detection and execution capabilities for underlying OpenAPIs |
+| **volclog-core** | Agent-only incremental knowledge beyond `tool describe` / `workflow describe`: intent routing, cross-group SOPs, recovery recipes, profile selection, and large-result control |
+
+`volclog-core` stays thin and is split into:
+
+- `routing`: natural-language intent to `tool / workflow / raw`
+- `sops`: common cross-group workflows
+- `best-practices`: recovery recipes, known traps, and token / large-result control
 
 **Install Skills:**
 ```bash
-volclog skill install --dir skills/
+volclog skill install --dir /path/to/agent/skills
 ```
 
 For a one-off install, `npx` works as well:
 
 ```bash
-npx @volcengine-tls/volclog skill install --dir skills/
+npx @volcengine-tls/volclog skill install --dir /path/to/agent/skills
 ```
 
 ---
 
 ## Advanced & Best Practices
 
-Beyond the basic commands, a few capabilities are especially useful in troubleshooting and automation:
+Beyond the basic commands, a few features are especially useful in troubleshooting and automation:
 
-- **Automated Discovery**: Fetch API constraints and complex JSON payload templates instantly using `--describe` and `--print-request-template`.
+- **Automated Discovery**: Read machine contracts via `tool describe` / `workflow describe`, and use shortcut `--print-request-template` only when you need a human-oriented JSON skeleton.
 - **Safe Pre-execution**: Use `--dry-run` to intercept network requests and locally validate JSON syntax and required parameters.
 - **Flexible Payload Inputs**: Pass JSON payloads via inline strings, local files (`file://...`), or standard input (`-`) streams.
 - **Troubleshooting & Redaction**: Generate sanitized Trace artifacts using `--trace-dir` combined with `--trace-redact strict`.
@@ -176,4 +195,4 @@ For detailed scenario guides (including specific commands for log search, ETL, a
 ## Security & Contributing
 
 - **Security**: Avoid hardcoding plaintext AK/SK in command arguments. Use `volclog configure`, inject them via environment variables (`VOLCENGINE_ACCESS_KEY_ID`, `VOLCENGINE_ACCESS_KEY_SECRET`), or use `--secrets-file <path>`.
-- **Contributing**: We welcome PRs to enhance the CLI. When adding new OpenAPI commands or skills, be sure to run `scripts/update_capabilities_contract.sh` to update the API contract.
+- **Contributing**: We welcome PRs to enhance the CLI. When changing the public tool catalog, regenerate it with `go run ./internal/openapigen --spec repos/docs/swagger.json` and run `go test ./...`.

@@ -1,9 +1,0 @@
-{
-  "schema_version": 1,
-  "contract_version": "stage1",
-  "capabilities_sha256": "1ee2aa64278d3311d95713850ba414deef7b111407c4c6e230986c610f5c0b16",
-  "commands_count": 126,
-  "signatures_sha256": "7b6cc2527cc9a4f355f101ec3e68f0e33b177e76d7a5eaadffdad00657ee820a",
-  "snapshot_path": "docs/agentic-stage1/capabilities-contract-snapshot.txt",
-  "updated_at": "2026-04-14"
-}

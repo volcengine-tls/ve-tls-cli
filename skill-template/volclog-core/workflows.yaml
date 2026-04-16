@@ -1,0 +1,37 @@
+workflows:
+  - name: create-searchable-log-pipeline
+    when_to_use: create project/topic/index and then validate search
+    steps:
+      - project.create
+      - topic.create
+      - index.create
+      - log.search
+    output_strategy: keep ids in stdout; move to file only if later search payload becomes large
+    fallback: workflow.log.export
+    stop_condition: one read path returns the expected shape
+  - name: ingest-and-validate
+    when_to_use: load local lines/jsonl/json-array into a topic and confirm the data is searchable
+    steps:
+      - workflow.log.ingest
+      - log.search
+    output_strategy: keep ingest stdout small; prefer file output once validation results grow
+    fallback: workflow.log.export
+    stop_condition: one write path succeeds and one read path returns rows
+  - name: troubleshoot-empty-search
+    when_to_use: writes succeeded but search returns empty
+    steps:
+      - configure.list
+      - topic.describe-topic
+      - index.describe
+      - log.search
+    output_strategy: keep time range narrow and use projection before widening the query
+    fallback: raw.SearchLogs
+    stop_condition: wrong target identified or search starts returning rows
+  - name: export-large-results
+    when_to_use: result set is too large for stdout or token budget
+    steps:
+      - workflow.log.export
+      - workflow.log.export-analysis
+    output_strategy: prefer file or artifact output and keep stdout to preview only
+    fallback: tool.log.search
+    stop_condition: file artifact path and preview are both available

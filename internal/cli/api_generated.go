@@ -239,11 +239,6 @@ func listGroupActions(group string, groupTitle string, actions map[string][]apiA
 			b.WriteString(": ")
 			b.WriteString(desc)
 		}
-		if shortcuts := relatedShortcutLabelsForAPI(group, actionName); len(shortcuts) > 0 {
-			b.WriteString(" [shortcut: ")
-			b.WriteString(strings.Join(shortcuts, ", "))
-			b.WriteString("]")
-		}
 		b.WriteString("\n")
 	}
 	return b.String()

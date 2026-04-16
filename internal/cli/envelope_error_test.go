@@ -10,9 +10,9 @@ import (
 	"testing"
 )
 
-func TestAPIErrorIsWrappedInEnvelope(t *testing.T) {
+func TestRawErrorIsWrappedInEnvelope(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"api", "project", "CreateProject", "--request", "file://req.json"}, &stdout, &stderr)
+	code := Run([]string{"raw", "--method", "POST", "--path", "/CreateProject", "--body", "file://req.json"}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatalf("expected non-zero exit code")
 	}
@@ -35,7 +35,7 @@ func TestAPIErrorIsWrappedInEnvelope(t *testing.T) {
 	}
 }
 
-func TestAPIServerErrorIsWrappedInEnvelope(t *testing.T) {
+func TestRawServerErrorIsWrappedInEnvelope(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("x-tls-requestid", "req-123")
 		w.WriteHeader(http.StatusConflict)
@@ -50,7 +50,7 @@ func TestAPIServerErrorIsWrappedInEnvelope(t *testing.T) {
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"api", "call", "--method", "POST", "--path", "/CreateTopic", "--body", `{"TopicName":"demo"}`}, &stdout, &stderr)
+	code := Run([]string{"raw", "--method", "POST", "--path", "/CreateTopic", "--body", `{"TopicName":"demo"}`}, &stdout, &stderr)
 	if code != 2 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}

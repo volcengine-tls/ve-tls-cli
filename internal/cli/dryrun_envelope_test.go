@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestAPIDryRunDoesNotSendRequest(t *testing.T) {
+func TestRawDryRunDoesNotSendRequest(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
@@ -16,7 +16,7 @@ func TestAPIDryRunDoesNotSendRequest(t *testing.T) {
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--dry-run", "api", "call", "--method", "GET", "--path", "/DescribeProjects"}, &stdout, &stderr)
+	code := Run([]string{"--dry-run", "raw", "--method", "GET", "--path", "/DescribeProjects"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -36,16 +36,16 @@ func TestAPIDryRunDoesNotSendRequest(t *testing.T) {
 	}
 }
 
-func TestAPIOutputModeFileReturnsEnvelope(t *testing.T) {
+func TestRawOutputModeFileReturnsEnvelope(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
 	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 
-	outFile := filepath.Join(t.TempDir(), "api-out.json")
+	outFile := filepath.Join(t.TempDir(), "raw-out.json")
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--dry-run", "--output-mode", "file", "--output-file", outFile, "api", "call", "--method", "GET", "--path", "/DescribeProjects"}, &stdout, &stderr)
+	code := Run([]string{"--dry-run", "--output-mode", "file", "--output-file", outFile, "raw", "--method", "GET", "--path", "/DescribeProjects"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -73,7 +73,7 @@ func TestAPIOutputModeFileReturnsEnvelope(t *testing.T) {
 	}
 }
 
-func TestAPIDryRunWithTraceAddsTracePathToEnvelope(t *testing.T) {
+func TestRawDryRunWithTraceAddsTracePathToEnvelope(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
@@ -82,9 +82,9 @@ func TestAPIDryRunWithTraceAddsTracePathToEnvelope(t *testing.T) {
 
 	tmp := t.TempDir()
 	traceDir := filepath.Join(tmp, "traces")
-	outFile := filepath.Join(tmp, "api-out.json")
+	outFile := filepath.Join(tmp, "raw-out.json")
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--dry-run", "--trace-dir", traceDir, "--output-mode", "file", "--output-file", outFile, "api", "call", "--method", "GET", "--path", "/DescribeProjects"}, &stdout, &stderr)
+	code := Run([]string{"--dry-run", "--trace-dir", traceDir, "--output-mode", "file", "--output-file", outFile, "raw", "--method", "GET", "--path", "/DescribeProjects"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -105,7 +105,7 @@ func TestAPIDryRunWithTraceAddsTracePathToEnvelope(t *testing.T) {
 	}
 }
 
-func TestAPIDryRunIncludesRequestPreviewBody(t *testing.T) {
+func TestRawDryRunIncludesRequestPreviewBody(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
@@ -115,7 +115,7 @@ func TestAPIDryRunIncludesRequestPreviewBody(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{
 		"--dry-run",
-		"api", "call",
+		"raw",
 		"--method", "POST",
 		"--path", "/CreateProject",
 		"--query", "region=cn-beijing",

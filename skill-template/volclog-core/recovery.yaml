@@ -1,0 +1,55 @@
+recipes:
+  - error_signature: unknown tool
+    http_status: 0
+    error_code: CLIError
+    likely_cause: wrong surface or wrong identity
+    exact_fix: rerun tool list or workflow list for the group before guessing aliases
+    retry_command: volclog tool list <group>
+  - error_signature: missing --input
+    http_status: 0
+    error_code: CLIError
+    likely_cause: wrong transport or unread contract
+    exact_fix: reread input_schema and input_encoding_hint, then resend inline JSON, stdin, or file input
+    retry_command: volclog tool describe <group.action>
+  - error_signature: filter matched no value
+    http_status: 0
+    error_code: CLIError
+    likely_cause: projection points at the wrong raw path
+    exact_fix: inspect one unfiltered response and rebuild the JMESPath against raw keys only
+    retry_command: rerun without projection, then retry with corrected JMESPath
+  - error_signature: 401 Unauthorized
+    http_status: 401
+    error_code: Unauthorized
+    likely_cause: credentials, region, or endpoint do not match
+    exact_fix: run doctor first, then verify AK/SK, region, and endpoint before retrying
+    retry_command: volclog doctor
+  - error_signature: 403 Forbidden
+    http_status: 403
+    error_code: ""
+    likely_cause: profile has no permission or the wrong tenant/profile is selected
+    exact_fix: confirm the selected profile matches the target tenant and region, then verify resource permissions before retrying
+    retry_command: volclog configure list
+  - error_signature: IndexNotExists
+    http_status: 404
+    error_code: IndexNotExists
+    likely_cause: index does not exist or is not ready
+    exact_fix: inspect the current index first, then create it or wait for readiness before retrying search
+    retry_command: volclog tool describe index.describe
+  - error_signature: TopicAlreadyExist
+    http_status: 409
+    error_code: TopicAlreadyExist
+    likely_cause: create request is targeting an existing topic
+    exact_fix: re-list topics in the target project, then switch to get or modify instead of repeating create
+    retry_command: volclog tool list topic --verb list
+  - error_signature: ProjectAlreadyExist
+    http_status: 409
+    error_code: ProjectAlreadyExist
+    likely_cause: create request is targeting an existing project
+    exact_fix: re-list projects, then switch to get or modify instead of repeating create
+    retry_command: volclog tool list project --verb list
+  - error_signature: search returned empty after write
+    http_status: 0
+    error_code: ""
+    likely_cause: wrong profile, wrong topic, wrong time range, or index not ready
+    exact_fix: verify profile/topic/index first, then retry with narrow time range and trace enabled
+    retry_command: volclog configure list

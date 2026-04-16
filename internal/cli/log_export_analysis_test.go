@@ -216,7 +216,7 @@ func TestLogExportAnalysis_RejectsMaxPages(t *testing.T) {
 	}
 }
 
-func TestLogExportAnalysisDescribeMentionsIndexIncrementalEffect(t *testing.T) {
+func TestShortcutDescribeLogExportAnalysisMentionsIndexIncrementalEffect(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"log", "export-analysis", "--describe"}, &stdout, &stderr)
 	if code != 0 {

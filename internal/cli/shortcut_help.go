@@ -33,9 +33,6 @@ func shortcutCommandUsage(spec shortcutCommandSpec) string {
 
 	b.WriteString("Interface:\n")
 	b.WriteString("  " + strings.ToUpper(strings.TrimSpace(spec.Method)) + " " + strings.TrimSpace(spec.Path) + "\n")
-	if strings.TrimSpace(spec.APIGroup) != "" && strings.TrimSpace(spec.APIAction) != "" {
-		b.WriteString("  API describe: volclog api " + spec.APIGroup + " " + spec.APIAction + " --describe\n")
-	}
 	b.WriteString("\n")
 
 	if shouldRenderRequiredSummary(spec, requiredParams) {
@@ -81,22 +78,45 @@ func shortcutCommandUsage(spec shortcutCommandSpec) string {
 		b.WriteString("\n")
 	}
 
-	guidance := shortcutAgentGuidance(spec)
-	if len(guidance) > 0 {
-		b.WriteString("Agent Guidance:\n")
-		for _, item := range guidance {
+	tips := shortcutUsageTips(spec)
+	if len(tips) > 0 {
+		b.WriteString("Tips:\n")
+		for _, item := range tips {
 			b.WriteString("  " + item + "\n")
 		}
 		b.WriteString("\n")
 	}
 
 	b.WriteString("Next:\n")
-	b.WriteString("  volclog " + spec.Group + " " + spec.Command + " --describe\n")
-	if spec.SupportsTemplate {
-		b.WriteString("  volclog " + spec.Group + " " + spec.Command + " --print-request-template=full\n")
+	for _, item := range shortcutNextCommands(spec) {
+		b.WriteString("  " + item + "\n")
 	}
-	b.WriteString("  volclog capabilities --group " + spec.Group + " --view text\n")
 	return b.String()
+}
+
+func shortcutNextCommands(spec shortcutCommandSpec) []string {
+	out := make([]string, 0, 5)
+	out = append(out, "volclog "+spec.Group+" "+spec.Command+" --describe")
+	if spec.SupportsTemplate {
+		out = append(out, "volclog "+spec.Group+" "+spec.Command+" --print-request-template=full")
+	}
+	if wf, err := resolveWorkflowByIdentity(spec.Group, spec.Command); err == nil {
+		out = append(out,
+			"volclog workflow describe "+strings.TrimSpace(wf.ID),
+			"volclog workflow exec "+strings.TrimSpace(wf.ID)+" --input file://req.json",
+		)
+	}
+	if action := toolIdentityAction(spec.Action); action != "" {
+		if _, ok := loadToolByIdentity(spec.Group, action); ok {
+			out = append(out, "volclog tool describe "+strings.TrimSpace(spec.Action))
+		}
+	}
+	if strings.TrimSpace(spec.APIGroup) != "" {
+		out = append(out, "volclog tool list "+strings.TrimSpace(spec.APIGroup))
+	} else {
+		out = append(out, "volclog "+strings.TrimSpace(spec.Group)+" --help")
+	}
+	return uniqueStrings(out)
 }
 
 func shouldRenderRequiredSummary(spec shortcutCommandSpec, requiredParams []apiCapParam) bool {
@@ -137,7 +157,7 @@ func optionalFlagsIntro(spec shortcutCommandSpec) string {
 	case "search", "histogram", "context", "export", "export-analysis":
 		return "这些都是附加条件。先满足核心查询条件，再按需要补范围、条数、排序或输出相关参数。"
 	case "create", "modify":
-		return "这些都是补充项。只有用户明确要设置对应能力时再加；字段一多就切到模板，不要继续硬拼。"
+		return "这些都是补充项。只有用户明确要设置对应能力时再加；字段一多或嵌套较深时先看 --print-request-template=full，再通过 --request file://req.json 组织完整 JSON。"
 	default:
 		return "这些都是可选项。用户没明确提到就先别加，按当前命令默认行为执行。"
 	}
@@ -183,47 +203,45 @@ func primaryShortcutFlag(raw string) string {
 	return flag
 }
 
-func shortcutAgentGuidance(spec shortcutCommandSpec) []string {
-	base := "volclog " + spec.Group + " " + spec.Command
+func shortcutUsageTips(spec shortcutCommandSpec) []string {
 	switch normalizeToken(spec.Command) {
 	case "list":
 		return []string{
-			"- 用户只是想随便列举资源时，先直接执行: " + base,
-			"- 只有用户明确给出过滤条件时，再补可选 query 参数。",
+			"- 不带参数先按默认方式列结果；只有明确要筛选、翻页或列全时再补参数。",
 			"- 不要因为可选 query 参数里出现了 --project-id/--topic-id/--topic-name，就把它们当成必填。",
 		}
 	case "get", "delete", "bind-rules", "unbind-rules", "delete-host", "bind-host-groups", "unbind-host-groups":
 		if flag := firstRequiredShortcutFlag(spec.Params); flag != "" {
 			return []string{
-				"- 先确认资源 ID 是否已知；未知时先回到同组的 list/get 入口。",
+				"- 先确认资源 ID 是否已知；未知时先回到同组的 list/get 命令。",
 				"- 当前命令的核心必填是: " + flag,
 				"- 不要猜资源 ID。",
 			}
 		}
 		return []string{
-			"- 先确认资源 ID 是否已知；未知时先回到同组的 list/get 入口。",
+			"- 先确认资源 ID 是否已知；未知时先回到同组的 list/get 命令。",
 			"- 不要猜资源 ID。",
 		}
 	case "search", "histogram", "context", "export", "export-analysis":
 		return []string{
 			"- 只把 Required 里的参数视为必填。",
-			"- 用户没有给足查询条件时，不要猜 topic/time/query；先回到 --describe 或补齐条件。",
-			"- Optional Flags 只在用户明确提出额外约束时再补。",
+			"- 查询条件不完整时先补 topic/time/query，不要从历史示例里猜参数。",
+			"- Optional Flags 只在明确需要额外约束时再加。",
 		}
 	case "put", "ingest":
 		return []string{
-			"- 先确认用户是想精确构造写入体，还是让 CLI 代为组装批次。",
+			"- 先确认是要精确构造写入体，还是让 CLI 代为组装批次。",
 			"- 只把 Required 里的参数视为必填；不要从可选 header 或输入格式推断必填。",
 		}
 	case "create", "modify":
 		return []string{
-			"- 字段不多时可以直接按 flags 组织；字段多或嵌套深时再看 --print-request-template=full。",
+			"- 字段不多时可以直接按 flags 组织；字段多或嵌套深时先看 --print-request-template=full，再改用 --request file://req.json。",
 			"- 不要把某个示例里的可选字段当成固定必填。",
 		}
 	default:
 		return []string{
 			"- 只把 Required 里的内容视为必填。",
-			"- 不确定时先看 --describe，而不是从历史示例里猜参数。",
+			"- 不确定参数时先看当前命令的 --describe；需要公开机器契约时再转到 tool describe 或 workflow describe。",
 		}
 	}
 }

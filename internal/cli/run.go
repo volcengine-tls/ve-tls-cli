@@ -23,7 +23,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if allowsTrailingGlobalsForGroup(g) {
-		rest, gf, ok = extractTrailingGlobals(rest, gf, g == "api")
+		rest, gf, ok = extractTrailingGlobals(rest, gf, allowsTrailingDryRun(g, rest))
 		if !ok {
 			_, _ = stderr.Write([]byte(usageText()))
 			return 1
@@ -62,15 +62,6 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	if strings.TrimSpace(gf.TraceRedact) == "" && strings.TrimSpace(projectCfg.TraceRedact) != "" {
 		gf.TraceRedact = projectCfg.TraceRedact
 	}
-	if g == "capabilities" && !hasFlagWithValue(rest, "--hints-file") {
-		hintsFile := strings.TrimSpace(os.Getenv("VOLCLOG_HINTS_FILE"))
-		if hintsFile == "" {
-			hintsFile = strings.TrimSpace(projectCfg.HintsFile)
-		}
-		if hintsFile != "" {
-			rest = append(rest, "--hints-file", hintsFile)
-		}
-	}
 	if g == "log" && len(rest) > 0 && rest[0] == "export-analysis" && !outputExplicit {
 		gf.Output = "jsonl"
 	}
@@ -96,7 +87,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	ctx := newContext(stdout, stderr, format, gf.Profile, gf.Filter)
+	ctx.OutputExplicit = outputExplicit
 	ctx.OutputMode = outputMode
+	ctx.OutputModeExplicit = gf.OutputModeExplicit
 	ctx.OutputDir = defaultOutDir
 	ctx.OutputFile = gf.OutputFile
 	ctx.TraceDir = gf.TraceDir
@@ -113,7 +106,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		writeCLIError(stderr, errors.New("unsupported output-mode: "+gf.OutputMode), "", 0, "usage", "invalid --output-mode")
 		return 1
 	}
-	if err := ctx.validateDryRunScope(g); err != nil {
+	if err := ctx.validateDryRunScope(g, rest); err != nil {
 		writeCLIError(stderr, err, "", 0, "usage", "invalid --dry-run scope")
 		return 1
 	}
@@ -123,12 +116,18 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	switch g {
 	case "configure":
 		out, err = runConfigure(ctx, rest)
+	case "tool":
+		out, err = runTool(ctx, rest)
+	case "workflow":
+		out, err = runWorkflow(ctx, rest)
+	case "raw":
+		out, err = runRaw(ctx, rest)
 	case "skill":
 		out, err = runSkill(ctx, rest)
 	case "capabilities":
-		out, err = runCapabilities(ctx, rest)
+		err = removedLegacyCommandError("capabilities", legacyCapabilitiesHint(rest))
 	case "api":
-		out, err = runAPI(ctx, rest)
+		err = removedLegacyCommandError("api", legacyAPIHint(rest))
 	case "project":
 		out, err = runProject(ctx, rest)
 	case "topic":
@@ -148,6 +147,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	default:
 		_, _ = stderr.Write([]byte(usageText()))
 		return 1
+	}
+	if ctx.FormatOverride != "" {
+		format = ctx.FormatOverride
+		ctx.Format = format
 	}
 	if err != nil {
 		if ue, ok := asUsageError(err); ok {
@@ -259,11 +262,11 @@ func usageText() string {
 	b.WriteString("Usage:\n")
 	b.WriteString("  volclog [--profile <name>] [--output json|jsonl|table] [--output-mode stdout|file] [--output-file <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
 	b.WriteString("主入口（Agent / 自动化优先）:\n")
-	b.WriteString("  用 capabilities 发现能力，用 api 查看约束并执行。\n")
-	b.WriteString("  适合智能体、CI/CD、脚本和其他非人工交互场景。\n")
-	b.WriteString("  默认全局参数写在 group 之前；但 api 与 project/topic/metric-topic/index/log/host-group/collector 的输出类全局参数也可后置。\n")
+	b.WriteString("  用 tool 发现能力并查看契约；需要结构化执行时使用 tool exec。\n")
+	b.WriteString("  已明确 method/path 的原始 transport 调用使用 raw。\n")
+	b.WriteString("  默认全局参数写在 group 之前；但 raw 与 project/topic/metric-topic/index/log/host-group/collector 的输出类全局参数也可后置。\n")
 	b.WriteString("  大输出优先使用 --output-mode file。\n")
-	b.WriteString("  --jmes-filter 作用于原始命令/API 结果，而不是 CLI envelope；筛选 Total 时写 Total，不写 data.Total。\n")
+	b.WriteString("  --jmes-filter 作用于原始结果，而不是 CLI envelope；筛选 Total 时写 Total，不写 data.Total。\n")
 	b.WriteString("  zsh/bash 下建议写成 --jmes-filter \"keys(@)\"；fish/PowerShell 下优先用单引号。\n\n")
 	for _, group := range cliGroups() {
 		if !group.Primary {
@@ -279,20 +282,10 @@ func usageText() string {
 		b.WriteString(group.Description)
 		b.WriteString("\n")
 	}
-	b.WriteString(`
-
-推荐流程:
-  1) 发现能力: volclog capabilities --view groups
-  2) 缩小范围: volclog capabilities --group <group> --view text
-  3) 查看约束: volclog api <group> <action> --describe
-  4) 请求校验: volclog --dry-run api <group> <action> --request file://req.json
-  5) 正式执行: volclog api <group> <action> --request file://req.json
-  6) 高频 shortcut 也支持 --describe 与 --print-request-template，可先用在 project/topic/index/log 等入口上
-  7) 安装内置 Agent 技能: volclog skill install --dir <agent-skills-dir>
-  8) 仓库内提供 skills/ 与 skill-template/ 目录，可直接为 Agent 安装或扩展技能
-
-次级入口（仅在你已明确目标资源时使用）:
-`)
+	b.WriteString("\n  project/topic/index/log 等 shortcut 仅供人工交互；Agent 不要把它们当主流程。\n")
+	b.WriteString("  可用 volclog skill install --dir <agent-skills-dir> 安装内置 Agent 技能。\n")
+	b.WriteString("  仓库内提供可直接安装的 skills/ 目录。\n\n")
+	b.WriteString("次级入口（仅在你已明确目标资源时使用）:\n")
 	for _, group := range cliGroups() {
 		if group.Primary {
 			continue
@@ -333,6 +326,69 @@ func usageText() string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+func legacyCapabilitiesHint(args []string) string {
+	group := ""
+	action := ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--group":
+			if i+1 < len(args) {
+				group = strings.TrimSpace(args[i+1])
+				i++
+			}
+		case "--action":
+			if i+1 < len(args) {
+				action = strings.TrimSpace(args[i+1])
+				i++
+			}
+		}
+	}
+	if hint := resolvedToolMigrationHint(group, action); hint != "" {
+		return hint
+	}
+	if strings.TrimSpace(group) != "" {
+		return "use 'volclog tool list " + strings.TrimSpace(group) + "' for discovery"
+	}
+	return "use 'volclog tool list' for discovery"
+}
+
+func legacyAPIHint(args []string) string {
+	if len(args) == 0 {
+		return "use 'volclog tool list' for discovery or 'volclog raw --method <METHOD> --path <PATH>' for transport-level calls"
+	}
+	if strings.TrimSpace(args[0]) == "call" {
+		return "use 'volclog raw --method <METHOD> --path <PATH>' for transport-level calls"
+	}
+	group := strings.TrimSpace(args[0])
+	action := ""
+	if len(args) > 1 && !strings.HasPrefix(strings.TrimSpace(args[1]), "-") {
+		action = strings.TrimSpace(args[1])
+	}
+	if hint := resolvedToolMigrationHint(group, action); hint != "" {
+		return hint
+	}
+	if group != "" {
+		return "use 'volclog tool list " + group + "' for discovery or 'volclog raw --method <METHOD> --path <PATH>' if you already know the transport path"
+	}
+	return "use 'volclog tool list' for discovery or 'volclog raw --method <METHOD> --path <PATH>' for transport-level calls"
+}
+
+func resolvedToolMigrationHint(group, action string) string {
+	group = strings.TrimSpace(group)
+	action = strings.TrimSpace(action)
+	if group == "" {
+		return ""
+	}
+	if action == "" {
+		return "use 'volclog tool list " + group + "' for discovery or 'volclog raw --method <METHOD> --path <PATH>' if you already know the transport path"
+	}
+	tool, err := resolveToolByIdentity(group, action)
+	if err != nil {
+		return "use 'volclog tool list " + group + "' for discovery"
+	}
+	return "use 'volclog tool list " + group + "' or 'volclog tool describe " + strings.TrimSpace(tool.ID) + "'"
 }
 
 func hasFlagWithValue(args []string, flag string) bool {

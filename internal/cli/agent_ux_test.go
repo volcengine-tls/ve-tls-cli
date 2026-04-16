@@ -273,7 +273,7 @@ func TestDoctorOnlineUsesCredRefCredentials(t *testing.T) {
 	}
 }
 
-func TestAPICallAllowsTrailingDryRunGlobalFlag(t *testing.T) {
+func TestRawAllowsTrailingDryRunGlobalFlag(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
@@ -282,7 +282,7 @@ func TestAPICallAllowsTrailingDryRunGlobalFlag(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"api", "call", "--method", "GET", "--path", "/DescribeProjects", "--dry-run"}, &stdout, &stderr)
+	code := Run([]string{"raw", "--method", "GET", "--path", "/DescribeProjects", "--dry-run"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit code: %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -299,12 +299,12 @@ func TestAPICallAllowsTrailingDryRunGlobalFlag(t *testing.T) {
 	}
 }
 
-func TestAPIGeneratedAllowsTrailingOutputFileGlobals(t *testing.T) {
+func TestToolDescribeAllowsTrailingOutputFileGlobals(t *testing.T) {
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "describe.json")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"api", "project", "CreateProject", "--describe", "--output-mode", "file", "--output-file", outFile}, &stdout, &stderr)
+	code := Run([]string{"tool", "describe", "project.create", "--output-mode", "file", "--output-file", outFile}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit code: %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -318,7 +318,7 @@ func TestAPIGeneratedAllowsTrailingOutputFileGlobals(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read output file: %v", err)
 	}
-	if !bytes.Contains(b, []byte(`"action": "CreateProject"`)) {
+	if !bytes.Contains(b, []byte(`"id": "project.create"`)) {
 		t.Fatalf("unexpected output file content: %s", string(b))
 	}
 }
@@ -403,6 +403,27 @@ func TestExtractTrailingGlobalsAllowsShortcutJMESFilter(t *testing.T) {
 	}
 	if merged.DryRun {
 		t.Fatalf("shortcut trailing globals should not enable dry-run")
+	}
+}
+
+func TestAllowsTrailingDryRunScope(t *testing.T) {
+	if !allowsTrailingDryRun("raw", []string{"--method", "GET"}) {
+		t.Fatalf("expected raw to allow trailing dry-run")
+	}
+	if !allowsTrailingDryRun("tool", []string{"exec", "topic.create"}) {
+		t.Fatalf("expected tool exec to allow trailing dry-run")
+	}
+	if allowsTrailingDryRun("tool", []string{"describe", "topic.create"}) {
+		t.Fatalf("expected tool describe to reject trailing dry-run")
+	}
+	if !allowsTrailingDryRun("workflow", []string{"exec", "log.export"}) {
+		t.Fatalf("expected workflow exec to allow trailing dry-run")
+	}
+	if allowsTrailingDryRun("workflow", []string{"describe", "log.export"}) {
+		t.Fatalf("expected workflow describe to reject trailing dry-run")
+	}
+	if allowsTrailingDryRun("project", []string{"list"}) {
+		t.Fatalf("expected shortcut groups to reject trailing dry-run")
 	}
 }
 

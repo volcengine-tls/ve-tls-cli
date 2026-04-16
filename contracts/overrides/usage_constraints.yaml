@@ -1,0 +1,3 @@
+# Tool catalog execution constraints overrides.
+# Format:
+#   <tool_id>: <constraint tag>

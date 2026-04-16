@@ -67,71 +67,42 @@ Notes:
 Examples:
   tlsctl skill list
   tlsctl skill install --dir /path/to/agent/skills
-  tlsctl skill install --dir /path/to/agent/skills --name volclog-shared --name volclog-log
+  tlsctl skill install --dir /path/to/agent/skills --name volclog-core
   tlsctl skill install --dir /path/to/agent/skills --force
 
 Exit Code:
   0 success
   1 usage / invalid args
-  2 runtime failure
+ 2 runtime failure
 `)
 }
 
 func usageAPI() string {
 	return u(`Usage:
-  tlsctl api <group>
-  tlsctl api <group> <action> [flags]
-  tlsctl api call --method <GET|POST|PUT|DELETE> --path <path> [--query k=v] [--header k=v] [--body <json|file://...|->] [--request-format <json|jsonl>]
+  tlsctl api <legacy surface removed>
 
-概览:
-  用于执行 OpenAPI；优先使用 api <group> <action>。
-  只有在已明确 method/path 时才使用 api call。
-  全局参数必须写在 api 前；大输出优先使用 --output-mode file。
-  对 api 可放宽：输出类全局参数也可写在 action 后。
-  --jmes-filter 作用于原始 API 结果，而不是 CLI envelope。
-
-推荐流程:
-  1. 先发现 action：        tlsctl capabilities --view groups
-  2. 查看调用约束：         tlsctl api <group> <action> --describe
-  3. 有 body 时先生成模板： tlsctl api <group> <action> --print-request-template=full
-  4. 执行前先 dry-run：     tlsctl --dry-run api <group> <action> --request file://req.json
-  5. 若是复数 Describe 列举接口，可直接加 --all 自动翻页
-
-调用方式:
-  - query/path 参数通过 flags 传入
-  - body 通过 --request 传入
-  - --request 支持 inline JSON、file://...、-、裸文件路径
-
-关键参数:
-  --request <json|file://...|->
-  --print-request-template[=required|full]
-  --describe
-  --request-format <json|jsonl>
-  --query k=v
-  --header k=v
-
-过滤与引号:
-  --jmes-filter 筛选原始 API 返回；例如取 Total 写 Total，不写 data.Total
-  zsh/bash:      --jmes-filter "keys(@)"
-  fish/PowerShell: --jmes-filter 'keys(@)'
-
-Examples:
-  tlsctl api project
-  tlsctl api log SearchLogs --describe
-  tlsctl api project DescribeProjects --all
-  tlsctl api log SearchLogs --print-request-template=full
-  tlsctl --dry-run api log SearchLogs --request file://./req.json
-  tlsctl api call -h
+Notes:
+  - This legacy surface is no longer routed from the main CLI entry.
+  - Use tlsctl tool ... / tlsctl raw ... instead.
 `)
 }
 
 func usageAPICall() string {
 	return u(`Usage:
-  tlsctl api call --method <GET|POST|PUT|DELETE> --path <path> [--query k=v] [--header k=v] [--body <json|file://...|->] [--request-format <json|jsonl>]
+  tlsctl api call <legacy surface removed>
+
+Notes:
+  - This legacy surface is no longer routed from the main CLI entry.
+  - Use tlsctl raw --method <METHOD> --path <PATH> instead.
+`)
+}
+
+func usageRaw() string {
+	return u(`Usage:
+  tlsctl raw --method <GET|POST|PUT|DELETE> --path <path> [--query k=v] [--header k=v] [--body <json|file://...|->] [--request-format <json|jsonl>]
 
 概览:
-  底层直调入口；仅在已明确 method/path 时使用。
-  如果你还不确定接口，先回到 capabilities / api <group> <action>。
+  原始 transport 调用入口；需要显式提供 method/path。
   --jmes-filter 作用于原始 API 结果，而不是 CLI envelope。
 
 关键参数:
@@ -147,41 +118,160 @@ func usageAPICall() string {
   - body 支持 inline JSON、file://...、-、裸文件路径
 
 Examples:
-  tlsctl api call --method GET --path /DescribeProjects
-  tlsctl api call --method POST --path /CreateProject --body file://./req.json
-  tlsctl api call --method GET --path /DescribeProjects --jmes-filter "Total"
+  tlsctl raw --method GET --path /DescribeProjects
+  tlsctl raw --method POST --path /CreateProject --body file://./req.json
+  tlsctl raw --method GET --path /DescribeProjects --jmes-filter "Total"
 `)
 }
 
-func usageCapabilities() string {
+func usageTool() string {
 	return u(`Usage:
-  tlsctl capabilities [--group <group>] [--action <action>] [--view <json|compact|full|text|groups>] [--hints-file <path>]
+  tlsctl tool <command> [args]
 
 概览:
-  用于发现 group 与 action；不执行请求。
-  先选 group，再选 action，最后转到 api --describe。
+  用统一 tool 契约面做发现、筛选与契约查看；执行能力请使用 tool exec。
+  仅公开官网文档已发布接口；未公开接口不属于对外 CLI 契约面。
 
-推荐流程:
-  1. 粗分类: tlsctl capabilities --view groups
-  2. 看全量 group + action: tlsctl capabilities --view text
-  3. 看组内动作: tlsctl capabilities --group <group> --view text
-  4. 查动作细节: tlsctl capabilities --group <group> --action <action> --view full
-  5. 执行前确认: tlsctl api <group> <action> --describe
+Commands:
+  list      List groups or actions
+  describe  Show a tool contract and execution hint
+  exec      Execute a tool contract with JSON context/input
 
-视图说明:
-  - groups: group 一行概览，并给出 agent entry
-  - text: group + action + 描述，并给出每个 action 的下一条可执行命令
-  - json: compact 的机器可读 JSON（compact 别名）
-  - compact: 单 action 简明语义
-  - full: 完整约束
+Use:
+  volclog tool list
+  volclog tool list <group> [--verb <verb>] [--format <text|json>]
+  volclog tool describe <group.action>
+  volclog tool exec <group.action> --context file://ctx.json [--input file://req.json]
 
-Examples:
-  tlsctl capabilities --view groups
-  tlsctl capabilities --view text
-  tlsctl capabilities --group log --view text
-  tlsctl capabilities --action CreateProject
-  tlsctl capabilities --group log --action SearchLogs
-  tlsctl capabilities --group log --action SearchLogs --view full
+说明:
+  list 默认返回 group 摘要；指定 <group> 后返回 action 列表。
+
+Exit Code:
+  0 success
+  1 usage / invalid args
+
+Agent:
+  - describe 结果是机器可读契约，包含输入/上下文/执行约束
+  - shortcut 仍是人工入口，不属于 tool 默认流程
+`)
+}
+
+func usageWorkflow() string {
+	return u(`Usage:
+  tlsctl workflow <command> [args]
+
+概览:
+  CLI workflow 契约面，暴露少量高价值高层编排。
+  这些能力不是官网公开 OpenAPI tool；tool 仍只暴露官网公开 API。
+
+Commands:
+  list      List workflow groups or workflow ids
+  describe  Show a workflow contract and execution hint
+  exec      Execute a workflow with JSON context/input
+`)
+}
+
+func usageWorkflowList() string {
+	return u(`Usage:
+  tlsctl workflow list
+  tlsctl workflow list [<group>] [--format <text|json>]
+
+说明:
+  - workflow 面只暴露 CLI workflow，不混入 public tool
+  - 当前首批 workflow: log.ingest / log.export / log.export-analysis
+  - tool 仍只暴露官网公开 API
+
+Next:
+  volclog workflow describe <group.command>
+  volclog workflow exec <group.command> --input file://req.json
+
+Filters:
+  --format <text|json>
+`)
+}
+
+func usageWorkflowDescribe() string {
+	return u(`Usage:
+  tlsctl workflow describe <group.command>
+
+说明:
+  - describe 返回 CLI workflow contract，而不是 public OpenAPI contract
+  - 需要原子 API 契约时，回到 volclog tool describe <group.action>
+  - workflow exec 使用 JSON input/context，不要求 agent 学 flags
+`)
+}
+
+func usageWorkflowExec() string {
+	return u(`Usage:
+  tlsctl workflow exec <group.command> [--context file://ctx.json|-|'<inline-json>'] --input file://req.json|-|'<inline-json>'
+
+Notes:
+  - --context 可省略；省略时默认使用空对象 {}
+  - --input 支持 file://...、-、inline JSON object
+  - execution 默认从 ctx.json 的 execution 字段读取
+  - execution.projection / execution.artifact / execution.dry_run 语义与 tool exec 一致
+  - 大结果 workflow 建议配合 --output-mode file 或 execution.artifact
+`)
+}
+
+func usageToolList() string {
+	return u(`Usage:
+  tlsctl tool list
+  tlsctl tool list [<group>] [--verb <verb>] [--format <text|json>]
+
+说明:
+  - 默认返回 group 摘要
+  - 指定 <group> 后返回该 group 下可执行的 action identity
+  - 仅列出官网文档已发布接口
+  - 只做发现与筛选，不执行请求
+
+支持的发现方式:
+  - 按 group 看有哪些 action: tlsctl tool list <group>
+  - 按 verb 缩小范围: tlsctl tool list <group> --verb <verb>
+
+常见 verb:
+  create / get / list / describe / modify / delete / search
+
+Next:
+  tlsctl tool describe <group.action>
+  tlsctl tool exec <group.action> [--context file://ctx.json] [--input file://req.json|-]
+
+Filters:
+  --verb <verb>
+  --format <text|json>
+`)
+}
+
+func usageToolDescribe() string {
+	return u(`Usage:
+  tlsctl tool describe <group.action> [--view <compact|full>]
+
+说明:
+  - 默认返回 compact 视图，优先保留最小可执行契约
+  - 指定 --view full 或显式 --output json 时返回完整机器契约
+  - 只展示官网文档已发布接口的契约
+  - 只做契约查看，不执行请求
+  - 通常与 volclog tool list <group> 配合使用
+`)
+}
+
+func usageToolExec() string {
+	return u(`Usage:
+  tlsctl tool exec <group.action> [--context file://ctx.json|-|'<inline-json>'] [--input file://req.json|-|'<inline-json>'] [--page-all]
+
+Notes:
+  - 先根据 tool describe 准备 context/input 文件
+  - --context 可省略；省略时默认使用空对象 {}
+  - --context 和 --input 都支持 file://...、-、inline JSON object
+  - 当 tool describe 的 input_schema 为空时，可省略 --input
+  - tool exec 既支持显式嵌套的 {query,path,header,body}，也支持扁平 JSON；当字段能唯一映射到某个 section 时会自动归位
+  - --page-all 是 execution.page.all 的 CLI 入口（等价于 execution.page.all=true）
+  - 未显式指定 --output-mode stdout/file 且 stdout 结果过大时，tool exec 会自动把全量结果写入 artifact，并仅返回摘要预览
+  - execution 默认从 ctx.json 的 execution 字段读取
+  - execution.projection 支持 "expr"、["expr"]、{"jmes":"expr"}
+  - execution.artifact 支持 true、"/tmp/out.json"、{"path":"/tmp/out.json"}
+  - execution.page.all 只在 tool describe 返回 execution.supports_all=true 时可用；它提高完整性，可能增加 payload 大小
+  - context.trace 支持 true、"/tmp/traces"、{"dir":"/tmp/traces","redact":"strict"}
 `)
 }
 
@@ -189,11 +279,11 @@ func usageProject() string {
 	return u(`Usage:
   tlsctl project <command> [args]
 
-Agent First:
-  - High-frequency shortcut for both agents and humans.
-  - Inspect shortcut constraints first: tlsctl project create --describe
-  - Generate JSON template when needed: tlsctl project create --print-request-template=full
-  - Fall back to capabilities/api when the shortcut does not cover the need.
+Human Shortcut:
+  - 面向人工交互的高频命令；已明确要做 project 操作时可直接使用。
+  - 当前 shortcut 仍支持 --describe；字段复杂时先看 --print-request-template=full。
+  - 需要公开 API 契约时，转到 tlsctl tool list project / tlsctl tool describe project.create。
+  - 字段较多时，用 --print-request-template=full + --request file://req.json 组织完整 JSON。
 
 Commands:
   list     List projects
@@ -207,15 +297,13 @@ Commands:
   - 按项目名过滤: volclog project list --project-name <name>
   - 看单项目详情: volclog project get --describe
   - 创建或修改项目: volclog project create --describe / volclog project modify --describe
+  - 字段较多时组织 body: volclog project create --print-request-template=full
 
 Exit Code:
   0 success
   1 usage / invalid args
   2 request/runtime failure
   3 output/decode failure
-
-Agent:
-  - Typical flow: tlsctl project create --describe -> tlsctl project create --print-request-template=full -> tlsctl project create --request file://req.json
 `)
 }
 
@@ -223,11 +311,11 @@ func usageTopic() string {
 	return u(`Usage:
   tlsctl topic <command> [args]
 
-Agent First:
-  - High-frequency shortcut for both agents and humans.
-  - Inspect shortcut constraints first: tlsctl topic create --describe
-  - Generate JSON template when needed: tlsctl topic create --print-request-template=full
-  - Fall back to capabilities/api when the shortcut does not cover the need.
+Human Shortcut:
+  - 面向人工交互的高频命令；已明确要做 topic 操作时可直接使用。
+  - 当前 shortcut 仍支持 --describe；字段复杂时先看 --print-request-template=full。
+  - 需要公开 API 契约时，转到 tlsctl tool list topic / tlsctl tool describe topic.<action>。
+  - 字段较多时，用 --print-request-template=full + --request file://req.json 组织完整 JSON。
 
 Commands:
   list     List topics
@@ -252,9 +340,6 @@ Exit Code:
   1 usage / invalid args
   2 request/runtime failure
   3 output/decode failure
-
-Agent:
-  - Use --describe plus --print-request-template before composing large request bodies
 `)
 }
 
@@ -262,11 +347,11 @@ func usageMetricTopic() string {
 	return u(`Usage:
   tlsctl metric-topic <command> [args]
 
-Agent First:
-  - High-frequency shortcut for both agents and humans.
-  - Inspect shortcut constraints first: tlsctl metric-topic create --describe
-  - Generate JSON template when needed: tlsctl metric-topic create --print-request-template=full
-  - Fall back to capabilities/api when the shortcut does not cover the need.
+Human Shortcut:
+  - 面向人工交互的高频命令；已明确要做 metric-topic 操作时可直接使用。
+  - 当前 shortcut 仍支持 --describe；字段复杂时先看 --print-request-template=full。
+  - 对外 agent tool 不暴露 metric-topic；这里保留人工 shortcut。
+  - 字段较多时，用 --print-request-template=full + --request file://req.json 组织完整 JSON。
 
 Commands:
   list     List metric topics
@@ -292,9 +377,6 @@ Exit Code:
   1 usage / invalid args
   2 request/runtime failure
   3 output/decode failure
-
-Agent:
-  - Prefer --describe plus --print-request-template before composing large request bodies
 `)
 }
 
@@ -333,11 +415,11 @@ func usageIndex() string {
 	return u(`Usage:
   tlsctl index <command> [args]
 
-Agent First:
-  - High-frequency shortcut for both agents and humans.
-  - Inspect shortcut constraints first: tlsctl index create --describe
-  - Generate JSON template first: tlsctl index create --print-request-template=full
-  - Fall back to capabilities/api when the shortcut does not cover the need.
+Human Shortcut:
+  - 面向人工交互的高频命令；已明确要做 index 操作时可直接使用。
+  - 当前 shortcut 仍支持 --describe；字段复杂时先看 --print-request-template=full。
+  - 需要公开 API 契约时，转到 tlsctl tool list index / tlsctl tool describe index.<action>。
+  - 字段较多时，用 --print-request-template=full + --request file://req.json 组织完整 JSON。
 
 Commands:
   get      Get index by topic id
@@ -361,11 +443,11 @@ func usageLog() string {
 	return u(`Usage:
   tlsctl log <command> [args]
 
-Agent First:
-  - High-frequency shortcut for both agents and humans.
-  - Inspect shortcut constraints first: tlsctl log search --describe
-  - Generate JSON template when needed: tlsctl log search --print-request-template=full
-  - Fall back to capabilities/api when the shortcut does not cover the need.
+Human Shortcut:
+  - 面向人工交互的高频命令；已明确要做 log 操作时可直接使用。
+  - 当前 shortcut 仍支持 --describe；复杂写入体先看 --print-request-template=full。
+  - 需要公开 API 契约时，转到 tlsctl tool list log / tlsctl tool describe log.<action>。
+  - CLI workflow 约束与执行请看 tlsctl workflow describe/exec log.<command>。
 
 Commands:
   search   Search logs via /SearchLogs
@@ -381,9 +463,9 @@ Commands:
   - 看命中日志上下文: volclog log context --describe
   - 看查询直方图: volclog log histogram --describe
   - 写日志/WebTracking: volclog log put --describe
-  - 批量导入文本或 JSON 日志: volclog log ingest --describe
-  - 大量原始日志导出: volclog --output-mode file log export --describe
-  - SQL/聚合/分析导出: volclog --output-mode file log export-analysis --describe
+  - 批量导入文本或 JSON 日志: volclog workflow describe log.ingest
+  - 大量原始日志导出: volclog workflow describe log.export
+  - SQL/聚合/分析导出: volclog workflow describe log.export-analysis
 
 Notes:
   - SearchLogs requires X-Tls-Apiversion=0.3.0 (handled by client).
@@ -403,11 +485,6 @@ Exit Code:
   1 usage / invalid args
   2 request/runtime failure
   3 output/decode failure
-
-Agent:
-  - Prefer --output-mode file for large search results
-  - Use --trace-dir to generate trace artifacts for debugging
-  - For export, prefer JSONL streaming: tlsctl --output jsonl log export ...
 `)
 }
 
@@ -415,11 +492,11 @@ func usageHostGroup() string {
 	return u(`Usage:
   tlsctl host-group <command> [args]
 
-Agent First:
-  - High-frequency shortcut for both agents and humans.
-  - Inspect shortcut constraints first: tlsctl host-group create --describe
-  - Generate JSON template when needed: tlsctl host-group create --print-request-template=full
-  - Fall back to capabilities/api when the shortcut does not cover the need.
+Human Shortcut:
+  - 面向人工交互的高频命令；已明确要做 host-group 操作时可直接使用。
+  - 当前 shortcut 仍支持 --describe；字段复杂时先看 --print-request-template=full。
+  - 需要公开 API 契约时，转到 tlsctl tool list host-group / tlsctl tool describe host-group.<action>。
+  - 字段较多时，用 --print-request-template=full + --request file://req.json 组织完整 JSON。
 
 Commands:
   list     List host groups
@@ -445,11 +522,11 @@ func usageCollector() string {
 	return u(`Usage:
   tlsctl collector <command> [args]
 
-Agent First:
-  - High-frequency shortcut for both agents and humans.
-  - Inspect shortcut constraints first: tlsctl collector create --describe
-  - Generate JSON template when needed: tlsctl collector create --print-request-template=full
-  - Fall back to capabilities/api when the shortcut does not cover the need.
+Human Shortcut:
+  - 面向人工交互的高频命令；已明确要做 collector 操作时可直接使用。
+  - 当前 shortcut 仍支持 --describe；字段复杂时先看 --print-request-template=full。
+  - 需要公开 API 契约时，转到 tlsctl tool list collector / tlsctl tool describe collector.<action>。
+  - 字段较多时，用 --print-request-template=full + --request file://req.json 组织完整 JSON。
 
 Commands:
   list     List collector rules
@@ -475,14 +552,14 @@ func usageAssistant() string {
 	return u(`Usage:
   tlsctl assistant <command> [args]
 
-Agent First:
-  - High-frequency shortcut for both agents and humans.
-  - Inspect shortcut constraints first: tlsctl assistant describe-session-answer --describe
-  - Fall back to capabilities/api when the shortcut does not cover the need.
+Human Shortcut:
+  - 面向人工交互的高频命令；已明确要做 assistant 操作时可直接使用。
+  - 当前 shortcut 仍支持 --describe。
+  - 对外公开 CLI 不暴露 assistant tool catalog；这里只保留人工 shortcut。
 
 场景速选:
   - 会话回答/answer detail: volclog assistant describe-session-answer --describe
-  - 实例管理或更底层接口: volclog capabilities --group assistant --view text
+  - 对外公开 CLI 不暴露 assistant tool catalog；不要把 assistant 当成公开 tool 分组
 
 Commands:
   describe-session-answer   Ask AI Assistant for a topic

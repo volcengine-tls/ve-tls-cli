@@ -77,15 +77,15 @@
 ### 1.5 告警管理 (Alarm)
 **场景**：配置告警策略组，实现日志监控和异常通知。
 
-- **通过 API 命令管理告警策略**：
-  *由于告警配置高度定制化，建议直接使用底层 API 命令。*
+- **通过 tool/shortcut 管理告警策略**：
+  *由于告警配置高度定制化，建议先看 `tool describe` 约束，再执行。*
   ```bash
-  # 探测 API 约束
-  volclog api alarm CreateAlarm --describe
+  # 探测契约
+  volclog tool describe alarm.create-alarm
   # 预执行校验
-  volclog --dry-run api alarm CreateAlarm --request file://alarm_req.json
+  volclog --dry-run tool exec alarm.create-alarm --context file://ctx.json --input file://alarm_req.json
   # 正式执行
-  volclog api alarm CreateAlarm --request file://alarm_req.json
+  volclog tool exec alarm.create-alarm --context file://ctx.json --input file://alarm_req.json
   ```
 
 ### 1.6 数据加工与消费 (ETL & Consumer Group)
@@ -93,31 +93,31 @@
 
 - **管理数据加工任务 (ETL)**：
   ```bash
-  volclog api etl CreateRule --describe
+  volclog tool describe etl.create-rule
   ```
 - **创建并查看消费组 (Consumer Group)**：
   ```bash
-  volclog api consumer-group CreateConsumerGroup --describe
+  volclog tool describe consumer-group.create-consumer-group
   ```
 
 ---
 
 ## 2. CLI 独有能力与高级参数组合
 
-除了普通的 API 映射，`volclog` 还为 CLI 和自动化设计了许多高级特性，这些是平台 SDK 或控制台所不具备的。熟练掌握这些参数组合，可以大幅提升开发与运维效率。
+除了常规资源命令，`volclog` 还为 CLI 和自动化设计了许多高级特性，这些是平台 SDK 或控制台所不具备的。熟练掌握这些参数组合，可以大幅提升开发与运维效率。
 
 ### 2.1 Agent/自动化友好的元数据探索
 
 对于不熟悉的接口，不要靠猜，利用 CLI 提供的自解释能力：
 
-- **--describe 探测 API 约束**
-  在调用任何 `api` 命令前，加上 `--describe`，CLI 会直接输出该 API 的字段要求、输入方式以及推荐模板。
+- **--describe 探测命令约束**
+  在调用复杂命令前，先看 `--describe`。shortcut 的 `--describe` 输出当前命令约束；公开机器契约请改用 `tool describe` 或 `workflow describe`。
   ```bash
   volclog log ingest --describe
   ```
 
 - **--print-request-template 生成请求骨架**
-  当 API 需要复杂的 JSON 请求体时，CLI 支持一键生成。
+  当命令需要复杂的 JSON 请求体时，CLI 支持一键生成。
   ```bash
   # 快捷写入优先看 ingest 的输入约束
   volclog log ingest --describe
@@ -128,9 +128,9 @@
   ```
 
 - **--dry-run 本地校验载荷**
-  这是最安全的参数！使用 `--dry-run` 拦截真实网络请求，仅校验参数是否完备、JSON 是否合法，并打印计算出的 Payload SHA256。
+  这是最安全的参数！通过 `tool exec` 的 `ctx.json` 中 `execution.dry_run` 先拦截真实网络请求，仅校验参数是否完备、JSON 是否合法。
   ```bash
-  volclog --dry-run api log PutLogs --request file://put_req.json
+  volclog tool exec log.put-logs --context file://ctx.json --input file://put_req.json
   ```
 
 ### 2.2 多种请求载荷输入方式 (--request)
@@ -155,7 +155,7 @@
 遇到非预期的 `400` 或 `500` 错误，想查看完整的请求响应包但又不想泄露敏感的 `AK/SK`：
 
 ```bash
-volclog --trace-dir ./.volclog/traces --trace-redact strict api project CreateProject --request file://create_req.json
+volclog --trace-dir ./.volclog/traces --trace-redact strict project create --request file://create_req.json
 ```
 执行后，目录下会生成详细的 trace 日志。`--trace-redact strict` 确保所有的 Authorization、Token 都被 `[REDACTED]` 替换，可以安全地发给支持团队。
 
@@ -163,7 +163,7 @@ volclog --trace-dir ./.volclog/traces --trace-redact strict api project CreatePr
 
 ## 3. 全局参数作用域与语法边界
 
-`volclog` 的全局参数只支持写在 group 之前：
+`volclog` 的全局参数默认仍建议写在 group 之前：
 
 ```bash
 volclog [global flags...] <group> <command> [args]
@@ -171,13 +171,15 @@ volclog [global flags...] <group> <command> [args]
 
 推荐：
 ```bash
-volclog --output json api call --method GET --path /DescribeProjects --query PageSize=1
+volclog --output json raw --method GET --path /DescribeProjects --query PageSize=1
 ```
 
-不推荐（不支持）：
+也支持的后置写法（仅限 `raw` 和部分 shortcut 的输出类全局参数）：
 ```bash
-volclog api --output json call --method GET --path /DescribeProjects
+volclog raw --output json --method GET --path /DescribeProjects
 ```
+
+建议：为了减少歧义，文档、脚本和 Agent 默认仍统一采用前置写法。
 
 ### 3.1 全局参数一图理解
 

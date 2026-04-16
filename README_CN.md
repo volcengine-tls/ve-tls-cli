@@ -2,16 +2,16 @@
 
 [中文版](README_CN.md) | [English](README.md)
 
-火山引擎 TLS（日志服务）官方 CLI 工具，兼顾人类开发者和 AI Agent 的使用场景。覆盖日志项目、主题、索引、检索分析、告警、消费组、数据加工等主要业务域，提供快捷命令、底层 API 调用和可选 skills。
+火山引擎 TLS（日志服务）官方 CLI 工具，兼顾人类开发者和 AI Agent 的使用场景。覆盖日志项目、主题、索引、检索分析、告警、消费组、数据加工等主要业务域，提供快捷命令、tool 契约、raw transport 调用和可选 skills。
 
 **volclog 提供什么？**
 
 - **Agent 可集成** — 提供一组可选 skills，方便把常见 TLS 操作接到大模型或自动化流程里。
 - **覆盖范围完整** — 涵盖 20+ 个业务领域；常见场景可走 shortcut，细粒度场景可直接调用底层 OpenAPI。
-- **命令约束更容易看清** — 统一提供 `--describe`、请求模板、`--dry-run` 和结构化输出，适合先看约束再执行。
+- **命令约束更容易看清** — 提供 `tool/workflow describe`、shortcut 请求模板、`--dry-run` 和结构化输出，适合先看约束再执行。
 - **安装和配置路径直接** — 支持二进制安装、源码编译、本地 profile、环境变量和 `--secrets-file`。
 - **安全边界相对清楚** — 提供 `--dry-run`、终端输出脱敏和环境隔离相关能力。
-- **分层使用** — shortcut / api / skills 三层并存，需要时再逐层下沉。
+- **分层使用** — shortcut / tool / workflow / raw / skills 多层并存，需要时再逐层下沉。
 
 ---
 
@@ -100,23 +100,45 @@ bash scripts/install-local.sh
 npm install -g @volcengine-tls/volclog
 ```
 
-#### Step 2 — 发现能力与约束
-对于不熟悉的接口，先通过 `capabilities` 和 `--describe` 看约束，比直接猜参数稳一些：
+#### Step 2 — 发现可执行工具与约束
+对未知任务先走 `tool / workflow` 契约主链路，再进入 raw 调试层：
 ```bash
-# 查看有哪些领域
-volclog capabilities --view groups
-# 查看具体领域的接口
-volclog capabilities --group project --view text
-# 查看接口的入参要求、模板与限制
-volclog api project CreateProject --describe
+# 查看可见 tool group（公开 API 主入口）
+volclog tool list
+# 查看领域内 action
+volclog tool list project
+# 查看可见 workflow group（CLI 编排入口）
+volclog workflow list
+# 查看某 action 的完整契约
+volclog tool describe project.create
+# 查看某 workflow 的完整契约
+volclog workflow describe log.export
+```
+
+如果你已经明确 method/path，就直接走专家级 raw 入口：
+```bash
+# 直接发原始 transport 调用
+volclog raw --method POST --path /CreateProject --body file://req.json
 ```
 
 #### Step 3 — 预执行与调用
-通过 `--dry-run` 验证您的请求载荷：
+先准备 `context` 与 `input`，并在 `ctx.json` 写入 `execution.dry_run`：
 ```bash
-volclog --dry-run api project CreateProject --request '{"ProjectName":"test", "Region": "cn-beijing"}'
+cat >ctx.json <<'EOF'
+{
+  "region": "cn-beijing",
+  "execution": {"dry_run": true}
+}
+EOF
+cat >req.json <<'EOF'
+{
+  "ProjectName": "test",
+  "Region": "cn-beijing"
+}
+EOF
+volclog tool exec project.create --context file://ctx.json --input file://req.json
 ```
-确认无误后去掉 `--dry-run` 再执行。
+确认无误后将 `ctx.json` 中的 `dry_run` 去掉再执行。
 
 #### Step 4 — 数据过滤
 使用 `--jmes-filter` 提取关键数据，避免上下文被长列表撑爆：
@@ -128,30 +150,27 @@ volclog project list --jmes-filter "Projects[].{Id: ProjectId, Name: ProjectName
 
 ## Agent Skills (智能体技能)
 
-仓库里带了一组 Agent Skills，放在 `skills/` 目录下：
+仓库里带了一组可直接安装的 Agent Skill，放在 `skills/` 目录下：
 
 | 技能 (Skill) | 描述 |
 | --- | --- |
-| **volclog-shared** | 通用配置与诊断（所有其他技能的基础），处理环境、认证与通用查询 |
-| **volclog-project** | 项目生命周期管理与查询规划 |
-| **volclog-topic** | 主题配置与约束校验 |
-| **volclog-index** | 索引分析与创建，自动处理全文与键值索引结构 |
-| **volclog-log** | 核心日志检索、SQL 分析与大数据导出路由 |
-| **volclog-host-group** | 机器组 CRUD 与机器组相关 API fallback 指引 |
-| **volclog-collector** | 采集规则 CRUD 与采集规则相关 API fallback 指引 |
-| **volclog-metric-topic** | 指标流查询与 PromQL 支持 |
-| **volclog-alarm** | 告警规则排查与配置 |
-| **volclog-api-explorer** | 提供底层 OpenAPI 的全量探测与调用能力 |
+| **volclog-core** | 仅补充 `tool describe` / `workflow describe` 之外的 Agent 增量知识：意图路由、跨 group SOP、错误恢复、profile 选择、大结果控制 |
+
+`volclog-core` 内部拆成三类薄参考：
+
+- `routing`：自然语言意图到 `tool / workflow / raw` 的路由
+- `sops`：跨 group 的常见多步任务编排
+- `best-practices`：错误恢复、已知陷阱、token 与大结果控制
 
 **安装技能:**
 ```bash
-volclog skill install --dir skills/
+volclog skill install --dir /path/to/agent/skills
 ```
 
 如果你只是想临时装一次 skill，也可以直接用 `npx`：
 
 ```bash
-npx @volcengine-tls/volclog skill install --dir skills/
+npx @volcengine-tls/volclog skill install --dir /path/to/agent/skills
 ```
 
 ---
@@ -160,7 +179,7 @@ npx @volcengine-tls/volclog skill install --dir skills/
 
 除了基础命令外，还有一些在排障和自动化里比较常用的能力：
 
-- **自动化探索**：通过 `--describe` 与 `--print-request-template` 一键获取接口约束与复杂 JSON 载荷模板。
+- **自动化探索**：通过 `tool describe` / `workflow describe` 获取机器契约；复杂 shortcut 请求体再用 `--print-request-template` 生成骨架。
 - **安全验证**：使用 `--dry-run` 拦截网络请求，本地校验 JSON 的合法性及必填参数。
 - **灵活输入**：支持通过内联字符串、本地文件（`file://...`）或标准输入（`-`）流式传递 JSON 载荷。
 - **排障与脱敏**：结合 `--trace-dir` 与 `--trace-redact strict` 生成脱敏的 Trace 工件包。
@@ -180,4 +199,4 @@ npx @volcengine-tls/volclog skill install --dir skills/
 ## 贡献与安全
 
 - **Security**: 避免在命令参数中硬编码明文的 AK/SK。请使用 `volclog configure`，或借助环境变量 `VOLCENGINE_ACCESS_KEY_ID`、`VOLCENGINE_ACCESS_KEY_SECRET`，或通过 `--secrets-file <path>` 注入。
-- **Contributing**: 我们欢迎提交 PR 来增强 CLI。添加新的 OpenAPI 命令或技能后，请务必运行 `scripts/update_capabilities_contract.sh` 更新接口契约。
+- **Contributing**: 我们欢迎提交 PR 来增强 CLI。修改公开 tool catalog 后，请运行 `go run ./internal/openapigen --spec repos/docs/swagger.json` 重新生成，并执行 `go test ./...`。

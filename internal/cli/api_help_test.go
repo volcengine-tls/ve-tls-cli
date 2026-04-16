@@ -2,170 +2,151 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestUsageAPIGeneratedIsConciseAndGuided(t *testing.T) {
-	ops := []apiActionOp{
-		{
-			Cmd: apiCapabilityCommand{
-				Group:        "log",
-				Action:       "SearchLogs",
-				Summary:      "SearchLogs",
-				Description:  "检索日志请求。",
-				Method:       "POST",
-				Path:         "/SearchLogs",
-				InputMode:    "body via --request; query/path via flags",
-				BodyRequired: true,
-			},
-			ParamFlags: map[string]apiCapParam{
-				"--topic-id": {Name: "TopicId", In: "query", Required: true},
-			},
-		},
-	}
-	s := usageAPIGenerated("log", "search", ops)
+func TestUsageRawDescribesTransportOnlySurface(t *testing.T) {
+	text := usageRaw()
 	for _, want := range []string{
-		"优先入口:",
-		"volclog log search --describe",
-		"volclog capabilities --group log --view text",
-		"模板建议:",
-		"--print-request-template=required",
-		"--print-request-template=full",
-		"--describe",
-		"--print-request-template[=required|full]",
-		"调用输入:",
-		"下一步命令:",
-		"接口协议:",
-		"请求体: 通过 --request 传入（必填）",
-		"--output-mode file api log SearchLogs --request file://req.json",
-	} {
-		if !strings.Contains(s, want) {
-			t.Fatalf("missing %q in usage: %s", want, s)
-		}
-	}
-	for _, notWant := range []string{"protocol:", "input:", "request body:"} {
-		if strings.Contains(s, notWant) {
-			t.Fatalf("unexpected legacy label %q in usage: %s", notWant, s)
-		}
-	}
-	for _, notWant := range []string{"推荐流程:", "大结果优先使用 --output-mode file"} {
-		if strings.Contains(s, notWant) {
-			t.Fatalf("usage should stay concise and hide %q: %s", notWant, s)
-		}
-	}
-}
-
-func TestUsageAPIGeneratedPluralDescribeIncludesAll(t *testing.T) {
-	ops := []apiActionOp{
-		{
-			Cmd: apiCapabilityCommand{
-				Group:   "project",
-				Action:  "DescribeProjects",
-				Summary: "DescribeProjects",
-				Method:  "GET",
-				Path:    "/DescribeProjects",
-				Params: []apiCapParam{
-					{Name: "PageNumber", In: "query", Type: "integer"},
-					{Name: "PageSize", In: "query", Type: "integer"},
-				},
-			},
-		},
-	}
-	s := usageAPIGenerated("project", "DescribeProjects", ops)
-	for _, want := range []string{
-		"--all",
-		"volclog api project DescribeProjects --all",
-	} {
-		if !strings.Contains(s, want) {
-			t.Fatalf("missing %q in usage: %s", want, s)
-		}
-	}
-}
-
-func TestUsageAPIGeneratedPutLogsMentionsMillisecondTimestamp(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{"api", "log", "PutLogs", "-h"}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-	}
-	out := stdout.String()
-	for _, want := range []string{
-		"Logs[].Time 必须填写 Unix 毫秒时间戳",
-		"1710374400000",
-		"不要填秒级 1710374400",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in usage: %s", want, out)
-		}
-	}
-}
-
-func TestUsageAPICallIsDistinctFromUsageAPI(t *testing.T) {
-	callText := usageAPICall()
-	apiText := usageAPI()
-	if callText == apiText {
-		t.Fatalf("api call help should be distinct from top-level api help")
-	}
-	for _, want := range []string{
-		"底层直调入口；仅在已明确 method/path 时使用",
+		"volclog raw --method <GET|POST|PUT|DELETE> --path <path>",
+		"原始 transport 调用入口",
 		"--method <GET|POST|PUT|DELETE>",
 		"--path <path>",
 	} {
-		if !strings.Contains(callText, want) {
-			t.Fatalf("missing %q in api call usage: %s", want, callText)
-		}
-	}
-	for _, notWant := range []string{
-		"推荐场景:",
-		"对比 generated action 与底层直调的请求差异",
-		"特殊 IO 接口如需 protobuf/压缩适配",
-	} {
-		if strings.Contains(callText, notWant) {
-			t.Fatalf("api call usage should stay concise and hide %q: %s", notWant, callText)
-		}
-	}
-}
-
-func TestUsageAPIDescribesAgentExecutionEntry(t *testing.T) {
-	text := usageAPI()
-	for _, want := range []string{
-		"用于执行 OpenAPI；优先使用 api <group> <action>",
-		"只有在已明确 method/path 时才使用 api call",
-		"有 body 时先生成模板",
-	} {
 		if !strings.Contains(text, want) {
-			t.Fatalf("missing %q in api usage: %s", want, text)
+			t.Fatalf("missing %q in raw usage: %s", want, text)
 		}
 	}
 	for _, notWant := range []string{
-		"优先服务智能体、CI/CD、运维脚本、RPA、服务端任务及各类非人工交互场景",
-		"退出码:",
+		"tool list",
+		"tool describe",
+		"api <group>",
+		"capabilities",
 	} {
 		if strings.Contains(text, notWant) {
-			t.Fatalf("unexpected verbose text %q in api usage: %s", notWant, text)
+			t.Fatalf("raw usage should stay transport-only and hide %q: %s", notWant, text)
 		}
 	}
 }
 
-func TestAPIDescribeIncludesShortcutFallbackGuidance(t *testing.T) {
+func TestRawHelpStaysTransportOnly(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"api", "log", "SearchLogs", "--describe"}, &stdout, &stderr)
+	code := Run([]string{"raw", "-h"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 	out := stdout.String()
 	for _, want := range []string{
-		`"shortcut_first": [`,
-		`"volclog log search --describe"`,
-		`"volclog log export --describe"`,
-		`"fallback_discovery": "volclog capabilities --group log --view text"`,
+		"volclog raw --method <GET|POST|PUT|DELETE> --path <path>",
+		"原始 transport 调用入口",
+		"--query k=v",
+		"--header k=v",
 	} {
 		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in api describe output: %q", want, out)
+			t.Fatalf("missing %q in raw help: %q", want, out)
 		}
 	}
-	if strings.Contains(out, `"scenario_routing":`) {
-		t.Fatalf("api action describe should omit scenario_routing: %q", out)
+	for _, notWant := range []string{
+		"tool list",
+		"tool describe",
+		"api <group>",
+		"capabilities",
+	} {
+		if strings.Contains(out, notWant) {
+			t.Fatalf("raw help should stay transport-only and hide %q: %q", notWant, out)
+		}
+	}
+}
+
+func TestLegacyCapabilitiesAndAPIAreRemoved(t *testing.T) {
+	cases := []struct {
+		name      string
+		args      []string
+		wantHints []string
+	}{
+		{
+			name:      "capabilities",
+			args:      []string{"capabilities", "--group", "log", "--action", "SearchLogs"},
+			wantHints: []string{"volclog tool list log", "volclog tool describe log.search"},
+		},
+		{
+			name:      "api group",
+			args:      []string{"api", "project"},
+			wantHints: []string{"volclog tool list project", "volclog raw --method"},
+		},
+		{
+			name:      "api action",
+			args:      []string{"api", "log", "SearchLogs", "--describe"},
+			wantHints: []string{"volclog tool list log", "volclog tool describe log.search"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := Run(tc.args, &stdout, &stderr)
+			if code != 1 {
+				t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+			}
+			if strings.TrimSpace(stdout.String()) != "" {
+				t.Fatalf("expected empty stdout, got %q", stdout.String())
+			}
+			text := stderr.String()
+			for _, want := range append([]string{`"errorCode": "CLIError"`, `"kind": "usage"`, "removed"}, tc.wantHints...) {
+				if !strings.Contains(text, want) {
+					t.Fatalf("missing %q in stderr: %q", want, text)
+				}
+			}
+		})
+	}
+}
+
+func TestRawCommandRemainsAvailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/DescribeProjects" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("x-tls-requestid", "req-raw")
+		_, _ = w.Write([]byte(`{"Projects":[],"Total":0}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
+	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
+	t.Setenv("VOLCENGINE_ENDPOINT", srv.URL)
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"raw", "--method", "GET", "--path", "/DescribeProjects", "--jmes-filter", "Total"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	if out["status"] != "success" {
+		t.Fatalf("unexpected status: %v", out["status"])
+	}
+	if out["action"] != "raw.call" {
+		t.Fatalf("unexpected action: %v", out["action"])
+	}
+	if out["requestId"] != "req-raw" {
+		t.Fatalf("unexpected requestId: %v", out["requestId"])
+	}
+	if got, ok := out["data"].(float64); !ok || got != 0 {
+		t.Fatalf("expected filtered raw result 0, got %#v", out["data"])
 	}
 }

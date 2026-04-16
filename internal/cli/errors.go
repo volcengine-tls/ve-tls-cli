@@ -17,6 +17,22 @@ type errPayload struct {
 	Hint         string `json:"hint,omitempty"`
 }
 
+type removedCommandError struct {
+	Command string
+	Hint    string
+}
+
+func (e *removedCommandError) Error() string {
+	return "legacy command removed: " + strings.TrimSpace(e.Command)
+}
+
+func removedLegacyCommandError(command string, hint string) error {
+	return &removedCommandError{
+		Command: strings.TrimSpace(command),
+		Hint:    strings.TrimSpace(hint),
+	}
+}
+
 func writeCLIError(w io.Writer, err error, requestID string, statusCode int, kind string, hint string) {
 	p := errPayload{
 		ErrorCode:    "CLIError",
@@ -39,6 +55,19 @@ func writeCLIError(w io.Writer, err error, requestID string, statusCode int, kin
 
 func classifyError(err error, requestID string, statusCode int, group string) (errPayload, int) {
 	msg := strings.TrimSpace(err.Error())
+	var removed *removedCommandError
+	if errors.As(err, &removed) {
+		hint := strings.TrimSpace(removed.Hint)
+		if hint == "" {
+			hint = "use 'volclog tool list' or 'volclog raw --method <METHOD> --path <PATH>'"
+		}
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "usage",
+			Hint:       hint,
+		}, 1
+	}
 	if he, ok := isHTTPError(err); ok {
 		kind := "server"
 		hint := ""
@@ -65,15 +94,20 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 	if strings.HasPrefix(msg, "missing --") ||
 		strings.HasPrefix(msg, "unknown flag:") ||
 		strings.HasPrefix(msg, "unknown api group:") ||
+		strings.Contains(msg, "must use file://") ||
+		strings.Contains(msg, "inline JSON object") ||
+		strings.Contains(msg, "json must be object") ||
 		strings.HasPrefix(msg, "action not found:") ||
 		strings.HasPrefix(msg, "group not found:") ||
 		(strings.Contains(msg, "unknown ") && strings.Contains(msg, " command:")) {
-		hint := "start with 'volclog capabilities --view text' or inspect 'volclog api <group> <action> --describe'"
+		hint := "start with 'volclog tool list' or inspect 'volclog tool describe <group.action>'"
 		if strings.HasPrefix(msg, "missing --") || strings.HasPrefix(msg, "unknown flag:") {
-			hint = "inspect constraints with 'volclog api <group> <action> --describe' or run --help"
+			hint = "inspect constraints with 'volclog tool describe <group.action>' or run --help"
 			if flag := strings.TrimSpace(strings.TrimPrefix(msg, "unknown flag:")); isGlobalFlagName(flag) {
 				hint = globalFlagPositionHint(flag, group)
 			}
+		} else if strings.Contains(msg, "must use file://") || strings.Contains(msg, "inline JSON object") || strings.Contains(msg, "json must be object") {
+			hint = "use file://ctx.json, -, or inline JSON object with 'volclog tool exec <group.action>'; tool exec also accepts flat JSON when fields map cleanly to query/path/header/body"
 		}
 		return errPayload{
 			RequestID:  requestID,

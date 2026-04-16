@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	bundledskills "github.com/volcengine-tls/ve-tls-cli"
 )
 
 func TestSkillListOutputsBundledSkills(t *testing.T) {
@@ -20,18 +22,24 @@ func TestSkillListOutputsBundledSkills(t *testing.T) {
 		t.Fatalf("invalid json: %v stdout=%s", err, stdout.String())
 	}
 	skills, ok := out["Skills"].([]any)
-	if !ok || len(skills) == 0 {
+	if !ok {
 		t.Fatalf("missing skills list: %v", out)
 	}
-	found := false
-	for _, item := range skills {
-		if item == "volclog-shared" {
-			found = true
+	if gotTotal, _ := out["Total"].(float64); int(gotTotal) != len(skills) {
+		t.Fatalf("total mismatch: %v", out)
+	}
+	if len(skills) == 0 {
+		t.Fatalf("expected bundled skills in this checkout")
+	}
+	var foundCore bool
+	for _, skill := range skills {
+		if name, _ := skill.(string); name == "volclog-core" {
+			foundCore = true
 			break
 		}
 	}
-	if !found {
-		t.Fatalf("expected bundled skill volclog-shared: %v", skills)
+	if !foundCore {
+		t.Fatalf("expected volclog-core in bundled skills: %v", out)
 	}
 }
 
@@ -48,16 +56,32 @@ func TestSkillInstallRequiresDir(t *testing.T) {
 
 func TestSkillInstallAllToTargetDir(t *testing.T) {
 	dest := t.TempDir()
+	available, err := bundledskills.List()
+	if err != nil {
+		t.Fatalf("list bundled skills: %v", err)
+	}
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"skill", "install", "--dir", dest}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
+	if len(available) == 0 {
+		entries, err := os.ReadDir(dest)
+		if err != nil {
+			t.Fatalf("read dest: %v", err)
+		}
+		if len(entries) != 0 {
+			t.Fatalf("expected no installed skills, got %d entries", len(entries))
+		}
+		return
+	}
 
 	for _, rel := range []string{
-		filepath.Join("volclog-shared", "SKILL.md"),
-		filepath.Join("volclog-log", "references", "log-search.md"),
+		filepath.Join("volclog-core", "SKILL.md"),
+		filepath.Join("volclog-core", "references", "routing.md"),
+		filepath.Join("volclog-core", "references", "sops.md"),
+		filepath.Join("volclog-core", "references", "best-practices.md"),
 	} {
 		if _, err := os.Stat(filepath.Join(dest, rel)); err != nil {
 			t.Fatalf("missing installed file %s: %v", rel, err)
@@ -67,17 +91,24 @@ func TestSkillInstallAllToTargetDir(t *testing.T) {
 
 func TestSkillInstallNamedSubset(t *testing.T) {
 	dest := t.TempDir()
+	available, err := bundledskills.List()
+	if err != nil {
+		t.Fatalf("list bundled skills: %v", err)
+	}
+	if len(available) == 0 {
+		t.Fatal("expected bundled skills in this checkout")
+	}
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"skill", "install", "--dir", dest, "--name", "volclog-project"}, &stdout, &stderr)
+	code := Run([]string{"skill", "install", "--dir", dest, "--name", "volclog-core"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 
-	if _, err := os.Stat(filepath.Join(dest, "volclog-project", "SKILL.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(dest, "volclog-core", "SKILL.md")); err != nil {
 		t.Fatalf("missing installed named skill: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dest, "volclog-log", "SKILL.md")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dest, "volclog-shared", "SKILL.md")); !os.IsNotExist(err) {
 		t.Fatalf("unexpected extra skill installation, err=%v", err)
 	}
 }

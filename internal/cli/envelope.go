@@ -11,7 +11,7 @@ func isAPIEnvelopeCandidate(group string, out any) bool {
 	if !isEnvelopeGroup(g) {
 		return false
 	}
-	if g == "api" {
+	if g == "raw" {
 		_, isString := out.(string)
 		return !isString
 	}
@@ -20,7 +20,7 @@ func isAPIEnvelopeCandidate(group string, out any) bool {
 
 func isEnvelopeGroup(group string) bool {
 	switch strings.TrimSpace(group) {
-	case "api", "project", "topic", "metric-topic", "index", "log", "assistant":
+	case "raw", "project", "topic", "metric-topic", "index", "log", "assistant":
 		return true
 	default:
 		return false

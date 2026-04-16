@@ -1,0 +1,3 @@
+# Tool catalog output policy overrides.
+# Format:
+#   <tool_id>: <full|stream|envelope|projection>

@@ -30,87 +30,17 @@ func TestSubcommandHelpFlagWorksAfterArgs(t *testing.T) {
 	}
 }
 
-func TestAPIProjectUsesSwaggerSummaryActions(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{"api", "project"}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-	}
-	out := stdout.String()
-	if !strings.Contains(out, "CreateProject") {
-		t.Fatalf("expected Swagger summary action in output: %q", out)
-	}
-	if strings.Contains(out, "create-project") {
-		t.Fatalf("kebab-case action should not appear in output: %q", out)
-	}
-	if strings.Contains(out, "POST /CreateProject") {
-		t.Fatalf("group action list should not expose method/path anymore: %q", out)
-	}
-}
-
-func TestAPIDescribeAcceptsSwaggerSummaryAction(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{"api", "project", "CreateProject", "--describe"}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-	}
-	out := stdout.String()
-	if !strings.Contains(out, `"action": "CreateProject"`) {
-		t.Fatalf("unexpected describe output: %q", out)
-	}
-}
-
-func TestAPIGroupHelpWorks(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{"api", "project", "-h"}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-	}
-	out := stdout.String()
-	for _, want := range []string{
-		"volclog api project",
-		"当前 group: project",
-		"场景速选:",
-		"按项目名过滤",
-		"volclog project list --describe",
-		"CreateProject: 创建日志项目请求",
-		"下一步命令:",
-		"volclog api project <action> --describe",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in stdout: %q", want, out)
-		}
-	}
-	for _, notWant := range []string{
-		"执行前先使用:",
-		"如有 body，再运行:",
-	} {
-		if strings.Contains(out, notWant) {
-			t.Fatalf("group help should stay concise and hide %q: %q", notWant, out)
-		}
-	}
-}
-
-func TestUsageCapabilitiesUsesRunnableActionOnlyExample(t *testing.T) {
-	text := usageCapabilities()
-	if strings.Contains(text, "--action create") {
-		t.Fatalf("deprecated ambiguous example should not appear: %q", text)
-	}
-	if !strings.Contains(text, "--action CreateProject") {
-		t.Fatalf("expected runnable action-only example: %q", text)
-	}
-}
-
 func TestUsageTextDescribesPrimaryEntryAsAgentNative(t *testing.T) {
 	text := usageText()
 	for _, want := range []string{
 		"主入口（Agent / 自动化优先）",
-		"用 capabilities 发现能力，用 api 查看约束并执行",
-		"1) 发现能力: volclog capabilities --view groups",
+		"用 tool 发现能力",
+		"需要结构化执行时使用 tool exec",
+		"原始 transport 调用使用 raw",
 		"默认全局参数写在 group 之前",
 		"输出类全局参数也可后置",
 		"大输出优先使用 --output-mode file",
-		"作用于原始命令/API 结果",
+		"作用于原始结果",
 		`zsh/bash 下建议写成 --jmes-filter "keys(@)"`,
 	} {
 		if !strings.Contains(text, want) {
@@ -120,6 +50,9 @@ func TestUsageTextDescribesPrimaryEntryAsAgentNative(t *testing.T) {
 	for _, notWant := range []string{
 		"优先服务智能体、CI/CD、运维脚本、RPA、服务端任务及各类非人工交互场景",
 		"补充说明:",
+		"推荐流程:",
+		"1) 发现能力: volclog tool list",
+		"capabilities",
 	} {
 		if strings.Contains(text, notWant) {
 			t.Fatalf("unexpected verbose text %q in usage text: %q", notWant, text)
@@ -130,36 +63,85 @@ func TestUsageTextDescribesPrimaryEntryAsAgentNative(t *testing.T) {
 func TestUsageTextMentionsShortcutDescribeAndSkills(t *testing.T) {
 	text := usageText()
 	for _, want := range []string{
-		"高频 shortcut 也支持 --describe 与 --print-request-template",
-		"skills/ 与 skill-template/ 目录",
+		"project/topic/index/log 等 shortcut 仅供人工交互",
+		"volclog skill install --dir <agent-skills-dir>",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q in usage text: %q", want, text)
 		}
 	}
+	if strings.Contains(text, "skill-template/") {
+		t.Fatalf("usage text should not expose maintainer-only skill-template dir: %q", text)
+	}
 }
 
-func TestAPISearchLogsHelpPrefersFileOutputExample(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{"api", "log", "SearchLogs", "-h"}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-	}
-	out := stdout.String()
-	if !strings.Contains(out, "volclog --output-mode file api log SearchLogs --request file://req.json") {
-		t.Fatalf("expected file output example in help: %q", out)
-	}
-	for _, want := range []string{
-		"例如取 Total 写 Total，不写 data.Total",
-		`zsh/bash: --jmes-filter "keys(@)"`,
+func TestToolUsageOmitsRecommendedFlow(t *testing.T) {
+	for name, text := range map[string]string{
+		"tool":          usageTool(),
+		"tool list":     usageToolList(),
+		"tool describe": usageToolDescribe(),
+		"tool exec":     usageToolExec(),
 	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in help: %q", want, out)
+		for _, notWant := range []string{"Agent Flow:", "推荐流程:"} {
+			if strings.Contains(text, notWant) {
+				t.Fatalf("%s usage should omit %q: %q", name, notWant, text)
+			}
 		}
 	}
 }
 
-func TestManualGroupHelpRedirectsAgentsToCapabilitiesAndDescribe(t *testing.T) {
+func TestToolListHelpExplainsDiscoveryOperations(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"tool", "list", "-h"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"支持的发现方式:",
+		"按 group 看有哪些 action",
+		"按 verb 缩小范围",
+		"常见 verb:",
+		"create / get / list / describe / modify / delete / search",
+		"--format <text|json>",
+		"Next:",
+		"volclog tool describe <group.action>",
+		"volclog tool exec <group.action> [--context file://ctx.json] [--input file://req.json|-]",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in stdout: %q", want, out)
+		}
+	}
+	for _, notWant := range []string{"--family", "--group"} {
+		if strings.Contains(out, notWant) {
+			t.Fatalf("unexpected legacy filter %q in stdout: %q", notWant, out)
+		}
+	}
+}
+
+func TestWorkflowListHelpExplainsCLIWorkflowBoundary(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"workflow", "list", "-h"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"CLI workflow",
+		"log.ingest",
+		"log.export",
+		"log.export-analysis",
+		"tool 仍只暴露官网公开 API",
+		"volclog workflow describe <group.command>",
+		"volclog workflow exec <group.command> --input file://req.json",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in stdout: %q", want, out)
+		}
+	}
+}
+
+func TestManualGroupHelpMentionsShortcutAndToolWorkflow(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"project", "-h"}, &stdout, &stderr)
 	if code != 0 {
@@ -167,10 +149,11 @@ func TestManualGroupHelpRedirectsAgentsToCapabilitiesAndDescribe(t *testing.T) {
 	}
 	out := stdout.String()
 	for _, want := range []string{
-		"High-frequency shortcut for both agents and humans.",
+		"Human Shortcut:",
 		"volclog project create --describe",
 		"volclog project create --print-request-template=full",
-		"Fall back to capabilities/api when the shortcut does not cover the need.",
+		"场景速选:",
+		"volclog tool describe project.create",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in stdout: %q", want, out)
@@ -252,8 +235,7 @@ func TestShortcutSubcommandHelpIsCommandScopedForTopicList(t *testing.T) {
 		"(none)",
 		"--page-size",
 		"--all",
-		"Agent Guidance:",
-		"volclog topic list",
+		"Tips:",
 		"不要因为可选 query 参数里出现了 --project-id",
 	} {
 		if !strings.Contains(out, want) {
@@ -262,6 +244,7 @@ func TestShortcutSubcommandHelpIsCommandScopedForTopicList(t *testing.T) {
 	}
 	for _, notWant := range []string{
 		"volclog topic create --describe",
+		"--print-request-template",
 		"volclog topic modify --topic-id",
 		"volclog topic delete --topic-id",
 		"volclog topic get --topic-id",
@@ -328,8 +311,9 @@ func TestShortcutSubcommandHelpIsCommandScopedForLogSearch(t *testing.T) {
 		"--from",
 		"--to",
 		"--limit",
-		"Agent Guidance:",
-		"只把 Required 里的参数视为必填",
+		"Tips:",
+		"查询条件不完整时先补 topic/time/query",
+		"volclog log search --print-request-template=full",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in stdout: %q", want, out)
@@ -344,89 +328,6 @@ func TestShortcutSubcommandHelpIsCommandScopedForLogSearch(t *testing.T) {
 	} {
 		if strings.Contains(out, notWant) {
 			t.Fatalf("unexpected %q in stdout: %q", notWant, out)
-		}
-	}
-}
-
-func TestAPIGeneratedHelpSeparatesOptionalQueryPathParams(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{"api", "topic", "DescribeTopics", "-h"}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-	}
-	out := stdout.String()
-	for _, want := range []string{
-		"必填 query/path 参数:",
-		"(none)",
-		"可选 query/path 参数:",
-		"这些都是筛选或翻页项。不带参数就先按默认方式请求；需要缩小范围、分页或列全时再加。",
-		"--project-id <value> - 日志项目ID",
-		"输出过滤与引号:",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in stdout: %q", want, out)
-		}
-	}
-	for _, notWant := range []string{
-		"--cursor <value>",
-		"--region <value>",
-		"--fuzzy-search-key <value>",
-		"--favourite <value>",
-		"--order-by-project <value>",
-		"--is-full-name <value>",
-		"--description <value>",
-	} {
-		if strings.Contains(out, notWant) {
-			t.Fatalf("api help should hide undocumented param %q: %q", notWant, out)
-		}
-	}
-}
-
-func TestAPIGeneratedHelpAvoidsDuplicateRequiredFlagSummary(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{"api", "topic", "DescribeTopic", "-h"}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-	}
-	out := stdout.String()
-	if strings.Contains(out, "调用输入:\n  query/path 参数通过 flags 传入\n  必填 flags: TopicId") {
-		t.Fatalf("api help should not repeat required flags summary above the detailed required param table: %q", out)
-	}
-	for _, want := range []string{
-		"调用输入:",
-		"query/path 参数通过 flags 传入",
-		"必填 query/path 参数:",
-		"--topic-id <value> - 日志主题ID（UUID）。",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in stdout: %q", want, out)
-		}
-	}
-}
-
-func TestAPIGeneratedHelpOfficialNoParamTableOmitsSwaggerFallback(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{"api", "log", "DescribeCursorTime", "-h"}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-	}
-	out := stdout.String()
-	for _, want := range []string{
-		"官网有接口页面，但当前未解析到结构化参数表",
-		"必填 query/path 参数:",
-		"(none)",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in stdout: %q", want, out)
-		}
-	}
-	for _, notWant := range []string{
-		"--cursor <value>",
-		"请求体: 通过 --request 传入（必填）",
-		"--print-request-template=full",
-	} {
-		if strings.Contains(out, notWant) {
-			t.Fatalf("official no-table help should not fall back to swagger detail %q: %q", notWant, out)
 		}
 	}
 }

@@ -1,0 +1,17 @@
+traps:
+  - trap: page-all-is-not-compression
+    symptom: payload gets larger after enabling page.all
+    why: page.all increases completeness and payload size
+    fix: combine page.all with file or artifact output instead of expecting smaller stdout
+  - trap: projection-runs-on-raw-result
+    symptom: data.Total or data.items style paths return null
+    why: data.Total is wrong because filtering happens before the CLI envelope
+    fix: rebuild the filter against raw keys such as Total or Results
+  - trap: workflow-ids-are-not-tool-ids
+    symptom: log.ingest or log.export returns unknown tool
+    why: log.ingest and log.export belong to workflow, not tool
+    fix: switch to workflow describe/exec instead of tool describe/exec
+  - trap: shortcuts-are-human-first
+    symptom: agent starts from project/topic/log shortcut commands
+    why: agent flows should start from tool or workflow instead of shortcut groups
+    fix: rediscover with tool list or workflow list and re-enter through the contract surface

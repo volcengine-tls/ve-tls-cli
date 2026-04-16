@@ -3,17 +3,18 @@ package cli
 import "strings"
 
 type GlobalFlags struct {
-	Profile     string
-	Output      string
-	Filter      string
-	OutputMode  string
-	OutputFile  string
-	TraceDir    string
-	TraceRedact string
-	SecretsFile string
-	DryRun      bool
-	ShowHelp    bool
-	ShowVersion bool
+	Profile            string
+	Output             string
+	Filter             string
+	OutputMode         string
+	OutputModeExplicit bool
+	OutputFile         string
+	TraceDir           string
+	TraceRedact        string
+	SecretsFile        string
+	DryRun             bool
+	ShowHelp           bool
+	ShowVersion        bool
 }
 
 func parseGlobal(args []string) (group string, rest []string, flags GlobalFlags, ok bool) {
@@ -40,6 +41,7 @@ func parseGlobal(args []string) (group string, rest []string, flags GlobalFlags,
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.OutputMode = args[1]
+			flags.OutputModeExplicit = true
 			args = args[2:]
 		case "--output-file":
 			if len(args) < 2 {
@@ -109,6 +111,7 @@ func extractTrailingGlobals(args []string, flags GlobalFlags, allowDryRun bool) 
 				return nil, GlobalFlags{}, false
 			}
 			merged.OutputMode = args[i+1]
+			merged.OutputModeExplicit = true
 			i++
 		case "--output-file":
 			if i+1 >= len(args) {
@@ -149,11 +152,32 @@ func extractTrailingGlobals(args []string, flags GlobalFlags, allowDryRun bool) 
 
 func allowsTrailingGlobalsForGroup(group string) bool {
 	switch strings.TrimSpace(group) {
-	case "api":
+	case "raw":
+		return true
+	case "tool":
+		return true
+	case "workflow":
 		return true
 	case "project", "topic", "metric-topic", "index", "log", "host-group", "collector":
 		return true
 	default:
 		return false
 	}
+}
+
+func allowsTrailingDryRun(group string, rest []string) bool {
+	g := strings.TrimSpace(group)
+	if g == "raw" {
+		return true
+	}
+	if g == "tool" || g == "workflow" {
+		if len(rest) == 0 {
+			return false
+		}
+		return strings.TrimSpace(rest[0]) == "exec"
+	}
+	if g != "tool" {
+		return false
+	}
+	return false
 }
