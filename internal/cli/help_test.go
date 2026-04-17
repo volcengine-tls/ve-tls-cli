@@ -1,3 +1,5 @@
+//go:build !agent
+
 package cli
 
 import (
@@ -40,7 +42,7 @@ func TestUsageTextDescribesPrimaryEntryAsAgentNative(t *testing.T) {
 		"默认全局参数写在 group 之前",
 		"输出类全局参数也可后置",
 		"大输出优先使用 --output-mode file",
-		"作用于原始结果",
+		"作用于完整 envelope",
 		`zsh/bash 下建议写成 --jmes-filter "keys(@)"`,
 	} {
 		if !strings.Contains(text, want) {
@@ -85,6 +87,24 @@ func TestToolUsageOmitsRecommendedFlow(t *testing.T) {
 		for _, notWant := range []string{"Agent Flow:", "推荐流程:"} {
 			if strings.Contains(text, notWant) {
 				t.Fatalf("%s usage should omit %q: %q", name, notWant, text)
+			}
+		}
+	}
+}
+
+func TestToolAndWorkflowExecHelpCarryCommonExecutionGuidance(t *testing.T) {
+	for name, text := range map[string]string{
+		"tool exec":     usageToolExec(),
+		"workflow exec": usageWorkflowExec(),
+	} {
+		for _, want := range []string{
+			"业务请求字段放在 --input",
+			"运行时/鉴权/trace/output 控制放在 --context",
+			"context.execution",
+			"大结果优先",
+		} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s usage missing %q: %q", name, want, text)
 			}
 		}
 	}
@@ -150,6 +170,7 @@ func TestManualGroupHelpMentionsShortcutAndToolWorkflow(t *testing.T) {
 	out := stdout.String()
 	for _, want := range []string{
 		"Human Shortcut:",
+		"Agent 默认不要停在 shortcut 元命令",
 		"volclog project create --describe",
 		"volclog project create --print-request-template=full",
 		"场景速选:",
@@ -230,6 +251,8 @@ func TestShortcutSubcommandHelpIsCommandScopedForTopicList(t *testing.T) {
 	for _, want := range []string{
 		"Usage:",
 		"volclog topic list",
+		"Agent:",
+		"Agent 默认先走 volclog tool/workflow describe/exec",
 		"列出日志主题",
 		"Required:",
 		"(none)",
@@ -305,6 +328,7 @@ func TestShortcutSubcommandHelpIsCommandScopedForLogSearch(t *testing.T) {
 	out := stdout.String()
 	for _, want := range []string{
 		"volclog log search",
+		"这是 human shortcut，不是 agent 主流程",
 		"执行日志检索",
 		"--topic-id",
 		"--query",
@@ -329,6 +353,24 @@ func TestShortcutSubcommandHelpIsCommandScopedForLogSearch(t *testing.T) {
 		if strings.Contains(out, notWant) {
 			t.Fatalf("unexpected %q in stdout: %q", notWant, out)
 		}
+	}
+}
+
+func TestShortcutSubcommandHelpPrioritizesToolWorkflowNext(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"project", "create", "-h"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	toolIdx := strings.Index(out, "volclog tool describe project.create")
+	describeIdx := strings.Index(out, "volclog project create --describe")
+	templateIdx := strings.Index(out, "volclog project create --print-request-template=full")
+	if toolIdx < 0 || describeIdx < 0 || templateIdx < 0 {
+		t.Fatalf("missing next commands in stdout: %q", out)
+	}
+	if !(toolIdx < describeIdx && describeIdx < templateIdx) {
+		t.Fatalf("expected tool guidance before shortcut metadata in stdout: %q", out)
 	}
 }
 

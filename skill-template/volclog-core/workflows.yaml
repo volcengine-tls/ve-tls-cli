@@ -42,6 +42,6 @@ workflows:
     steps:
       - workflow.log.export
       - workflow.log.export-analysis
-    output_strategy: prefer file or artifact output and keep stdout to preview only
+    output_strategy: prefer --output-mode file with a writable output_dir; stdout may only return a file notice while the full envelope is written to disk
     fallback: tool.log.search
-    stop_condition: file artifact path and preview are both available
+    stop_condition: stdout returns the result file path and the written full envelope confirms the expected shape

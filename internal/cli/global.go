@@ -8,6 +8,8 @@ type GlobalFlags struct {
 	Filter             string
 	OutputMode         string
 	OutputModeExplicit bool
+	OutputDir          string
+	OutputDirExplicit  bool
 	OutputFile         string
 	TraceDir           string
 	TraceRedact        string
@@ -42,6 +44,13 @@ func parseGlobal(args []string) (group string, rest []string, flags GlobalFlags,
 			}
 			flags.OutputMode = args[1]
 			flags.OutputModeExplicit = true
+			args = args[2:]
+		case "--output-dir":
+			if len(args) < 2 {
+				return "", nil, GlobalFlags{}, false
+			}
+			flags.OutputDir = args[1]
+			flags.OutputDirExplicit = true
 			args = args[2:]
 		case "--output-file":
 			if len(args) < 2 {
@@ -112,6 +121,13 @@ func extractTrailingGlobals(args []string, flags GlobalFlags, allowDryRun bool) 
 			}
 			merged.OutputMode = args[i+1]
 			merged.OutputModeExplicit = true
+			i++
+		case "--output-dir":
+			if i+1 >= len(args) {
+				return nil, GlobalFlags{}, false
+			}
+			merged.OutputDir = args[i+1]
+			merged.OutputDirExplicit = true
 			i++
 		case "--output-file":
 			if i+1 >= len(args) {

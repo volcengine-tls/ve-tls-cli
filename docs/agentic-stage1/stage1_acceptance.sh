@@ -78,8 +78,11 @@ VOLCENGINE_ACCESS_KEY_ID=ak VOLCENGINE_ACCESS_KEY_SECRET=sk VOLCENGINE_REGION=cn
   GOCACHE=/tmp/go-build go run ./cmd/volclog --output json tool exec topic.describe-topics --context "file://$TMP_DIR/page_all_ctx.json" --input "file://$TMP_DIR/topics_req.json" >/dev/null
 
 echo "[5/5] Trace + envelope(file) in tool dry-run mode"
+cat > "$TMP_DIR/file_ctx.json" <<EOF
+{"region":"cn-beijing","execution":{"dry_run":true,"output":{"mode":"file","dir":"$TMP_DIR/out"}}}
+EOF
 VOLCENGINE_ACCESS_KEY_ID=ak VOLCENGINE_ACCESS_KEY_SECRET=sk VOLCENGINE_REGION=cn-beijing VOLCENGINE_ENDPOINT=https://tls-cn-beijing.volces.com VOLCLOG_CONFIG="$TMP_DIR/config.json" \
-  GOCACHE=/tmp/go-build go run ./cmd/volclog --trace-dir "$TMP_DIR/traces" --output-mode file --output-file "$TMP_DIR/out.json" tool exec log.search-logs --context "file://$TMP_DIR/ctx.json" --input "file://$TMP_DIR/req.json" >/dev/null
+  GOCACHE=/tmp/go-build go run ./cmd/volclog --trace-dir "$TMP_DIR/traces" tool exec log.search-logs --context "file://$TMP_DIR/file_ctx.json" --input "file://$TMP_DIR/req.json" >/dev/null
 
 echo "[5/5] Notes"
 echo "L4 real request is not executed by this script."

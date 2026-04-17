@@ -115,6 +115,25 @@ func TestClassifyError_ToolExecRequiresFileURLIsUsage(t *testing.T) {
 	}
 }
 
+func TestClassifyError_MissingRequiredFieldIsValidation(t *testing.T) {
+	cases := []string{
+		"missing required field: input.query.ProjectId",
+		"workflow input missing required fields: TopicId, Input",
+	}
+	for _, msg := range cases {
+		p, code := classifyError(errString(msg), "", 0, "tool")
+		if code != 1 {
+			t.Fatalf("%q unexpected code: %d", msg, code)
+		}
+		if p.Kind != "validation" {
+			t.Fatalf("%q unexpected kind: %q", msg, p.Kind)
+		}
+		if strings.TrimSpace(p.Hint) == "" {
+			t.Fatalf("%q expected validation hint", msg)
+		}
+	}
+}
+
 func TestIndexNotExistsHintSuggestsCreateIndex(t *testing.T) {
 	p, code := classifyError(&httpError{
 		statusCode: 404,

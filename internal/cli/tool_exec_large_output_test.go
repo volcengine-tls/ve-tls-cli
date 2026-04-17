@@ -23,10 +23,14 @@ func TestToolExecAutoArtifactsLargeDryRunResults(t *testing.T) {
 	tmp := t.TempDir()
 	ctxFile := filepath.Join(tmp, "ctx.json")
 	reqFile := filepath.Join(tmp, "req.json")
+	outDir := filepath.Join(tmp, "out")
 	if err := osWriteJSON(ctxFile, map[string]any{
 		"region": "cn-beijing",
 		"execution": map[string]any{
 			"dry_run": true,
+			"output": map[string]any{
+				"dir": outDir,
+			},
 		},
 	}); err != nil {
 		t.Fatalf("write context: %v", err)
@@ -48,20 +52,21 @@ func TestToolExecAutoArtifactsLargeDryRunResults(t *testing.T) {
 	if strings.TrimSpace(stderr.String()) != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
-
+	artifactPath := parseNoticePath(t, stdout.String())
+	raw, err := os.ReadFile(artifactPath)
+	if err != nil {
+		t.Fatalf("read artifact envelope: %v", err)
+	}
 	var out map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
-		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("invalid artifact json: %v artifact=%q", err, string(raw))
 	}
 	summary, ok := out["summary"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected summary map, got %#v", out["summary"])
 	}
-	if summary["truncated"] != true {
-		t.Fatalf("expected auto-artifact truncation summary, got %#v", summary)
-	}
-	if summary["autoArtifact"] != true {
-		t.Fatalf("expected autoArtifact=true, got %#v", summary)
+	if summary["deliveryMode"] != "file_auto" {
+		t.Fatalf("expected file_auto delivery mode, got %#v", summary)
 	}
 	artifacts, ok := out["artifacts"].([]any)
 	if !ok || len(artifacts) != 1 {
@@ -71,22 +76,22 @@ func TestToolExecAutoArtifactsLargeDryRunResults(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected artifact object, got %#v", artifacts[0])
 	}
-	artifactPath, _ := artifact["path"].(string)
-	if artifactPath == "" {
+	filePath, _ := artifact["path"].(string)
+	if filePath == "" {
 		t.Fatalf("expected artifact path, got %#v", artifact)
 	}
-	if _, err := os.Stat(artifactPath); err != nil {
+	if filePath != artifactPath {
+		t.Fatalf("expected notice path to match artifact path: notice=%q artifact=%q", artifactPath, filePath)
+	}
+	if _, err := os.Stat(filePath); err != nil {
 		t.Fatalf("expected artifact file to exist: %v", err)
 	}
 	data, ok := out["data"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected preview data object, got %#v", out["data"])
+		t.Fatalf("expected file envelope data object, got %#v", out["data"])
 	}
 	if _, ok := data["request_preview"]; !ok {
-		t.Fatalf("expected preview data to preserve request_preview, got %#v", data)
-	}
-	if _, ok := data["omitted"]; !ok {
-		t.Fatalf("expected preview data to advertise omission, got %#v", data)
+		t.Fatalf("expected file envelope data to preserve request_preview, got %#v", data)
 	}
 }
 

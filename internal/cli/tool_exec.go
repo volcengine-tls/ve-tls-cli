@@ -55,6 +55,7 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	ctx.Action = "tool." + strings.TrimSpace(contract.ID)
 	ctxCfg := toolExecContext{Execution: map[string]any{}}
 	if strings.TrimSpace(contextArg) != "" {
 		ctxCfg, err = loadToolExecContext(contextArg)
@@ -80,9 +81,10 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 		return nil, err
 	}
 
-	rawFilter := strings.TrimSpace(ctx.Filter)
-	ctx.Filter = ""
 	options := resolveToolExecutionOptions(ctxCfg)
+	if strings.TrimSpace(options.OutputDir) != "" {
+		ctx.OutputDir = strings.TrimSpace(options.OutputDir)
+	}
 	if pageAllFlag {
 		options.PageAll = true
 	}
@@ -90,9 +92,15 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 		ctx.DryRun = true
 	}
 	if options.Artifact {
+		if strings.TrimSpace(ctx.Filter) != "" {
+			return nil, errors.New("--jmes-filter cannot be combined with file delivery for tool exec")
+		}
 		ctx.OutputMode = "file"
 		if strings.TrimSpace(options.ArtifactPath) != "" {
 			ctx.OutputFile = strings.TrimSpace(options.ArtifactPath)
+		}
+		if err := preflightOutputFilePath(ctx.OutputFile, ctx.OutputDir, "tool", output.FormatJSON); err != nil {
+			return nil, err
 		}
 	}
 
@@ -100,7 +108,6 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	ctx.Action = "tool." + strings.TrimSpace(contract.ID)
 	ctx.apiIOMeta = apiIOMeta{
 		Group:         group,
 		Action:        normalizeActionToken(contract.Action),
@@ -116,11 +123,11 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	filteredResult, err := applyToolExecFilters(result, options.Projection, rawFilter)
+	filteredResult, err := applyToolExecFilters(result, options.Projection)
 	if err != nil {
 		return nil, err
 	}
-	filteredResult = stabilizeProjectedToolResult(result, filteredResult, options.Projection, rawFilter)
+	filteredResult = stabilizeProjectedToolResult(result, filteredResult, options.Projection)
 	env, err := buildAPIEnvelope(ctx, "tool", filteredResult, ctx.OutputMode, ctx.OutputFile, ctx.Format)
 	if err != nil {
 		return nil, err

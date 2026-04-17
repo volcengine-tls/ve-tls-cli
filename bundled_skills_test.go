@@ -33,7 +33,8 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"agent-only incremental knowledge",
 		"Do not use human shortcut commands as the primary agent flow.",
 		"Prefer `tool` for published public APIs, `workflow` for CLI-owned high-level flows, and `raw` only when method/path is already known",
-		"Prefer file or artifact output for large responses.",
+		"prefer `volclog-agent` for agent or CI sessions",
+		"Prefer file delivery for large responses; use `--output-mode file --output-dir <writable-dir>` when you expect stdout to be too large.",
 		"contract_cache_hint",
 		"reuse the cached contract only while the same CLI build still reports the same contract_digest",
 		"one-shot `--secrets-file`",
@@ -97,6 +98,15 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"`log.search` itself supports plain search and SQL/analysis queries",
 		"`log.describe-histogram-v1` is for time-distribution preview and total hit estimation only for pure search queries before widening or narrowing a search window",
 		"only for pure search queries",
+		"`--jmes-filter` runs on the complete CLI envelope",
+		"`execution.projection` is different: it runs on the raw result before envelope wrapping",
+		"stdout returns literal `null` and the command still succeeds",
+		"Failed envelopes use one flat `error` object",
+		"`error.kind`",
+		"`error.code`",
+		"`error.details`",
+		"`summary.deliveryMode`",
+		"`volclog-agent`",
 		"`HitCount` is only the count returned in the current `SearchLogs` response",
 		"`Histogram.TotalCount` is the better whole-window hit count",
 		"`ResultStatus=incomplete` means the service returned only a partial scan",
@@ -154,6 +164,7 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 	}
 	foundCachePrinciple := false
 	foundStatelessSecretPrinciple := false
+	foundAgentEditionPrinciple := false
 	for _, principle := range m.Principles {
 		if principle == "respect_contract_cache_hint" {
 			foundCachePrinciple = true
@@ -161,12 +172,18 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 		if principle == "host_managed_secret_injection_for_stateless_agents" {
 			foundStatelessSecretPrinciple = true
 		}
+		if principle == "prefer_volclog_agent_when_available" {
+			foundAgentEditionPrinciple = true
+		}
 	}
 	if !foundCachePrinciple {
 		t.Fatalf("manifest missing respect_contract_cache_hint principle: %+v", m)
 	}
 	if !foundStatelessSecretPrinciple {
 		t.Fatalf("manifest missing host_managed_secret_injection_for_stateless_agents principle: %+v", m)
+	}
+	if !foundAgentEditionPrinciple {
+		t.Fatalf("manifest missing prefer_volclog_agent_when_available principle: %+v", m)
 	}
 	for _, want := range []string{"routing", "workflows", "recovery", "traps"} {
 		if _, ok := m.Sources[want]; !ok {

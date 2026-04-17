@@ -2,13 +2,14 @@
 
 ## Surface Choice: tool / workflow / raw
 
+- If both binaries are available, prefer `volclog-agent` for agent or CI runs. Use the full `volclog` binary only when a human explicitly needs shortcut-oriented interaction.
 - Use `tool` for public API discovery and execution.
 - Use `workflow` for CLI-owned orchestration such as `log.ingest`, `log.export`, and `log.export-analysis`.
 - Use `raw` only when exact method/path is already known or the public contract surface cannot express the need.
 - If you are unsure between `tool` and `workflow`, inspect both with `describe` before constructing input. Do not guess ids.
 - `log.search` itself supports plain search and SQL/analysis queries in `Query`; prefer it for interactive analysis and small result previews.
 - `log.describe-histogram-v1` is for time-distribution preview and total hit estimation only for pure search queries before widening or narrowing a search window.
-- `log.export-analysis` is for large SQL/analysis row exports that should land in file/artifact output instead of full stdout.
+- `log.export-analysis` is for large SQL/analysis row exports that should land in file delivery instead of full stdout.
 
 ## Command Examples
 
@@ -34,11 +35,13 @@
 ## Token Control
 
 - Default to `--dry-run` before writes.
-- For large responses, prefer `--output-mode file` or execution artifact output.
+- For large responses, prefer `--output-mode file --output-dir <writable-dir>`.
 - Add `projection` only after the unfiltered shape is understood.
-- `projection` runs on the raw result, not on the CLI envelope.
+- `execution.projection` runs on the raw result, not on the CLI envelope; `--jmes-filter` runs on the full CLI envelope.
+- If `--jmes-filter` targets an existing envelope field whose value is `null`, stdout returns literal `null` and the command still succeeds.
 - Use `tool describe --view full` when compact output hides optional but important nested fields.
-- For list, export, and search-heavy tasks, prefer preview + file/artifact over full stdout payloads.
+- For list, export, and search-heavy tasks, prefer file delivery over full stdout payloads.
+- Under file delivery, stdout may contain only a fixed file notice; read the written full envelope from disk and inspect `summary.deliveryMode` there.
 - If `tool describe --view full` still shows `query/body/path/header` nesting, treat `input_flat_schema` and `input_encoding_hint` as the execution guide for `tool exec`.
 - `HitCount` is only the count returned in the current `SearchLogs` response; it is not the whole-window total.
 - `Histogram.TotalCount` is the better whole-window hit count only for pure search when you use `log.describe-histogram-v1` before reading rows.
@@ -94,7 +97,7 @@ Do not do this:
 | --- | --- | --- |
 | `unknown tool` / `CLIError` | Wrong surface or wrong id | Re-run `tool list <group>` or `workflow list <group>` before guessing aliases |
 | `missing --input` / `CLIError` | Non-empty input schema or wrong transport | Re-check `tool describe` or `workflow describe` for `input_schema` and `input_encoding_hint` |
-| `filter matched no value` / `CLIError` | Wrong JMESPath or wrong expectation about envelope shape | Inspect one unfiltered response, then apply projection to raw keys only |
+| `filter matched no value` / `CLIError` | Wrong JMESPath or wrong expectation about envelope shape | Inspect one unfiltered response first; for `--jmes-filter` target envelope keys like `data` or `summary`, for `execution.projection` target raw result keys only |
 | `401` / `Unauthorized` | Credentials, region, or endpoint do not match | Run `volclog doctor`; inspect AK/SK, region, and endpoint before retrying |
 | `403` / `Forbidden or empty server errorCode` | Profile has no permission or wrong tenant/profile selected | Check whether the selected profile matches the target region and tenant, confirm the account has resource permissions, then switch profile before retrying |
 | selected profile seems ignored | Process-wide env credentials overrode profile resolution | Remove broad env injection, switch to one-shot `--secrets-file` or `context.secrets_file`, then retry with the intended profile selector |
@@ -103,7 +106,7 @@ Do not do this:
 | `409` / `ProjectAlreadyExist` | Create request is targeting an existing project | Re-run project discovery/list, then switch to get/modify instead of create |
 | `ResultStatus=incomplete` | Service returned only a partial scan to keep latency short | Narrow the time range and rerun before trusting counts, returned rows, empty results, or histogram buckets |
 | empty search result after write | Wrong profile/topic/time range or index not ready | Verify profile/topic/index, then retry with narrow query and trace enabled |
-| huge stdout payload | Output strategy chosen too late | Re-run with `--output-mode file`, artifact output, or a smaller projection before continuing |
+| huge stdout payload | Output strategy chosen too late | Re-run with `--output-mode file --output-dir <writable-dir>` or a smaller `--jmes-filter` / `execution.projection` before continuing |
 
 Recommended retry posture:
 
@@ -112,10 +115,25 @@ Recommended retry posture:
 - Retry empty search only after profile/topic/index/time range are reconfirmed.
 - Retry `403 Forbidden` only after profile/tenant/permission alignment is rechecked.
 
+## Error Object
+
+- Failed envelopes use one flat `error` object instead of nested upstream payloads.
+- Prefer these fields in order:
+  - `error.kind`
+  - `error.code`
+  - `error.message`
+  - `error.details`
+  - `error.requestId`
+  - `error.statusCode`
+- For upstream service failures, `error.code` is already the business error code such as `ProjectAlreadyExist`.
+- If the service embeds extra JSON details inside the error message, the CLI lifts them into `error.details`; do not parse `error.message` again unless `details` is absent.
+
 ## Known Traps
 
 - `page.all` increases completeness and payload size; it is not a compression flag, and it only applies when `tool describe` reports `execution.supports_all=true`.
-- `raw` and `tool exec` use the same JMESPath semantics, but `tool exec` also has `context.execution.projection`.
+- `--jmes-filter` runs on the complete CLI envelope. `execution.projection` is different: it runs on the raw result before envelope wrapping.
+- `--jmes-filter 'error'` can legitimately return `null` on successful calls because the field exists and its value is null.
+- With `--jmes-filter`, file delivery is not the default path; if you need the full large result, rerun without `--jmes-filter` and use `--output-mode file --output-dir <writable-dir>`.
 - `workflow` ids such as `log.ingest` and `log.export` are not public API tool ids; they belong to the workflow surface.
 - Use `tool` first for public APIs even if a human shortcut name looks more natural.
 - `log.ingest` is the natural-language route for write/import/upload tasks; do not guess `log.put` unless the task is clearly about the raw public API contract itself.

@@ -26,8 +26,16 @@ func finalizeToolExecEnvelope(ctx *Context, result any, env map[string]any, opti
 	if size <= toolExecAutoArtifactByteLimit {
 		return env, nil
 	}
-	path, err := writeOutputFileToDir("", ctx.OutputDir, "tool", result, ctx.Format)
+	filePath, err := resolveOutputFilePath("", ctx.OutputDir, "tool", output.FormatJSON)
 	if err != nil {
+		return nil, err
+	}
+	fileArtifact := []map[string]any{{
+		"path":   filePath,
+		"format": string(output.FormatJSON),
+	}}
+	fileEnv := newAPISuccessEnvelope(ctx, "tool", result, ctx.OutputMode, "file_auto", fileArtifact)
+	if err := materializeEnvelopeFile(filePath, fileEnv); err != nil {
 		return nil, err
 	}
 	summary, _ := env["summary"].(map[string]any)
@@ -35,11 +43,13 @@ func finalizeToolExecEnvelope(ctx *Context, result any, env map[string]any, opti
 		summary = map[string]any{}
 		env["summary"] = summary
 	}
+	summary["deliveryMode"] = "file_auto"
 	summary["truncated"] = true
 	summary["autoArtifact"] = true
 	summary["fullBytes"] = size
 	summary["hint"] = "full result written to artifact; use execution.projection or execution.artifact for deterministic control"
-	env["artifacts"] = []map[string]any{buildOutputArtifact(path, ctx.Format)}
+	summary["totalBytes"] = fileEnv["summary"].(map[string]any)["totalBytes"]
+	env["artifacts"] = fileEnv["artifacts"]
 	env["data"] = buildToolExecPreview(result)
 	return env, nil
 }
@@ -52,6 +62,9 @@ func shouldAutoArtifactToolExec(ctx *Context, options toolExecutionOptions) bool
 		return false
 	}
 	if ctx.Format != output.FormatJSON {
+		return false
+	}
+	if strings.TrimSpace(ctx.Filter) != "" {
 		return false
 	}
 	if options.Artifact || strings.TrimSpace(options.Projection) != "" {

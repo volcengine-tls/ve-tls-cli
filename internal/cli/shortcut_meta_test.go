@@ -1,3 +1,5 @@
+//go:build !agent
+
 package cli
 
 import (
@@ -19,7 +21,9 @@ func TestShortcutDescribeProjectCreate(t *testing.T) {
 		`"action": "project.create"`,
 		`"api_group": "project"`,
 		`"api_action": "CreateProject"`,
-		`"describe": "volclog project create --describe"`,
+		`"describe": "volclog tool describe project.create"`,
+		`"execute": "volclog tool exec project.create --context file://ctx.json --input file://req.json"`,
+		`"fallback_discovery": "volclog tool list project"`,
 		`"fallback_api_describe": "volclog tool describe project.create"`,
 		`"--project-name"`,
 		`"--description"`,
@@ -31,6 +35,9 @@ func TestShortcutDescribeProjectCreate(t *testing.T) {
 	}
 	if strings.Contains(out, `"request_body":`) {
 		t.Fatalf("project create should prefer direct shortcut flags instead of request_body hint: %q", out)
+	}
+	if strings.Contains(out, `"shortcut_first"`) {
+		t.Fatalf("project create shortcut describe should not prioritize shortcut-first guidance anymore: %q", out)
 	}
 }
 

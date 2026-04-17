@@ -104,6 +104,13 @@ func TestWorkflowDescribeReturnsWorkflowContract(t *testing.T) {
 			t.Fatalf("expected workflow input schema to contain %q, got %#v", key, props)
 		}
 	}
+	topicID, ok := props["TopicId"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected TopicId schema, got %#v", props["TopicId"])
+	}
+	if _, ok := topicID["cli_flag"]; ok {
+		t.Fatalf("workflow describe should not expose exec-time cli_flag hints, got %#v", topicID)
+	}
 }
 
 func TestWorkflowDescribeLogExportAnalysisExplainsLargeAnalysisExportUseCase(t *testing.T) {
@@ -274,5 +281,69 @@ func TestWorkflowExecAcceptsInlineJSONInput(t *testing.T) {
 	summary, ok := out["summary"].(map[string]any)
 	if !ok || summary["dryRun"] != true {
 		t.Fatalf("expected dryRun summary, got %#v", out["summary"])
+	}
+}
+
+func TestWorkflowExecRejectsConflictingGlobalAndContextProfile(t *testing.T) {
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
+	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
+	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	tmp := t.TempDir()
+	ctxFile := filepath.Join(tmp, "ctx.json")
+	reqFile := filepath.Join(tmp, "req.json")
+	if err := osWriteJSON(ctxFile, map[string]any{
+		"profile": "context-profile",
+		"execution": map[string]any{
+			"dry_run": true,
+		},
+	}); err != nil {
+		t.Fatalf("write context: %v", err)
+	}
+	if err := osWriteJSON(reqFile, map[string]any{
+		"TopicId":   "tid",
+		"Query":     "*",
+		"StartTime": 1710374400000,
+		"EndTime":   1710378000000,
+		"MaxPages":  1,
+	}); err != nil {
+		t.Fatalf("write request: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"--profile", "global-profile",
+		"workflow", "exec", "log.export",
+		"--context", "file://" + ctxFile,
+		"--input", "file://" + reqFile,
+	}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected conflict failure stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	if out["status"] != "failed" {
+		t.Fatalf("expected failed status, got %#v", out["status"])
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if errObj["kind"] != "validation" {
+		t.Fatalf("expected validation kind, got %#v", errObj)
+	}
+	if errObj["source"] != "cli" {
+		t.Fatalf("expected cli source, got %#v", errObj["source"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "conflicting profile selectors") {
+		t.Fatalf("unexpected error message: %#v", errObj["message"])
 	}
 }

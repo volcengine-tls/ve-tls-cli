@@ -58,18 +58,100 @@ func resolveWorkflowByIdentity(group, command string) (workflowCatalog, error) {
 }
 
 func workflowCatalogSource() []workflowCatalog {
-	candidates := [][2]string{
-		{"log", "export"},
-		{"log", "export-analysis"},
-		{"log", "ingest"},
-	}
-	out := make([]workflowCatalog, 0, len(candidates))
-	for _, item := range candidates {
-		spec, ok := lookupShortcutSpec(item[0], item[1])
-		if !ok {
-			continue
-		}
-		out = append(out, workflowFromShortcutSpec(spec))
+	out := []workflowCatalog{
+		{
+			ID:                  "log.export",
+			Group:               "log",
+			Command:             "export",
+			Action:              "log.export",
+			Summary:             "自动翻页导出日志",
+			Description:         "面向纯检索结果导出；分析语句请改用 export-analysis。",
+			Method:              "POST",
+			Path:                "/SearchLogs",
+			InputMode:           "body via --request; auto-pagination in command",
+			PreferredOutputMode: "file",
+			RecommendedGlobalFlags: []string{
+				"--output jsonl",
+				"--output-mode file",
+			},
+			Params: []apiCapParam{
+				flagParam("TopicId", "--topic-id", "body", true, "string", "主题 ID"),
+				flagParam("Query", "--query", "body", true, "string", "非分析查询语句"),
+				flagParam("StartTime", "--from", "body", true, "integer", "起始毫秒时间戳"),
+				flagParam("EndTime", "--to", "body", true, "integer", "结束毫秒时间戳"),
+				flagParam("maxPages", "--max-pages", "meta", false, "integer", "最多翻页数量"),
+				flagParam("request", "--request", "body", false, "json", "完整请求 JSON"),
+			},
+			APIGroup:  "log",
+			APIAction: "SearchLogs",
+			BackedBy:  []string{"SearchLogs"},
+			Source:    "cli_workflow",
+		},
+		{
+			ID:                  "log.export-analysis",
+			Group:               "log",
+			Command:             "export-analysis",
+			Action:              "log.export-analysis",
+			Summary:             "导出分析行结果",
+			Description:         "面向大量 SQL/分析结果导出；交互式分析和少量结果优先用 log.search。",
+			Method:              "POST",
+			Path:                "/SearchLogs",
+			InputMode:           "body via --request; analysis mode",
+			PreferredOutputMode: "file",
+			RecommendedGlobalFlags: []string{
+				"--output jsonl",
+				"--output-mode file",
+			},
+			Params: []apiCapParam{
+				flagParam("TopicId", "--topic-id", "body", true, "string", "主题 ID"),
+				flagParam("Query", "--query", "body", true, "string", "分析查询语句，示例：*|select count(*)"),
+				flagParam("StartTime", "--from", "body", true, "integer", "起始毫秒时间戳"),
+				flagParam("EndTime", "--to", "body", true, "integer", "结束毫秒时间戳"),
+				flagParam("request", "--request", "body", false, "json", "完整请求 JSON"),
+			},
+			APIGroup:  "log",
+			APIAction: "SearchLogs",
+			BackedBy:  []string{"SearchLogs"},
+			Source:    "cli_workflow",
+			Notes: []string{
+				"同样基于 SearchLogs 的 SQL/分析语句，但定位是大结果导出；交互式探索和少量预览优先使用 log.search。",
+				"分析可见列强依赖当前索引配置；新增或修改索引后通常只对增量写入生效，旧日志对应列可能仍为 null。",
+			},
+		},
+		{
+			ID:          "log.ingest",
+			Group:       "log",
+			Command:     "ingest",
+			Action:      "log.ingest",
+			Summary:     "批量导入文本或 JSON 日志",
+			Description: "面向高层写入场景；CLI 负责补时间、组批、统计头和 protobuf 编码。",
+			Method:      "POST",
+			Path:        "/PutLogs",
+			InputMode:   "ingest via --input; lines/jsonl/json-array normalized by CLI before PutLogs",
+			Params: []apiCapParam{
+				flagParam("TopicId", "--topic-id", "query", true, "string", "主题 ID"),
+				flagParam("input", "--input", "meta", true, "path|-", "输入内容；支持 file://...、-、裸文件路径"),
+				flagParam("inputFormat", "--input-format", "meta", false, "string", "lines/jsonl/json-array"),
+				flagParam("timeField", "--time-field", "meta", false, "string", "jsonl/json-array 的时间字段名"),
+				flagParam("timeFormat", "--time-format", "meta", false, "string", "auto/unix_ms/unix/rfc3339"),
+				flagParam("Source", "--source", "group", false, "string", "本次写入共用 Source"),
+				flagParam("FileName", "--file-name", "group", false, "string", "本次写入共用 FileName"),
+				flagParam("LogTags", "--tag", "group", false, "string", "重复传入 k=v 形式的 LogTag"),
+				flagParam("batchMaxCount", "--batch-max-count", "meta", false, "integer", "每批最大发送条数，默认 500"),
+				flagParam("x-tls-compresstype", "--compress-type", "header", false, "string", "lz4/zlib/none，默认 lz4"),
+				flagParam("x-tls-hashkey", "--hash-key", "header", false, "string", "指定写入分区的 HashKey"),
+			},
+			APIGroup:  "log",
+			APIAction: "PutLogs",
+			BackedBy:  []string{"PutLogs"},
+			Source:    "cli_workflow",
+			Notes: []string{
+				"lines 输入默认写入字段 __content__。",
+				"未指定 --time-field 时，CLI 会用本次命令启动时的毫秒时间戳补齐日志时间。",
+				"jsonl/json-array 会保留用户原始字段，不做 message 字段重映射。",
+				"每个批次都会自动带上 log-count、earliest-log-time、latest-log-time 请求头。",
+			},
+		},
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if normalizeToken(out[i].Group) == normalizeToken(out[j].Group) {
@@ -78,32 +160,6 @@ func workflowCatalogSource() []workflowCatalog {
 		return normalizeToken(out[i].Group) < normalizeToken(out[j].Group)
 	})
 	return out
-}
-
-func workflowFromShortcutSpec(spec shortcutCommandSpec) workflowCatalog {
-	backedBy := []string{}
-	if action := strings.TrimSpace(spec.APIAction); action != "" {
-		backedBy = append(backedBy, action)
-	}
-	return workflowCatalog{
-		ID:                     strings.TrimSpace(spec.Action),
-		Group:                  strings.TrimSpace(spec.Group),
-		Command:                strings.TrimSpace(spec.Command),
-		Action:                 strings.TrimSpace(spec.Action),
-		Summary:                strings.TrimSpace(spec.Summary),
-		Description:            strings.TrimSpace(spec.Description),
-		Method:                 strings.TrimSpace(spec.Method),
-		Path:                   strings.TrimSpace(spec.Path),
-		InputMode:              strings.TrimSpace(spec.InputMode),
-		PreferredOutputMode:    strings.TrimSpace(spec.PreferredOutputMode),
-		RecommendedGlobalFlags: append([]string(nil), spec.RecommendedGlobalFlags...),
-		Params:                 append([]apiCapParam(nil), spec.Params...),
-		Notes:                  append([]string(nil), spec.Notes...),
-		APIGroup:               strings.TrimSpace(spec.APIGroup),
-		APIAction:              strings.TrimSpace(spec.APIAction),
-		BackedBy:               backedBy,
-		Source:                 "cli_workflow",
-	}
 }
 
 func workflowDescribeOutput(spec workflowCatalog) map[string]any {
@@ -233,9 +289,6 @@ func workflowFieldSchema(param apiCapParam) map[string]any {
 	}
 	if desc := conciseFieldDescription(param.Description); desc != "" {
 		out["description"] = desc
-	}
-	if strings.TrimSpace(param.CLIFlag) != "" {
-		out["cli_flag"] = strings.TrimSpace(param.CLIFlag)
 	}
 	if len(param.Enum) > 0 {
 		out["enum"] = append([]string(nil), param.Enum...)

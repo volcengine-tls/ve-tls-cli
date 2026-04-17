@@ -91,15 +91,22 @@ func ApplyFilter(v any, expr string) (any, error) {
 		return nil, errors.New("invalid jmes-filter expression: " + err.Error())
 	}
 	if out == nil {
+		if resolvedNilValue(v, e) {
+			return nil, nil
+		}
 		return nil, errors.New(buildNilFilterMessage(v, e))
 	}
 	return out, nil
 }
 
+func resolvedNilValue(raw any, expr string) bool {
+	return strings.Contains(diagnosePathMatch(raw, expr), "resolved value: nil")
+}
+
 func buildNilFilterMessage(raw any, expr string) string {
 	parts := []string{
 		"filter matched no value: " + expr,
-		"raw result scope: " + describeScope(raw),
+		"result scope: " + describeScope(raw),
 	}
 	if keys, ok := scopeKeys(raw); ok {
 		parts = append(parts, "available keys: "+formatDiagnosticKeys(keys))

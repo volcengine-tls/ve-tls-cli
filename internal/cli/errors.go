@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"strings"
+
+	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
 type errPayload struct {
@@ -116,6 +118,21 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 			Hint:       hint,
 		}, 1
 	}
+	if strings.HasPrefix(msg, "missing required field:") ||
+		strings.HasPrefix(msg, "workflow input missing required fields:") ||
+		strings.HasPrefix(msg, "flat input contains unknown fields:") ||
+		strings.HasPrefix(msg, "conflicting profile selectors:") {
+		hint := "inspect the contract with 'volclog tool describe <group.action>' or 'volclog workflow describe <group.command>' and align the JSON input/context fields"
+		if strings.HasPrefix(msg, "conflicting profile selectors:") {
+			hint = "use exactly one profile selector: global --profile or context.profile"
+		}
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "validation",
+			Hint:       hint,
+		}, 1
+	}
 	if strings.HasPrefix(msg, "filter ") || msg == "empty filter" || strings.HasPrefix(msg, "invalid --jmes-filter") || strings.HasPrefix(msg, "invalid jmes-filter expression:") {
 		return errPayload{
 			RequestID:  requestID,
@@ -167,6 +184,9 @@ func globalFlagPositionHint(flag string, group string) string {
 			break
 		}
 	}
+	if flag == "--output-file" {
+		usage = "--output-file <path>"
+	}
 	example := "volclog " + usage
 	if group != "" {
 		example += " " + group + " ..."
@@ -175,10 +195,26 @@ func globalFlagPositionHint(flag string, group string) string {
 	return "flag " + flag + " is global and position-sensitive; move it before the group, e.g. '" + example + " <group> ...'"
 }
 
+func writeStructuredError(stdout, stderr io.Writer, err error, requestID string, statusCode int, group string, env map[string]any) int {
+	payload, code := classifyError(err, requestID, statusCode, group)
+	if env != nil {
+		if err2 := output.Write(stdout, env, output.FormatJSON); err2 != nil {
+			writeCLIError(stderr, err2, payload.RequestID, payload.StatusCode, "decode", "output write failed")
+			return 3
+		}
+		return code
+	}
+	writeCLIError(stderr, err, payload.RequestID, payload.StatusCode, payload.Kind, payload.Hint)
+	return code
+}
+
 func isGlobalFlagName(flag string) bool {
 	flag = strings.TrimSpace(flag)
 	if flag == "" {
 		return false
+	}
+	if flag == "--output-file" {
+		return true
 	}
 	for _, name := range cliGlobalFlags() {
 		if flag == name {

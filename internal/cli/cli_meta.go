@@ -14,6 +14,21 @@ type cliGlobalFlagSpec struct {
 }
 
 func cliGroups() []cliGroupSpec {
+	groups := visibleCliGroups()
+	if currentEdition() != cliEditionAgent {
+		return groups
+	}
+	filtered := make([]cliGroupSpec, 0, len(groups))
+	for _, group := range groups {
+		if !agentEditionGroupNames[group.Name] {
+			continue
+		}
+		filtered = append(filtered, group)
+	}
+	return filtered
+}
+
+func visibleCliGroups() []cliGroupSpec {
 	return []cliGroupSpec{
 		{Name: "configure", Description: "配置本地凭证与默认参数", Primary: true},
 		{Name: "tool", Description: "使用统一 tool 契约面发现与查看能力", Primary: true},
@@ -41,12 +56,12 @@ func cliGroupNames() []string {
 }
 
 func cliGlobalFlagSpecs() []cliGlobalFlagSpec {
-	return []cliGlobalFlagSpec{
+	specs := []cliGlobalFlagSpec{
 		{Name: "--profile", Usage: "--profile <name>", Description: "配置名称", TakesValue: true},
 		{Name: "--output", Usage: "--output <json|jsonl|table>", Description: "输出格式（table 适用于常用快捷 list/get、index get、log search）", TakesValue: true},
 		{Name: "--output-mode", Usage: "--output-mode <stdout|file>", Description: "输出目标", TakesValue: true},
 		{Name: "--output-file", Usage: "--output-file <path>", Description: "输出文件路径", TakesValue: true},
-		{Name: "--jmes-filter", Usage: "--jmes-filter <expr>", Description: "JMESPath 输出过滤表达式（作用于原始结果，不是 envelope）", TakesValue: true},
+		{Name: "--jmes-filter", Usage: "--jmes-filter <expr>", Description: "JMESPath 输出过滤表达式（tool/workflow/raw 作用于完整 envelope）", TakesValue: true},
 		{Name: "--trace-dir", Usage: "--trace-dir <path>", Description: "trace 落盘目录", TakesValue: true},
 		{Name: "--trace-redact", Usage: "--trace-redact <strict|default>", Description: "trace 脱敏模式", TakesValue: true},
 		{Name: "--secrets-file", Usage: "--secrets-file <path>", Description: "dotenv 文件路径", TakesValue: true},
@@ -55,6 +70,20 @@ func cliGlobalFlagSpecs() []cliGlobalFlagSpec {
 		{Name: "-h", Usage: "-h", Description: "显示帮助"},
 		{Name: "--version", Usage: "--version", Description: "显示版本"},
 	}
+	if currentEdition() != cliEditionAgent {
+		return specs
+	}
+	filtered := make([]cliGlobalFlagSpec, 0, len(specs))
+	for _, spec := range specs {
+		if spec.Name == "--output-file" {
+			continue
+		}
+		if spec.Name == "--output" {
+			spec.Description = "输出格式（tool/workflow/raw 默认用 json；需要面向机器的逐行结果时可用 jsonl）"
+		}
+		filtered = append(filtered, spec)
+	}
+	return filtered
 }
 
 func cliGlobalFlags() []string {

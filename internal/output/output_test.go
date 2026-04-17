@@ -71,7 +71,7 @@ func TestApplyFilterNilResultReturnsError(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	for _, want := range []string{
-		"raw result scope:",
+		"result scope:",
 		"available keys:",
 		"missing",
 	} {
@@ -96,6 +96,19 @@ func TestApplyFilterNilResultIncludesMatchedPrefix(t *testing.T) {
 	}
 	if !strings.Contains(msg, "available keys: [Total]") {
 		t.Fatalf("expected keys from matched scope in error message, got %q", msg)
+	}
+}
+
+func TestApplyFilterExistingNullValueReturnsNilWithoutError(t *testing.T) {
+	out, err := ApplyFilter(map[string]any{
+		"status": "success",
+		"error":  nil,
+	}, "error")
+	if err != nil {
+		t.Fatalf("expected nil result to be treated as success, got %v", err)
+	}
+	if out != nil {
+		t.Fatalf("expected nil result, got %#v", out)
 	}
 }
 

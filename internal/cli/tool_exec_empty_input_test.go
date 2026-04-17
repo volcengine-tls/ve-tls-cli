@@ -60,9 +60,12 @@ func TestToolExecMissingInputStillReportsContractMissingField(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"tool", "exec", "topic.create", "--context", "file://" + ctxFile}, &stdout, &stderr)
 	if code == 0 {
-		t.Fatalf("expected missing required field failure stdout=%q", stdout.String())
+		t.Fatalf("expected missing required field failure stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "input.body.ProjectId") {
-		t.Fatalf("expected contract field path in stderr, got %q", stderr.String())
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "input.body.ProjectId") {
+		t.Fatalf("expected contract field path in stdout envelope, got %q", stdout.String())
 	}
 }

@@ -1282,7 +1282,7 @@ func defaultToolContextSchema() map[string]any {
 				"description":    "Select the named local profile to use for this tool execution.",
 				"when_to_use":    "Set this when you want tool exec to read credentials and defaults from a specific saved profile.",
 				"default":        "Use the active CLI profile when omitted.",
-				"runtime_effect": "Overrides ctx.Profile after any secrets_file has been loaded.",
+				"runtime_effect": "Loads credentials and defaults from the selected profile. If global --profile is also set, conflicting selectors fail fast instead of silently overriding each other.",
 			},
 			"secrets_file": map[string]any{
 				"type":           "string",

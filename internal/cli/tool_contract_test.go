@@ -822,18 +822,13 @@ func TestToolDescribeExplainsExecutionEmbedding(t *testing.T) {
 	}
 
 	notes, ok := got["usage_notes"].([]any)
-	if !ok || len(notes) == 0 {
+	if !ok {
 		t.Fatalf("expected usage_notes list, got %#v", got["usage_notes"])
 	}
-	found := false
 	for _, note := range notes {
 		if strings.Contains(strings.ToLower(asStringOrEmpty(note)), "context.execution") {
-			found = true
-			break
+			t.Fatalf("expected common execution embedding guidance to move out of usage_notes, got %#v", notes)
 		}
-	}
-	if !found {
-		t.Fatalf("expected usage_notes to mention context.execution, got %#v", notes)
 	}
 }
 
@@ -966,19 +961,12 @@ func TestToolDescribeRecommendsArtifactAndClarifiesPageAllPayload(t *testing.T) 
 		t.Fatalf("expected usage_notes list, got %#v", got["usage_notes"])
 	}
 
-	foundArtifact := false
 	foundPageAllPayload := false
 	for _, note := range notes {
 		text := strings.ToLower(asStringOrEmpty(note))
-		if strings.Contains(text, "artifact") || strings.Contains(text, "output-mode file") {
-			foundArtifact = true
-		}
 		if strings.Contains(text, "page.all") && strings.Contains(text, "payload") {
 			foundPageAllPayload = true
 		}
-	}
-	if !foundArtifact {
-		t.Fatalf("expected usage_notes to recommend artifact/file handling for large results, got %#v", notes)
 	}
 	if !foundPageAllPayload {
 		t.Fatalf("expected usage_notes to clarify page.all payload semantics, got %#v", notes)
@@ -1586,8 +1574,11 @@ func TestToolExecRequiresFileContextAndInput(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "file://") {
-		t.Fatalf("expected file:// requirement in stderr: %q", stderr.String())
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "file://") {
+		t.Fatalf("expected file:// requirement in stdout envelope: %q", stdout.String())
 	}
 }
 
@@ -1761,10 +1752,13 @@ func TestToolExecRejectsMissingRequiredFieldWithContractPath(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"tool", "exec", "topic.create", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
 	if code == 0 {
-		t.Fatalf("expected missing required field failure stdout=%q", stdout.String())
+		t.Fatalf("expected missing required field failure stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "input.body.ProjectId") {
-		t.Fatalf("expected contract field path in stderr, got %q", stderr.String())
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "input.body.ProjectId") {
+		t.Fatalf("expected contract field path in stdout envelope, got %q", stdout.String())
 	}
 }
 
@@ -2013,7 +2007,7 @@ func TestToolExecDigestMismatchWarnsOnly(t *testing.T) {
 	}
 }
 
-func TestToolExecAppliesTopLevelJMESFilterBeforeEnvelope(t *testing.T) {
+func TestToolExecAppliesTopLevelJMESFilterToEnvelope(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
@@ -2043,16 +2037,16 @@ func TestToolExecAppliesTopLevelJMESFilterBeforeEnvelope(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--jmes-filter", "valid", "tool", "exec", "topic.create-topic", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
+	code := Run([]string{"--jmes-filter", "summary.deliveryMode", "tool", "exec", "topic.create-topic", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	var out map[string]any
+	var out string
 	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
 		t.Fatalf("invalid stdout json: %v", err)
 	}
-	if out["data"] != true {
-		t.Fatalf("expected top-level jmes filter to target raw result, got %#v", out["data"])
+	if out != "stdout" {
+		t.Fatalf("expected top-level jmes filter to target envelope summary, got %#v", out)
 	}
 }
 
@@ -2091,10 +2085,13 @@ func TestToolExecRejectsUnsupportedPageAll(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"tool", "exec", "topic.create-topic", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
 	if code == 0 {
-		t.Fatalf("expected unsupported page.all failure stdout=%q", stdout.String())
+		t.Fatalf("expected unsupported page.all failure stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "page.all") {
-		t.Fatalf("expected page.all error in stderr, got %q", stderr.String())
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "page.all") {
+		t.Fatalf("expected page.all error in stdout envelope, got %q", stdout.String())
 	}
 }
 
@@ -2177,16 +2174,16 @@ func TestToolExecAllowsTrailingJMESFilter(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "exec", "project.create-project", "--context", "file://" + ctxFile, "--input", "file://" + reqFile, "--jmes-filter", "valid"}, &stdout, &stderr)
+	code := Run([]string{"tool", "exec", "project.create-project", "--context", "file://" + ctxFile, "--input", "file://" + reqFile, "--jmes-filter", "summary.deliveryMode"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	var out map[string]any
+	var out string
 	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
 		t.Fatalf("invalid stdout json: %v", err)
 	}
-	if out["data"] != true {
-		t.Fatalf("expected trailing jmes filter to target raw result, got %#v", out["data"])
+	if out != "stdout" {
+		t.Fatalf("expected trailing jmes filter to target envelope summary, got %#v", out)
 	}
 }
 

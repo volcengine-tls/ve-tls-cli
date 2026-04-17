@@ -14,9 +14,15 @@ recipes:
   - error_signature: filter matched no value
     http_status: 0
     error_code: CLIError
-    likely_cause: projection points at the wrong raw path
-    exact_fix: inspect one unfiltered response and rebuild the JMESPath against raw keys only
-    retry_command: rerun without projection, then retry with corrected JMESPath
+    likely_cause: jmes path points at the wrong layer of the response
+    exact_fix: inspect one unfiltered response first, then decide whether you are filtering the full CLI envelope via --jmes-filter or the raw result via execution.projection
+    retry_command: rerun without filter/projection, then retry with a corrected path
+  - error_signature: jmes filter returned literal null
+    http_status: 0
+    error_code: ""
+    likely_cause: the selected envelope field exists and its value is null
+    exact_fix: treat literal null as a successful projection result; only switch to debugging if the command returned a filter matched no value error instead
+    retry_command: inspect the unfiltered envelope only if null was unexpected
   - error_signature: 401 Unauthorized
     http_status: 401
     error_code: Unauthorized
@@ -59,3 +65,9 @@ recipes:
     likely_cause: wrong profile, wrong topic, wrong time range, or index not ready
     exact_fix: verify profile/topic/index first, then retry with narrow time range and trace enabled
     retry_command: volclog configure list
+  - error_signature: huge stdout payload
+    http_status: 0
+    error_code: ""
+    likely_cause: output strategy was chosen too late
+    exact_fix: rerun with --output-mode file and a writable --output-dir, or reduce stdout with --jmes-filter / execution.projection
+    retry_command: volclog --output-mode file --output-dir <writable-dir> <same-command>

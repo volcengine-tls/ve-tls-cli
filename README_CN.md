@@ -2,13 +2,15 @@
 
 [中文版](README_CN.md) | [English](README.md)
 
-火山引擎 TLS（日志服务）官方 CLI 工具，兼顾人类开发者和 AI Agent 的使用场景。覆盖日志项目、主题、索引、检索分析、告警、消费组、数据加工等主要业务域，提供快捷命令、tool 契约、raw transport 调用和可选 skills。
+火山引擎 TLS（日志服务）官方 CLI 工具。主路径按 Agent-native 的 `tool / workflow / raw` 设计，同时保留 full 版的人类 shortcut 与模板能力。
 
 **volclog 提供什么？**
 
+- **默认 Agent 优先** — 主执行路径是 `tool / workflow / raw`，不要求 Agent 先学习 shortcut flags。
+- **双发行版** — 发布同时提供面向 Agent/CI 的 `volclog-agent`，以及面向人类/完整能力的 `volclog`；两者共享相同的 `tool`、`workflow` 和 `raw` 契约。
 - **Agent 可集成** — 提供一组可选 skills，方便把常见 TLS 操作接到大模型或自动化流程里。
-- **覆盖范围完整** — 涵盖 20+ 个业务领域；常见场景可走 shortcut，细粒度场景可直接调用底层 OpenAPI。
-- **命令约束更容易看清** — 提供 `tool/workflow describe`、shortcut 请求模板、`--dry-run` 和结构化输出，适合先看约束再执行。
+- **覆盖范围完整** — 涵盖 20+ 个业务领域；full 版继续保留 shortcut 作为人类高频入口。
+- **命令约束更容易看清** — 提供 `tool/workflow describe`、`--dry-run`、结构化输出，以及可选的 shortcut 模板能力，适合先看约束再执行。
 - **安装和配置路径直接** — 支持二进制安装、源码编译、本地 profile、环境变量和 `--secrets-file`。
 - **安全边界相对清楚** — 提供 `--dry-run`、终端输出脱敏和环境隔离相关能力。
 - **分层使用** — shortcut / tool / workflow / raw / skills 多层并存，需要时再逐层下沉。
@@ -40,53 +42,9 @@
 - 您的火山引擎 AK (Access Key ID) 与 SK (Secret Access Key)
 - 目标 Region（如 `cn-beijing`）与 Endpoint（如 `https://tls-cn-beijing.volces.com`）
 
-### 快速开始（人类用户）
-
-*如果您是在用 AI 助手协助安装，可以直接跳至 **快速开始（AI Agent）**。*
-
-#### 1. 安装
-**方式一：二进制下载（推荐）**
-```bash
-VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash scripts/install-binary.sh
-```
-
-**方式二：npm 全局安装**
-```bash
-npm install -g @volcengine-tls/volclog
-```
-
-**方式三：Go 安装**
-需要 Go 1.22+ 环境。
-```bash
-go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
-```
-
-**方式四：本地源码安装**
-```bash
-git clone https://github.com/volcengine-tls/ve-tls-cli.git
-cd ve-tls-cli
-bash scripts/install-local.sh
-```
-
-#### 2. 配置凭证
-执行配置命令并按照提示填入 AK、SK、Region 与 Endpoint：
-```bash
-volclog configure
-```
-
-#### 3. 开始使用
-```bash
-# 查询项目列表
-volclog project list
-# 查询日志主题
-volclog topic list --project-id <your-project-id>
-```
-
----
-
 ### 快速开始（AI Agent）
 
-如果您是 AI Agent，可以按下面这个顺序帮用户完成配置和验证。
+这部分是 Agent / CI / 自动化的主路径。
 
 #### Step 1 — 安装
 ```bash
@@ -94,11 +52,21 @@ volclog topic list --project-id <your-project-id>
 bash scripts/install-local.sh
 ```
 
+发布版的 agent 版本请安装 `volclog-agent`，而不是 full 版 `volclog`：
+```bash
+VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download VOLCLOG_EDITION=agent bash scripts/install-binary.sh
+```
+
+`volclog-agent` 只保留 `configure`、`doctor`、`skill`、`tool`、`workflow` 和 `raw`。
+`project`、`topic`、`log`、`host-group`、`collector` 等 shortcut group 继续留在 full 版 `volclog`。
+
 如果你已经发布了 npm 包，也可以直接：
 
 ```bash
 npm install -g @volcengine-tls/volclog
 ```
+
+当前 npm 包安装的是 full 版 `volclog`。如果你需要只暴露 Agent 命令面的版本，请优先安装发布资产里的 `volclog-agent` 二进制。
 
 #### Step 2 — 发现可执行工具与约束
 对未知任务先走 `tool / workflow` 契约主链路，再进入 raw 调试层：
@@ -143,10 +111,74 @@ volclog tool exec project.create --context file://ctx.json --input file://req.js
 #### Step 4 — 数据过滤
 使用 `--jmes-filter` 提取关键数据，避免上下文被长列表撑爆：
 ```bash
-volclog project list --jmes-filter "Projects[].{Id: ProjectId, Name: ProjectName}"
+volclog tool exec project.describe-projects \
+  --input '{"ProjectName":"demo"}' \
+  --jmes-filter "data.Projects[].{Id: ProjectId, Name: ProjectName}"
 ```
 
+说明：
+- `--jmes-filter` 作用于完整 CLI envelope，所以 `data.*`、`summary.*`、`error.*` 都是合法路径。
+- 如果目标字段真实存在但值为 `null`，stdout 会直接输出字面量 `null`，命令仍算成功。
+- 失败执行统一使用单层 `error` 对象，优先读取 `error.kind`、`error.code`、`error.message`、`error.details`，不要再去二次解析错误字符串。
+
 ---
+
+### 快速开始（人类用户 / Full 版）
+
+如果你是直接在终端里操作的人工用户，请安装 full 版 `volclog`。shortcut 是建立在同一套 `tool / workflow / raw` 基础之上的人类便利层。
+
+#### 1. 安装
+**方式一：二进制下载（推荐）**
+```bash
+VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash scripts/install-binary.sh
+```
+
+如果要安装 agent 版：
+```bash
+VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download VOLCLOG_EDITION=agent bash scripts/install-binary.sh
+# 或
+bash scripts/install-binary.sh --edition agent
+```
+
+如果你在 Windows PowerShell 下安装：
+```powershell
+pwsh -File scripts/install.ps1
+pwsh -File scripts/install.ps1 -Edition agent
+```
+
+**方式二：npm 全局安装**
+```bash
+npm install -g @volcengine-tls/volclog
+```
+
+**方式三：Go 安装**
+需要 Go 1.22+ 环境。
+```bash
+go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
+```
+
+**方式四：本地源码安装**
+```bash
+git clone https://github.com/volcengine-tls/ve-tls-cli.git
+cd ve-tls-cli
+bash scripts/install-local.sh
+```
+
+#### 2. 配置凭证
+执行配置命令并按照提示填入 AK、SK、Region 与 Endpoint：
+```bash
+volclog configure
+```
+
+#### 3. 开始使用
+```bash
+volclog project list
+volclog topic list --project-id <your-project-id>
+```
+
+如果你想直接走 full 版的人类 shortcut 与模板路径，请看：
+
+👉 **[Human Shortcut Guide](docs/cli-human-shortcuts.md)**
 
 ## Agent Skills (智能体技能)
 
@@ -186,13 +218,17 @@ npx @volcengine-tls/volclog skill install --dir /path/to/agent/skills
 - **大数据流式处理**：通过 `--output jsonl` 和 `--output-mode file` 处理海量导出与 SQL 分析结果。
 - **多账号隔离**：使用 `--secrets-file ./.env` 注入局部环境变量。
 
-详细的场景指南（包含日志检索、加工、告警、多账号隔离的具体操作命令），已抽取至独立文档中。
-
-👉 **[CLI 参数最佳实践与场景指南](docs/cli-best-practices.md)**
-  
-如果你更希望按“安装 -> 第一次调用 -> 常见场景实操”的顺序看，也可以直接读：
+Agent-first 的实战主线，优先看：
 
 👉 **[volclog CLI 实战指导](docs/cli-practical-guide.md)**
+
+共享的运行时、输出、安全与自动化参数说明，优先看：
+
+👉 **[CLI 参数最佳实践与场景指南](docs/cli-best-practices.md)**
+
+如果你明确是在 full 版里做人工 shortcut 操作，再看：
+
+👉 **[Human Shortcut Guide](docs/cli-human-shortcuts.md)**
 
 ---
 

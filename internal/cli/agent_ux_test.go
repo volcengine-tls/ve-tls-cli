@@ -1,3 +1,5 @@
+//go:build !agent
+
 package cli
 
 import (
@@ -299,27 +301,12 @@ func TestRawAllowsTrailingDryRunGlobalFlag(t *testing.T) {
 	}
 }
 
-func TestToolDescribeAllowsTrailingOutputFileGlobals(t *testing.T) {
-	dir := t.TempDir()
-	outFile := filepath.Join(dir, "describe.json")
+func TestToolDescribeRejectsTrailingOutputFileGlobals(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"tool", "describe", "project.create", "--output-mode", "file", "--output-file", outFile}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("unexpected exit code: %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-	}
-	if stdout.String() != outFile+"\n" {
-		t.Fatalf("unexpected stdout: %q", stdout.String())
-	}
-	if _, err := os.Stat(outFile); err != nil {
-		t.Fatalf("expected output file: %v", err)
-	}
-	b, err := os.ReadFile(outFile)
-	if err != nil {
-		t.Fatalf("read output file: %v", err)
-	}
-	if !bytes.Contains(b, []byte(`"id": "project.create"`)) {
-		t.Fatalf("unexpected output file content: %s", string(b))
+	code := Run([]string{"tool", "describe", "project.create", "--output-mode", "file", "--output-file", filepath.Join(t.TempDir(), "describe.json")}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected output-file to be rejected stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
 

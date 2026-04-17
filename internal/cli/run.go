@@ -53,12 +53,6 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	if strings.TrimSpace(gf.OutputMode) == "" && strings.TrimSpace(projectCfg.OutputMode) != "" {
 		gf.OutputMode = projectCfg.OutputMode
 	}
-	// Resolve default output directory precedence:
-	// VOLCLOG_OUTPUT_DIR env > project config output_dir > default (.volclog/output)
-	defaultOutDir := strings.TrimSpace(os.Getenv("VOLCLOG_OUTPUT_DIR"))
-	if defaultOutDir == "" {
-		defaultOutDir = strings.TrimSpace(projectCfg.OutputDir)
-	}
 	if strings.TrimSpace(gf.TraceRedact) == "" && strings.TrimSpace(projectCfg.TraceRedact) != "" {
 		gf.TraceRedact = projectCfg.TraceRedact
 	}
@@ -73,6 +67,19 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	if gf.ShowVersion {
 		_, _ = stdout.Write([]byte("volclog " + version.Version + "\n"))
 		return 0
+	}
+	if g == "version" && len(rest) == 0 {
+		_, _ = stdout.Write([]byte("volclog " + version.Version + "\n"))
+		return 0
+	}
+
+	if !isRecognizedGroup(g) {
+		_, _ = stderr.Write([]byte(usageText()))
+		return 1
+	}
+	if !isGroupEnabledInCurrentEdition(g) {
+		writeCLIError(stderr, errors.New("group not available in "+string(currentEdition())+" edition: "+g), "", 0, "usage", editionGroupHint(g))
+		return 1
 	}
 
 	format, err := output.ParseFormat(gf.Output)
@@ -90,7 +97,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	ctx.OutputExplicit = outputExplicit
 	ctx.OutputMode = outputMode
 	ctx.OutputModeExplicit = gf.OutputModeExplicit
-	ctx.OutputDir = defaultOutDir
+	ctx.OutputDir = strings.TrimSpace(gf.OutputDir)
 	ctx.OutputFile = gf.OutputFile
 	ctx.TraceDir = gf.TraceDir
 	ctx.TraceRedact = gf.TraceRedact
@@ -106,9 +113,23 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		writeCLIError(stderr, errors.New("unsupported output-mode: "+gf.OutputMode), "", 0, "usage", "invalid --output-mode")
 		return 1
 	}
+	if outputMode == "file" && strings.TrimSpace(gf.Filter) != "" && filterTargetsEnvelope(g, rest) {
+		writeCLIError(stderr, errors.New("--jmes-filter cannot be combined with file delivery"), "", 0, "usage", "remove --jmes-filter or use stdout delivery")
+		return 1
+	}
+	if rejectsOutputFileForGroup(g) && strings.TrimSpace(gf.OutputFile) != "" {
+		writeCLIError(stderr, errors.New("--output-file is not supported for "+strings.TrimSpace(g)), "", 0, "usage", "use output_dir-based delivery instead")
+		return 1
+	}
 	if err := ctx.validateDryRunScope(g, rest); err != nil {
 		writeCLIError(stderr, err, "", 0, "usage", "invalid --dry-run scope")
 		return 1
+	}
+	if outputMode == "file" {
+		if err := preflightOutputFilePath(gf.OutputFile, ctx.OutputDir, g, knownFileDeliveryFormat(g, rest, format)); err != nil {
+			writeCLIError(stderr, err, "", 0, "decode", "output write failed")
+			return 3
+		}
 	}
 
 	var out any
@@ -128,25 +149,15 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		err = removedLegacyCommandError("capabilities", legacyCapabilitiesHint(rest))
 	case "api":
 		err = removedLegacyCommandError("api", legacyAPIHint(rest))
-	case "project":
-		out, err = runProject(ctx, rest)
-	case "topic":
-		out, err = runTopic(ctx, rest)
-	case "metric-topic":
-		out, err = runMetricTopic(ctx, rest)
-	case "index":
-		out, err = runIndex(ctx, rest)
-	case "log":
-		out, err = runLog(ctx, rest)
-	case "host-group":
-		out, err = runHostGroup(ctx, rest)
-	case "collector":
-		out, err = runCollector(ctx, rest)
 	case "doctor":
 		out, exitCode, err = runDoctor(ctx, rest)
 	default:
-		_, _ = stderr.Write([]byte(usageText()))
-		return 1
+		handled := false
+		out, handled, err = runEditionSpecificGroup(ctx, g, rest)
+		if !handled {
+			_, _ = stderr.Write([]byte(usageText()))
+			return 1
+		}
 	}
 	if ctx.FormatOverride != "" {
 		format = ctx.FormatOverride
@@ -157,34 +168,38 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			_, _ = stdout.Write([]byte(ue.Text))
 			return ue.ExitCode
 		}
-		payload, code := classifyError(err, ctx.RequestID, ctx.StatusCode, g)
-		if isEnvelopeGroup(g) {
+		if emitsStructuredEnvelope(g, rest) {
 			if strings.TrimSpace(ctx.TraceDir) != "" {
 				_ = ctx.initTrace()
 			}
 			env := buildAPIErrorEnvelope(ctx, g, err, outputMode)
-			if err2 := output.Write(stdout, env, output.FormatJSON); err2 != nil {
-				writeCLIError(stderr, err2, payload.RequestID, payload.StatusCode, "decode", "output write failed")
-				return 3
+			if ctx.Filter != "" && filterTargetsEnvelope(g, rest) {
+				filtered, err2 := applyEnvelopeFilterResult(env, ctx.Filter)
+				if err2 != nil {
+					failed := buildAPIErrorEnvelope(ctx, g, err2, outputMode)
+					return writeStructuredError(stdout, stderr, err2, ctx.RequestID, ctx.StatusCode, g, failed)
+				}
+				if err2 := output.Write(stdout, filtered, output.FormatJSON); err2 != nil {
+					writeCLIError(stderr, err2, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
+					return 3
+				}
+				_, code := classifyError(err, ctx.RequestID, ctx.StatusCode, g)
+				return code
 			}
-			return code
+			return writeStructuredError(stdout, stderr, err, ctx.RequestID, ctx.StatusCode, g, env)
 		}
-		writeCLIError(stderr, err, payload.RequestID, payload.StatusCode, payload.Kind, payload.Hint)
-		return code
+		return writeStructuredError(stdout, stderr, err, ctx.RequestID, ctx.StatusCode, g, nil)
 	}
-	if ctx.Filter != "" {
+	applyEnvelopeFilter := filterTargetsEnvelope(g, rest)
+	if ctx.Filter != "" && !applyEnvelopeFilter {
 		out, err = output.ApplyFilter(out, ctx.Filter)
 		if err != nil {
-			if isEnvelopeGroup(g) {
+			if emitsStructuredEnvelope(g, rest) {
 				if strings.TrimSpace(ctx.TraceDir) != "" {
 					_ = ctx.initTrace()
 				}
 				env := buildAPIErrorEnvelope(ctx, g, err, outputMode)
-				if err2 := output.Write(stdout, env, output.FormatJSON); err2 != nil {
-					writeCLIError(stderr, err2, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
-					return 3
-				}
-				return 3
+				return writeStructuredError(stdout, stderr, err, ctx.RequestID, ctx.StatusCode, g, env)
 			}
 			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "invalid --jmes-filter")
 			return 3
@@ -235,10 +250,41 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
 			return 3
 		}
+		if ctx.Filter != "" && applyEnvelopeFilter {
+			filtered, err := applyEnvelopeFilterResult(env, ctx.Filter)
+			if err != nil {
+				errorEnv := buildAPIErrorEnvelope(ctx, g, err, outputMode)
+				if err2 := output.Write(stdout, errorEnv, output.FormatJSON); err2 != nil {
+					writeCLIError(stderr, err2, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
+					return 3
+				}
+				return 3
+			}
+			if err := output.Write(stdout, filtered, output.FormatJSON); err != nil {
+				writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
+				return 3
+			}
+			return exitCode
+		}
+		if notice, ok := fileDeliveryNoticeForOutput(env, g, rest); ok {
+			_, _ = stdout.Write([]byte(notice))
+			return exitCode
+		}
 		if err := output.Write(stdout, env, output.FormatJSON); err != nil {
 			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
 			return 3
 		}
+		return exitCode
+	}
+	if ctx.Filter != "" && applyEnvelopeFilter {
+		out, err = applyEnvelopeFilterResult(out, ctx.Filter)
+		if err != nil {
+			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "invalid --jmes-filter")
+			return 3
+		}
+	}
+	if notice, ok := fileDeliveryNoticeForOutput(out, g, rest); ok {
+		_, _ = stdout.Write([]byte(notice))
 		return exitCode
 	}
 	if outputMode == "file" {
@@ -257,17 +303,124 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	return exitCode
 }
 
+func knownFileDeliveryFormat(group string, rest []string, format output.Format) output.Format {
+	if emitsStructuredEnvelope(group, rest) {
+		return output.FormatJSON
+	}
+	return format
+}
+
+func rejectsOutputFileForGroup(group string) bool {
+	switch strings.TrimSpace(group) {
+	case "tool", "workflow", "raw":
+		return true
+	default:
+		return false
+	}
+}
+
+func filterTargetsEnvelope(group string, rest []string) bool {
+	switch strings.TrimSpace(group) {
+	case "raw":
+		return true
+	case "tool", "workflow":
+		return len(rest) > 0 && strings.TrimSpace(rest[0]) == "exec"
+	default:
+		return false
+	}
+}
+
+func emitsStructuredEnvelope(group string, rest []string) bool {
+	if isEnvelopeGroup(group) {
+		return true
+	}
+	switch strings.TrimSpace(group) {
+	case "tool", "workflow":
+		return len(rest) > 0 && strings.TrimSpace(rest[0]) == "exec"
+	default:
+		return false
+	}
+}
+
+func applyEnvelopeFilterResult(v any, expr string) (any, error) {
+	return output.ApplyFilter(v, expr)
+}
+
+func fileDeliveryNoticeForOutput(v any, group string, rest []string) (string, bool) {
+	if !usesFixedFileNotice(group, rest) {
+		return "", false
+	}
+	env, ok := v.(map[string]any)
+	if !ok {
+		return "", false
+	}
+	summary, _ := env["summary"].(map[string]any)
+	if summary == nil {
+		return "", false
+	}
+	deliveryMode, _ := summary["deliveryMode"].(string)
+	path, ok := firstArtifactPath(env["artifacts"])
+	if !ok {
+		return "", false
+	}
+	switch strings.TrimSpace(deliveryMode) {
+	case "file_auto":
+		return "结果过大，已写入文件。\n文件: " + path + "\n", true
+	case "file_forced":
+		return "结果已写入文件。\n文件: " + path + "\n", true
+	default:
+		return "", false
+	}
+}
+
+func firstArtifactPath(v any) (string, bool) {
+	switch vv := v.(type) {
+	case []map[string]any:
+		if len(vv) == 0 {
+			return "", false
+		}
+		path, _ := vv[0]["path"].(string)
+		return strings.TrimSpace(path), strings.TrimSpace(path) != ""
+	case []any:
+		if len(vv) == 0 {
+			return "", false
+		}
+		artifact, _ := vv[0].(map[string]any)
+		path, _ := artifact["path"].(string)
+		return strings.TrimSpace(path), strings.TrimSpace(path) != ""
+	default:
+		return "", false
+	}
+}
+
+func usesFixedFileNotice(group string, rest []string) bool {
+	switch strings.TrimSpace(group) {
+	case "raw":
+		return true
+	case "tool", "workflow":
+		return len(rest) > 0 && strings.TrimSpace(rest[0]) == "exec"
+	default:
+		return false
+	}
+}
+
 func usageText() string {
 	var b strings.Builder
 	b.WriteString("Usage:\n")
-	b.WriteString("  volclog [--profile <name>] [--output json|jsonl|table] [--output-mode stdout|file] [--output-file <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
+	b.WriteString("  volclog [--profile <name>] [--output json|jsonl|table] [--output-mode stdout|file] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
 	b.WriteString("主入口（Agent / 自动化优先）:\n")
-	b.WriteString("  用 tool 发现能力并查看契约；需要结构化执行时使用 tool exec。\n")
-	b.WriteString("  已明确 method/path 的原始 transport 调用使用 raw。\n")
-	b.WriteString("  默认全局参数写在 group 之前；但 raw 与 project/topic/metric-topic/index/log/host-group/collector 的输出类全局参数也可后置。\n")
-	b.WriteString("  大输出优先使用 --output-mode file。\n")
-	b.WriteString("  --jmes-filter 作用于原始结果，而不是 CLI envelope；筛选 Total 时写 Total，不写 data.Total。\n")
-	b.WriteString("  zsh/bash 下建议写成 --jmes-filter \"keys(@)\"；fish/PowerShell 下优先用单引号。\n\n")
+	if currentEdition() == cliEditionAgent {
+		b.WriteString("  用 tool 发现公开 API 并查看契约；需要结构化执行时使用 tool exec。\n")
+		b.WriteString("  用 workflow 执行 CLI 提供的高层编排能力；只有已明确 method/path 时才使用 raw。\n")
+		b.WriteString("  tool/workflow 走 JSON input/context；raw 走 method/path 与 transport flags。\n\n")
+	} else {
+		b.WriteString("  用 tool 发现能力并查看契约；需要结构化执行时使用 tool exec。\n")
+		b.WriteString("  已明确 method/path 的原始 transport 调用使用 raw。\n")
+		b.WriteString("  默认全局参数写在 group 之前；但 raw 与 project/topic/metric-topic/index/log/host-group/collector 的输出类全局参数也可后置。\n")
+		b.WriteString("  大输出优先使用 --output-mode file。\n")
+		b.WriteString("  --jmes-filter 作用于完整 envelope；筛选结果字段时写 data.Total，筛选交付语义时写 summary.deliveryMode。\n")
+		b.WriteString("  zsh/bash 下建议写成 --jmes-filter \"keys(@)\"；fish/PowerShell 下优先用单引号。\n\n")
+	}
 	for _, group := range cliGroups() {
 		if !group.Primary {
 			continue
@@ -282,25 +435,31 @@ func usageText() string {
 		b.WriteString(group.Description)
 		b.WriteString("\n")
 	}
-	b.WriteString("\n  project/topic/index/log 等 shortcut 仅供人工交互；Agent 不要把它们当主流程。\n")
-	b.WriteString("  可用 volclog skill install --dir <agent-skills-dir> 安装内置 Agent 技能。\n")
-	b.WriteString("  仓库内提供可直接安装的 skills/ 目录。\n\n")
-	b.WriteString("次级入口（仅在你已明确目标资源时使用）:\n")
-	for _, group := range cliGroups() {
-		if group.Primary {
-			continue
+	if currentEdition() == cliEditionAgent {
+		b.WriteString("\n  可用 volclog skill install --dir <agent-skills-dir> 安装内置 Agent 技能。\n")
+		b.WriteString("  当前 edition 只暴露 configure/doctor/skill/tool/workflow/raw，不包含 human shortcut。\n\n")
+	} else {
+		b.WriteString("\n  project/topic/index/log 等 shortcut 仅供人工交互；Agent 不要把它们当主流程，也不要默认停在 shortcut 的 --describe / --print-request-template。\n")
+		b.WriteString("  可用 volclog skill install --dir <agent-skills-dir> 安装内置 Agent 技能。\n")
+		b.WriteString("  仓库内提供可直接安装的 skills/ 目录。\n\n")
+		b.WriteString("次级入口（仅在你已明确目标资源时使用）:\n")
+		for _, group := range cliGroups() {
+			if group.Primary {
+				continue
+			}
+			b.WriteString("  ")
+			b.WriteString(group.Name)
+			if len(group.Name) < 12 {
+				b.WriteString(strings.Repeat(" ", 12-len(group.Name)))
+			} else {
+				b.WriteString(" ")
+			}
+			b.WriteString(group.Description)
+			b.WriteString("\n")
 		}
-		b.WriteString("  ")
-		b.WriteString(group.Name)
-		if len(group.Name) < 12 {
-			b.WriteString(strings.Repeat(" ", 12-len(group.Name)))
-		} else {
-			b.WriteString(" ")
-		}
-		b.WriteString(group.Description)
 		b.WriteString("\n")
 	}
-	b.WriteString("\n全局参数:\n")
+	b.WriteString("全局参数:\n")
 	maxUsageLen := 0
 	for _, flag := range cliGlobalFlagSpecs() {
 		if flag.Name == "-h" {

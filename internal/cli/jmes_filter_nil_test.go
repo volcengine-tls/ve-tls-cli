@@ -21,7 +21,7 @@ func TestRawJMESFilterNilResultReturnsEnvelopeError(t *testing.T) {
 		"raw",
 		"--method", "GET",
 		"--path", "/DescribeProjects",
-		"--jmes-filter", "missing.field",
+		"--jmes-filter", "data.missing.field",
 	}, &stdout, &stderr)
 	if code != 3 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
@@ -45,14 +45,14 @@ func TestRawJMESFilterNilResultReturnsEnvelopeError(t *testing.T) {
 	if errObj["kind"] != "decode" {
 		t.Fatalf("expected decode error kind, got %#v", errObj)
 	}
-	if !strings.Contains(asStringOrEmpty(errObj["errorMessage"]), "matched no value") {
-		t.Fatalf("expected matched no value message, got %#v", errObj["errorMessage"])
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "matched no value") {
+		t.Fatalf("expected matched no value message, got %#v", errObj["message"])
 	}
-	if !strings.Contains(asStringOrEmpty(errObj["errorMessage"]), "raw result") {
-		t.Fatalf("expected raw result scope in error message, got %#v", errObj["errorMessage"])
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "result scope") {
+		t.Fatalf("expected result scope in error message, got %#v", errObj["message"])
 	}
-	if !strings.Contains(asStringOrEmpty(errObj["errorMessage"]), "available keys") {
-		t.Fatalf("expected available keys hint in error message, got %#v", errObj["errorMessage"])
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "available keys") {
+		t.Fatalf("expected available keys hint in error message, got %#v", errObj["message"])
 	}
 }
 
@@ -95,24 +95,31 @@ func TestToolExecProjectionNilResultReturnsEnvelopeError(t *testing.T) {
 	if code != 3 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	if stdout.Len() != 0 {
-		t.Fatalf("expected empty stdout for tool exec filter failure, got %q", stdout.String())
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr for envelope error, got %q", stderr.String())
 	}
 
 	var out map[string]any
-	if err := json.Unmarshal(stderr.Bytes(), &out); err != nil {
-		t.Fatalf("invalid stderr json: %v stderr=%q", err, stderr.String())
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
 	}
-	if out["kind"] != "decode" {
-		t.Fatalf("expected decode error kind, got %#v", out)
+	if out["status"] != "failed" {
+		t.Fatalf("expected status=failed, got %#v", out["status"])
 	}
-	if !strings.Contains(asStringOrEmpty(out["errorMessage"]), "matched no value") {
-		t.Fatalf("expected matched no value message, got %#v", out["errorMessage"])
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
 	}
-	if !strings.Contains(asStringOrEmpty(out["errorMessage"]), "raw result") {
-		t.Fatalf("expected raw result scope in error message, got %#v", out["errorMessage"])
+	if errObj["kind"] != "decode" {
+		t.Fatalf("expected decode error kind, got %#v", errObj)
 	}
-	if !strings.Contains(asStringOrEmpty(out["errorMessage"]), "available keys") {
-		t.Fatalf("expected available keys hint in error message, got %#v", out["errorMessage"])
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "matched no value") {
+		t.Fatalf("expected matched no value message, got %#v", errObj["message"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "result scope") {
+		t.Fatalf("expected result scope in error message, got %#v", errObj["message"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "available keys") {
+		t.Fatalf("expected available keys hint in error message, got %#v", errObj["message"])
 	}
 }

@@ -11,6 +11,8 @@ Use this skill only for agent-only incremental knowledge.
 
 If `volclog tool describe ...` or `volclog workflow describe ...` already answers the question, stop and follow that contract instead of adding duplicate guidance here.
 
+If both binaries are available, prefer `volclog-agent` for agent or CI sessions. If only the full `volclog` binary is installed, stay on `tool / workflow / raw` and ignore human shortcut groups.
+
 Treat this skill as the thin delta above runtime contracts:
 
 - `routing`: natural-language intent to `tool / workflow / raw`
@@ -31,7 +33,7 @@ Treat this skill as the thin delta above runtime contracts:
 - Do not repeat schema details that already exist in `tool describe` or `workflow describe`.
 - Prefer `tool` for published public APIs, `workflow` for CLI-owned high-level flows, and `raw` only when method/path is already known or no public contract exists.
 - Prefer `--dry-run` before any write or destructive change.
-- Prefer file or artifact output for large responses.
+- Prefer file delivery for large responses; use `--output-mode file --output-dir <writable-dir>` when you expect stdout to be too large.
 - Never persist AK/SK or token values in the skill, prompt, session memory, or request artifacts. For stateless agents and CI, ask the host or broker for a one-shot `--secrets-file` or process-scoped environment injection instead.
 
 ## First Response Checklist
@@ -39,7 +41,7 @@ Treat this skill as the thin delta above runtime contracts:
 1. Identify whether the task is public API execution, CLI-owned workflow, or exact transport call.
 2. Read the matching `tool describe` or `workflow describe` contract before constructing input.
 3. If the task is write, destructive, or account-sensitive, confirm `profile` and start with `--dry-run`.
-4. If the result may be large, choose file or artifact output before execution.
+4. If the result may be large, choose `--output-mode file --output-dir <writable-dir>` before execution, then read the written full envelope from disk if stdout returns only a file notice.
 
 ## Quick Reference
 
@@ -56,7 +58,8 @@ Treat this skill as the thin delta above runtime contracts:
 
 - Using shortcut `project/topic/index/log ...` as the default agent entry.
 - Treating `page.all` as an output-shrinking flag, or assuming every list action supports it. Use it only when the contract says `execution.supports_all=true`.
-- Writing `data.Total` in `projection`; filters run on the raw result, not the CLI envelope.
+- Mixing up `--jmes-filter` and `execution.projection`: `--jmes-filter` runs on the full CLI envelope, but `execution.projection` runs on the raw result.
+- Treating `--jmes-filter 'error'` returning `null` on a success envelope as a failure. Existing `null` values are valid filter results.
 - Forgetting `tool describe --view full` when compact output omits low-frequency optional nesting.
 - Guessing `ingest` or `export` as `tool` ids; these belong to the `workflow` surface.
 - Injecting broad environment variables into the whole sandbox and assuming `profile` still chooses the account. Environment credentials override profile resolution.

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -83,18 +84,44 @@ func writeOutputFileToDir(outputFile string, baseDir string, group string, out a
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-		return "", err
-	}
-	f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = f.Close() }()
-	if err := output.Write(f, out, format); err != nil {
+	if err := writeValueToPath(p, out, format); err != nil {
 		return "", err
 	}
 	return p, nil
+}
+
+func writeEnvelopeFileToDir(outputFile string, baseDir string, group string, env map[string]any) (string, error) {
+	p, err := resolveOutputFilePath(outputFile, baseDir, group, output.FormatJSON)
+	if err != nil {
+		return "", err
+	}
+	if err := writeValueToPath(p, env, output.FormatJSON); err != nil {
+		return "", err
+	}
+	return p, nil
+}
+
+func preflightOutputFilePath(outputFile string, baseDir string, group string, format output.Format) error {
+	p, err := resolveOutputFilePath(outputFile, baseDir, group, format)
+	if err != nil {
+		return err
+	}
+	return os.MkdirAll(filepath.Dir(p), 0o700)
+}
+
+func writeValueToPath(path string, out any, format output.Format) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	if err := output.Write(f, out, format); err != nil {
+		return err
+	}
+	return nil
 }
 
 func writeTextFileToDir(outputFile string, baseDir string, group string, s string) (string, error) {
@@ -122,14 +149,15 @@ func writeTextFileToDir(outputFile string, baseDir string, group string, s strin
 }
 
 func defaultOutputFile(baseDir string, group string, format output.Format) (string, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
 	dir := strings.TrimSpace(baseDir)
 	if dir == "" {
-		dir = filepath.Join(wd, ".volclog", "output")
-	} else if !filepath.IsAbs(dir) {
+		return "", errors.New("missing writable output_dir")
+	}
+	if !filepath.IsAbs(dir) {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
 		dir = filepath.Join(wd, dir)
 	}
 	ext := "json"
@@ -147,14 +175,15 @@ func defaultOutputFile(baseDir string, group string, format output.Format) (stri
 }
 
 func defaultBinaryOutputFile(baseDir string, group string, ext string) (string, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
 	dir := strings.TrimSpace(baseDir)
 	if dir == "" {
-		dir = filepath.Join(wd, ".volclog", "output")
-	} else if !filepath.IsAbs(dir) {
+		return "", errors.New("missing writable output_dir")
+	}
+	if !filepath.IsAbs(dir) {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
 		dir = filepath.Join(wd, dir)
 	}
 	g := strings.TrimSpace(group)
@@ -170,4 +199,50 @@ func defaultBinaryOutputFile(baseDir string, group string, ext string) (string, 
 	}
 	name := g + "-" + time.Now().UTC().Format("2006-01-02T15-04-05.000Z") + suffix
 	return filepath.Join(dir, name), nil
+}
+
+func materializeEnvelopeFile(path string, env map[string]any) error {
+	if env == nil {
+		return errors.New("nil envelope")
+	}
+	cleanPath := filepath.Clean(path)
+	lastSize := -1
+	for i := 0; i < 8; i++ {
+		artifact := map[string]any{
+			"path":   cleanPath,
+			"format": string(output.FormatJSON),
+		}
+		if lastSize >= 0 {
+			artifact["sizeBytes"] = lastSize
+		}
+		env["artifacts"] = []map[string]any{artifact}
+		if err := updateEnvelopeTotalBytes(env); err != nil {
+			return err
+		}
+		b, err := marshalOutputBytes(env, output.FormatJSON)
+		if err != nil {
+			return err
+		}
+		size := len(b)
+		if size == lastSize {
+			return writeBytesToPath(cleanPath, b)
+		}
+		lastSize = size
+	}
+	return errors.New("failed to stabilize envelope file size")
+}
+
+func marshalOutputBytes(v any, format output.Format) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := output.Write(&buf, v, format); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func writeBytesToPath(path string, b []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o600)
 }

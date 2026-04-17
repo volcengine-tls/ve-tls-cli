@@ -376,13 +376,7 @@ func buildToolDescribeCommon(contract toolCatalog) toolDescribeCommon {
 	execution["supports_dry_run"] = contract.SupportsDryRun
 	digestValue := strings.ToLower(toolContractForDigest(contract))
 	verb := semanticToolVerb(contract)
-	usageNotes := []any{
-		"Put execution controls under context.execution; do not pass a standalone execution file.",
-		"Keep business request fields in input (body/query/path/header), and keep auth/runtime knobs in context.",
-	}
-	if verb == "list" || verb == "search" || contract.SupportsAll {
-		usageNotes = append(usageNotes, "Large result actions should prefer execution.artifact or global --output-mode file; execution.projection keeps stdout payload small.")
-	}
+	usageNotes := []any{}
 	if contract.SupportsAll {
 		usageNotes = append(usageNotes, "execution.page.all increases completeness and may increase payload size; pair it with execution.artifact or execution.projection for large results.")
 	}
@@ -1063,7 +1057,7 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 			"when_to_use":     "Set this when you need a non-default account/profile or want to switch tenant/environment without changing input.",
 			"default":         "active CLI profile",
 			"discover_values": "Run `volclog configure list` to inspect saved profile names; omit profile to use the active CLI profile.",
-			"runtime_effect":  "Runtime loads credentials and defaults from the selected profile.",
+			"runtime_effect":  "Runtime loads credentials and defaults from the selected profile. If global --profile is also set, conflicting selectors fail fast instead of silently overriding each other.",
 		},
 		"secrets_file": {
 			"type":           "string",

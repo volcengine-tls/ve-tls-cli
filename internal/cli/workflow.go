@@ -196,6 +196,7 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	ctx.Action = "workflow." + spec.ID
 
 	contextArg := ""
 	inputArg := ""
@@ -240,13 +241,22 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 	}
 
 	options := resolveToolExecutionOptions(cfg)
+	if strings.TrimSpace(options.OutputDir) != "" {
+		ctx.OutputDir = strings.TrimSpace(options.OutputDir)
+	}
 	if options.DryRun {
 		ctx.DryRun = true
 	}
 	if options.Artifact {
+		if strings.TrimSpace(ctx.Filter) != "" {
+			return nil, errors.New("--jmes-filter cannot be combined with file delivery for workflow exec")
+		}
 		ctx.OutputMode = "file"
 		if strings.TrimSpace(options.ArtifactPath) != "" {
 			ctx.OutputFile = strings.TrimSpace(options.ArtifactPath)
+		}
+		if err := preflightOutputFilePath(ctx.OutputFile, ctx.OutputDir, "workflow", output.FormatJSON); err != nil {
+			return nil, err
 		}
 	}
 
@@ -256,14 +266,11 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 	}
 	defer cleanup()
 
-	ctx.Action = "workflow." + spec.ID
-	rawFilter := strings.TrimSpace(ctx.Filter)
-	ctx.Filter = ""
 	out, err := dispatchWorkflowExec(ctx, spec, workflowArgs)
 	if err != nil {
 		return nil, err
 	}
-	filtered, err := applyToolExecFilters(out, options.Projection, rawFilter)
+	filtered, err := applyToolExecFilters(out, options.Projection)
 	if err != nil {
 		return nil, err
 	}
@@ -436,8 +443,16 @@ func finalizeWorkflowExecEnvelope(ctx *Context, result any, env map[string]any, 
 	if err != nil || size <= toolExecAutoArtifactByteLimit {
 		return env, nil
 	}
-	path, err := writeOutputFileToDir("", ctx.OutputDir, "workflow", result, ctx.Format)
+	filePath, err := resolveOutputFilePath("", ctx.OutputDir, "workflow", output.FormatJSON)
 	if err != nil {
+		return nil, err
+	}
+	fileArtifact := []map[string]any{{
+		"path":   filePath,
+		"format": string(output.FormatJSON),
+	}}
+	fileEnv := newAPISuccessEnvelope(ctx, "workflow", result, ctx.OutputMode, "file_auto", fileArtifact)
+	if err := materializeEnvelopeFile(filePath, fileEnv); err != nil {
 		return nil, err
 	}
 	summary, _ := env["summary"].(map[string]any)
@@ -445,11 +460,13 @@ func finalizeWorkflowExecEnvelope(ctx *Context, result any, env map[string]any, 
 		summary = map[string]any{}
 		env["summary"] = summary
 	}
+	summary["deliveryMode"] = "file_auto"
 	summary["truncated"] = true
 	summary["autoArtifact"] = true
 	summary["fullBytes"] = size
 	summary["hint"] = "full result written to artifact; use execution.projection or output-mode file for deterministic control"
-	env["artifacts"] = []map[string]any{buildOutputArtifact(path, ctx.Format)}
+	summary["totalBytes"] = fileEnv["summary"].(map[string]any)["totalBytes"]
+	env["artifacts"] = fileEnv["artifacts"]
 	env["data"] = buildToolExecPreview(result)
 	return env, nil
 }

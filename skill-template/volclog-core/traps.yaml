@@ -2,11 +2,15 @@ traps:
   - trap: page-all-is-not-compression
     symptom: payload gets larger after enabling page.all
     why: page.all increases completeness and payload size
-    fix: combine page.all with file or artifact output instead of expecting smaller stdout
-  - trap: projection-runs-on-raw-result
-    symptom: data.Total or data.items style paths return null
-    why: data.Total is wrong because filtering happens before the CLI envelope
-    fix: rebuild the filter against raw keys such as Total or Results
+    fix: combine page.all with file delivery via --output-mode file --output-dir instead of expecting smaller stdout
+  - trap: jmes-filter-and-projection-have-different-scope
+    symptom: data.Total or summary.deliveryMode style paths return null in execution.projection, or raw keys fail under --jmes-filter
+    why: --jmes-filter runs on the full CLI envelope, but execution.projection runs on the raw result before envelope wrapping
+    fix: use data.* or summary.* with --jmes-filter; use raw keys such as Total or Results only in execution.projection
+  - trap: jmes-filter-null-is-still-success
+    symptom: --jmes-filter 'error' prints null on a successful call
+    why: the envelope field exists and its value is null, so the filter matched successfully
+    fix: treat literal null as a valid projection result; only investigate when the CLI returns filter matched no value
   - trap: hitcount-is-not-whole-window-total
     symptom: SearchLogs.HitCount is used as the total count for the whole time window
     why: HitCount only reflects the rows returned in the current SearchLogs response window
@@ -23,6 +27,10 @@ traps:
     symptom: agent starts from project/topic/log shortcut commands
     why: agent flows should start from tool or workflow instead of shortcut groups
     fix: rediscover with tool list or workflow list and re-enter through the contract surface
+  - trap: agent-binary-exists
+    symptom: agent keeps seeing shortcut-oriented help and examples
+    why: the full volclog binary exposes human surfaces that an agent should ignore
+    fix: prefer volclog-agent when it is installed; otherwise stay on tool/workflow/raw only
   - trap: env-creds-override-profile
     symptom: a stateless sandbox run selects profile A but appears to use another account
     why: process-wide environment credentials override local profile resolution

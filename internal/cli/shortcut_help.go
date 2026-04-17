@@ -1,3 +1,5 @@
+//go:build !agent
+
 package cli
 
 import (
@@ -21,6 +23,10 @@ func shortcutCommandUsage(spec shortcutCommandSpec) string {
 
 	b.WriteString("Usage:\n")
 	b.WriteString("  volclog " + spec.Group + " " + spec.Command + " [flags]\n\n")
+
+	b.WriteString("Agent:\n")
+	b.WriteString("  - 这是 human shortcut，不是 agent 主流程。\n")
+	b.WriteString("  - Agent 默认先走 volclog tool/workflow describe/exec；只有用户明确要求 shortcut flags 或模板时再留在这里。\n\n")
 
 	if strings.TrimSpace(spec.Summary) != "" {
 		b.WriteString("Summary:\n")
@@ -96,10 +102,6 @@ func shortcutCommandUsage(spec shortcutCommandSpec) string {
 
 func shortcutNextCommands(spec shortcutCommandSpec) []string {
 	out := make([]string, 0, 5)
-	out = append(out, "volclog "+spec.Group+" "+spec.Command+" --describe")
-	if spec.SupportsTemplate {
-		out = append(out, "volclog "+spec.Group+" "+spec.Command+" --print-request-template=full")
-	}
 	if wf, err := resolveWorkflowByIdentity(spec.Group, spec.Command); err == nil {
 		out = append(out,
 			"volclog workflow describe "+strings.TrimSpace(wf.ID),
@@ -116,7 +118,31 @@ func shortcutNextCommands(spec shortcutCommandSpec) []string {
 	} else {
 		out = append(out, "volclog "+strings.TrimSpace(spec.Group)+" --help")
 	}
-	return uniqueStrings(out)
+	out = append(out, "volclog "+spec.Group+" "+spec.Command+" --describe")
+	if spec.SupportsTemplate {
+		out = append(out, "volclog "+spec.Group+" "+spec.Command+" --print-request-template=full")
+	}
+	return uniqueStringsKeepOrder(out)
+}
+
+func uniqueStringsKeepOrder(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
 }
 
 func shouldRenderRequiredSummary(spec shortcutCommandSpec, requiredParams []apiCapParam) bool {

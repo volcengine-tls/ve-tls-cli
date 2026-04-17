@@ -125,7 +125,7 @@ func TestRawCommandRemainsAvailable(t *testing.T) {
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"raw", "--method", "GET", "--path", "/DescribeProjects", "--jmes-filter", "Total"}, &stdout, &stderr)
+	code := Run([]string{"raw", "--method", "GET", "--path", "/DescribeProjects", "--jmes-filter", "data.Total"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -133,20 +133,11 @@ func TestRawCommandRemainsAvailable(t *testing.T) {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
 
-	var out map[string]any
+	var out float64
 	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
 		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
 	}
-	if out["status"] != "success" {
-		t.Fatalf("unexpected status: %v", out["status"])
-	}
-	if out["action"] != "raw.call" {
-		t.Fatalf("unexpected action: %v", out["action"])
-	}
-	if out["requestId"] != "req-raw" {
-		t.Fatalf("unexpected requestId: %v", out["requestId"])
-	}
-	if got, ok := out["data"].(float64); !ok || got != 0 {
-		t.Fatalf("expected filtered raw result 0, got %#v", out["data"])
+	if out != 0 {
+		t.Fatalf("expected filtered envelope field 0, got %#v", out)
 	}
 }

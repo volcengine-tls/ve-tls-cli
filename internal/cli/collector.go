@@ -1,3 +1,5 @@
+//go:build !agent
+
 package cli
 
 import (

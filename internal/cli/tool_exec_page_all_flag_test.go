@@ -86,10 +86,13 @@ func TestToolExecPageAllFlagRejectsUnsupportedAction(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"tool", "exec", "topic.create-topic", "--context", "file://" + ctxFile, "--input", "file://" + reqFile, "--page-all"}, &stdout, &stderr)
 	if code == 0 {
-		t.Fatalf("expected unsupported page.all failure stdout=%q", stdout.String())
+		t.Fatalf("expected unsupported page.all failure stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "page.all") {
-		t.Fatalf("expected page.all error in stderr, got %q", stderr.String())
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "page.all") {
+		t.Fatalf("expected page.all error in stdout envelope, got %q", stdout.String())
 	}
 }
 

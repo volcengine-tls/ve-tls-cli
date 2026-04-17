@@ -1,14 +1,72 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BIN_NAME="${BIN_NAME:-volclog}"
 PREFIX="${PREFIX:-$HOME/.local}"
 DEST_DIR="${DEST_DIR:-$PREFIX/bin}"
-DEST="$DEST_DIR/$BIN_NAME"
 
 DOWNLOAD_URL="${VOLCLOG_DOWNLOAD_URL:-}"
 BASE_URL="${VOLCLOG_BASE_URL:-}"
 VERSION="${VOLCLOG_VERSION:-}"
+EDITION="${VOLCLOG_EDITION:-}"
+
+usage() {
+  cat <<'EOF'
+usage: install-binary.sh [--edition full|agent]
+
+Environment:
+  VOLCLOG_DOWNLOAD_URL  direct archive URL
+  VOLCLOG_BASE_URL      release base URL
+  VOLCLOG_EDITION       full (default) or agent
+  BIN_NAME              override installed binary name
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --edition)
+      if [[ $# -lt 2 ]]; then
+        echo "missing --edition value" >&2
+        exit 2
+      fi
+      EDITION="$2"
+      shift 2
+      ;;
+    --edition=*)
+      EDITION="${1#*=}"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$EDITION" ]]; then
+  if [[ "${BIN_NAME:-}" = "volclog-agent" ]]; then
+    EDITION="agent"
+  else
+    EDITION="full"
+  fi
+fi
+
+case "$EDITION" in
+  full) SRC_BIN_NAME="volclog" ;;
+  agent) SRC_BIN_NAME="volclog-agent" ;;
+  *)
+    echo "invalid VOLCLOG_EDITION: $EDITION" >&2
+    exit 2
+    ;;
+esac
+
+BIN_NAME="${BIN_NAME:-$SRC_BIN_NAME}"
+
+DEST="$DEST_DIR/$BIN_NAME"
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
@@ -26,6 +84,9 @@ if [[ -z "$DOWNLOAD_URL" ]]; then
     exit 2
   fi
   pkg="volclog_${os}_${arch}.tar.gz"
+  if [[ "$EDITION" = "agent" ]]; then
+    pkg="volclog-agent_${os}_${arch}.tar.gz"
+  fi
   DOWNLOAD_URL="${BASE_URL%/}/$pkg"
 fi
 
@@ -55,11 +116,11 @@ if curl -fsSL "$sha_url" -o "$sha_path" 2>/dev/null; then
 fi
 
 tar -xzf "$archive_path" -C "$tmp"
-if [[ ! -f "$tmp/$BIN_NAME" ]]; then
+if [[ ! -f "$tmp/$SRC_BIN_NAME" ]]; then
   echo "binary not found in package" >&2
   exit 4
 fi
 
-install -m 0755 "$tmp/$BIN_NAME" "$DEST"
+install -m 0755 "$tmp/$SRC_BIN_NAME" "$DEST"
 echo "installed: $DEST"
 "$DEST" --version || true

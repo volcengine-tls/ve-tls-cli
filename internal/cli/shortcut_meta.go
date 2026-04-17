@@ -1,3 +1,5 @@
+//go:build !agent
+
 package cli
 
 import (
@@ -117,6 +119,26 @@ func describeShortcutOutput(spec shortcutCommandSpec) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	describeCmd := "volclog " + spec.Group + " " + spec.Command + " --describe"
+	executeCmd := "volclog " + spec.Group + " " + spec.Command
+	fallbackDiscovery := ""
+	fallbackAPIDescribe := ""
+	shortcutFirst := relatedShortcutDescribesForShortcut(spec.Group, spec.Command)
+
+	if wf, err := resolveWorkflowByIdentity(spec.Group, spec.Command); err == nil {
+		describeCmd = "volclog workflow describe " + strings.TrimSpace(wf.ID)
+		executeCmd = "volclog workflow exec " + strings.TrimSpace(wf.ID) + " --input file://req.json"
+		fallbackDiscovery = "volclog workflow list " + strings.TrimSpace(wf.Group)
+		shortcutFirst = nil
+	} else if action := toolIdentityAction(spec.Action); action != "" {
+		if _, ok := loadToolByIdentity(spec.Group, action); ok {
+			describeCmd = "volclog tool describe " + strings.TrimSpace(spec.Action)
+			executeCmd = "volclog tool exec " + strings.TrimSpace(spec.Action) + " --context file://ctx.json --input file://req.json"
+			fallbackDiscovery = "volclog tool list " + strings.TrimSpace(spec.APIGroup)
+			fallbackAPIDescribe = "volclog tool describe " + strings.TrimSpace(spec.Action)
+			shortcutFirst = nil
+		}
+	}
 	var flagDoc []apiCapDocParam
 	var bodyFields []describeFieldParam
 	if strings.TrimSpace(spec.APIGroup) != "" && strings.TrimSpace(spec.APIAction) != "" {
@@ -150,32 +172,27 @@ func describeShortcutOutput(spec shortcutCommandSpec) (string, error) {
 		},
 		Notes: append([]string(nil), spec.Notes...),
 		Guidance: apiDescribeGuidance{
-			ListGroup:     "volclog " + spec.Group + " --help",
-			Describe:      "volclog " + spec.Group + " " + spec.Command + " --describe",
-			Filter:        `volclog ` + spec.Group + ` ` + spec.Command + ` --jmes-filter "keys(@)"`,
-			ShortcutFirst: relatedShortcutDescribesForShortcut(spec.Group, spec.Command),
+			ListGroup:           "volclog " + spec.Group + " --help",
+			Describe:            describeCmd,
+			Execute:             executeCmd,
+			Filter:              `volclog ` + spec.Group + ` ` + spec.Command + ` --jmes-filter "keys(@)"`,
+			ShortcutFirst:       shortcutFirst,
+			FallbackDiscovery:   fallbackDiscovery,
+			FallbackAPIDescribe: fallbackAPIDescribe,
 		},
-	}
-	if wf, err := resolveWorkflowByIdentity(spec.Group, spec.Command); err == nil {
-		out.Guidance.FallbackDiscovery = "volclog workflow describe " + strings.TrimSpace(wf.ID)
-	} else if action := toolIdentityAction(spec.Action); action != "" {
-		if _, ok := loadToolByIdentity(spec.Group, action); ok {
-			out.Guidance.FallbackDiscovery = "volclog tool list " + strings.TrimSpace(spec.APIGroup)
-			out.Guidance.FallbackAPIDescribe = "volclog tool describe " + strings.TrimSpace(spec.Action)
-		}
 	}
 	out.Input = &describeInput{
 		Flags: buildShortcutFlagInput(spec.Params, flagDoc),
 	}
-	if spec.SupportsTemplate {
+	if spec.SupportsTemplate && describeCmd == "volclog "+spec.Group+" "+spec.Command+" --describe" {
 		if spec.PreferredOutputMode == "file" {
 			out.Guidance.Execute = "volclog --output-mode file " + spec.Group + " " + spec.Command + " --request file://req.json"
 		} else {
 			out.Guidance.Execute = "volclog " + spec.Group + " " + spec.Command + " --request file://req.json"
 		}
-	} else if spec.PreferredOutputMode == "file" {
+	} else if spec.PreferredOutputMode == "file" && describeCmd == "volclog "+spec.Group+" "+spec.Command+" --describe" {
 		out.Guidance.Execute = "volclog --output-mode file " + spec.Group + " " + spec.Command
-	} else {
+	} else if describeCmd == "volclog "+spec.Group+" "+spec.Command+" --describe" {
 		out.Guidance.Execute = "volclog " + spec.Group + " " + spec.Command
 	}
 
@@ -368,23 +385,6 @@ func legacyShortcutMetaHint(group, command string) string {
 		return "shortcut metadata flags were removed; use 'volclog tool list " + strings.TrimSpace(spec.APIGroup) + "' for public API discovery or run 'volclog " + group + " " + command + " -h'"
 	}
 	return "shortcut metadata flags were removed; run 'volclog " + group + " " + command + " -h'"
-}
-
-func shortcutActionOps(group, action string) ([]apiActionOp, error) {
-	doc, err := loadAPICapabilities()
-	if err != nil {
-		return nil, err
-	}
-	index := buildAPIIndex(doc)
-	actions, ok := index[normalizeToken(group)]
-	if !ok {
-		return nil, errors.New("api group not found: " + group)
-	}
-	ops, ok := actions[normalizeActionToken(action)]
-	if !ok || len(ops) == 0 {
-		return nil, errors.New("api action not found: " + group + "." + action)
-	}
-	return ops, nil
 }
 
 func lookupShortcutSpec(group, command string) (shortcutCommandSpec, bool) {
@@ -1220,17 +1220,6 @@ func shortcutSpecs() map[string]shortcutCommandSpec {
 		out[normalizeToken(spec.Group)+"\x00"+normalizeToken(spec.Command)] = spec
 	}
 	return out
-}
-
-func flagParam(name, cliFlag, in string, required bool, typ, desc string) apiCapParam {
-	return apiCapParam{
-		Name:        name,
-		CLIFlag:     cliFlag,
-		In:          in,
-		Required:    required,
-		Type:        typ,
-		Description: desc,
-	}
 }
 
 func sortedShortcutGroupsWithMeta() []string {

@@ -6,7 +6,7 @@
 | Ingest local logs and validate search | Need to write local data and confirm it is queryable | `workflow log.ingest` then `tool` or `workflow` read path | stdout for preview, file if ingest/search response expands | one write path succeeds and one read path returns rows |
 | Troubleshoot empty search | Write appeared to succeed but search returns empty | `tool` | keep results small with narrow time range and projection | wrong profile/topic/index found or results appear |
 | Preview search volume before reading rows | Need to decide whether to narrow time range, use search preview, or jump to export | `tool log.describe-histogram-v1` | keep stdout small; only switch to file when later row results stay large | bucket distribution and next surface are clear |
-| Export large results | Need full rows or analysis rows beyond token budget | `workflow log.export` or `workflow log.export-analysis` | prefer `--output-mode file` or artifact | artifact path and preview both available |
+| Export large results | Need full rows or analysis rows beyond token budget | `workflow log.export` or `workflow log.export-analysis` | prefer `--output-mode file --output-dir <writable-dir>` | stdout returns a file notice and the written full envelope is available |
 
 ## Create A Searchable Log Pipeline
 
@@ -38,7 +38,7 @@ Use when the task is "load local sample logs or jsonl into a topic, then confirm
 4. If the dataset is small, validate with `volclog tool describe log.search` and then `tool exec log.search`.
 5. If validation may return many rows, use `volclog workflow describe log.export` instead of full stdout search.
 
-Output strategy: keep ingest stdout small; prefer file output once read validation becomes large.
+Output strategy: keep ingest stdout small; prefer `--output-mode file --output-dir <writable-dir>` once read validation becomes large.
 
 Stop when one write path succeeds and one read path returns rows from the same topic/time range.
 
@@ -78,4 +78,4 @@ Stop when the next execution surface is clear and the time window has been narro
 
 Fallback: if `workflow` is not suitable for the exact need, drop to `tool describe log.search` before considering `raw`.
 
-Stop when the file artifact path is produced and the preview confirms the expected fields.
+Stop when stdout returns the result file path and the written full envelope confirms the expected fields.

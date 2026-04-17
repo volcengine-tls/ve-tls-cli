@@ -23,6 +23,7 @@ type toolExecutionOptions struct {
 	DryRun       bool
 	Artifact     bool
 	ArtifactPath string
+	OutputDir    string
 	Projection   string
 	PageAll      bool
 }
@@ -69,13 +70,18 @@ func loadToolExecContext(value string) (toolExecContext, error) {
 }
 
 func applyToolExecContext(ctx *Context, cfg toolExecContext) error {
+	globalProfile := strings.TrimSpace(ctx.Profile)
+	contextProfile := strings.TrimSpace(cfg.Profile)
+	if contextProfile != "" {
+		if globalProfile != "" && globalProfile != contextProfile {
+			return errors.New("conflicting profile selectors: global --profile=" + globalProfile + " conflicts with context.profile=" + contextProfile)
+		}
+		ctx.Profile = contextProfile
+	}
 	if strings.TrimSpace(cfg.SecretsFile) != "" {
 		if err := loadSecretsFile(cfg.SecretsFile); err != nil {
 			return err
 		}
-	}
-	if strings.TrimSpace(cfg.Profile) != "" {
-		ctx.Profile = strings.TrimSpace(cfg.Profile)
 	}
 	if strings.TrimSpace(cfg.Region) != "" {
 		ctx.defaults.Region = strings.TrimSpace(cfg.Region)
@@ -107,11 +113,28 @@ func resolveToolExecutionOptions(cfg toolExecContext) toolExecutionOptions {
 		if p, ok := v["path"].(string); ok {
 			out.ArtifactPath = strings.TrimSpace(p)
 		}
+		if dir, ok := v["dir"].(string); ok {
+			out.OutputDir = strings.TrimSpace(dir)
+		}
 	}
 	if mode, ok := exec["output_mode"].(string); ok {
 		switch strings.ToLower(strings.TrimSpace(mode)) {
 		case "artifact", "file":
 			out.Artifact = true
+		}
+	}
+	if outputCfg, ok := exec["output"].(map[string]any); ok {
+		if mode, ok := outputCfg["mode"].(string); ok {
+			switch strings.ToLower(strings.TrimSpace(mode)) {
+			case "artifact", "file":
+				out.Artifact = true
+			}
+		}
+		if dir, ok := outputCfg["dir"].(string); ok {
+			out.OutputDir = strings.TrimSpace(dir)
+		}
+		if path, ok := outputCfg["path"].(string); ok {
+			out.ArtifactPath = strings.TrimSpace(path)
 		}
 	}
 	out.Projection = resolveToolProjection(exec["projection"])
