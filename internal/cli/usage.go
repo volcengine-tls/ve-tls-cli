@@ -99,7 +99,7 @@ Notes:
 
 func usageRaw() string {
 	return u(`Usage:
-  tlsctl raw --method <GET|POST|PUT|DELETE> --path <path> [--query k=v] [--header k=v] [--body <json|file://...|->] [--request-format <json|jsonl>]
+  tlsctl raw --method <GET|POST|PUT|DELETE> --path <path> [--query k=v] [--header k=v] [--body <json|file://...|->|--input <json|file://...|->] [--request-format <json|jsonl>]
 
 概览:
   原始 transport 调用入口；需要显式提供 method/path。
@@ -110,16 +110,18 @@ func usageRaw() string {
   --path <path>
   --query k=v
   --header k=v
-  --body <json|file://...|->
+  --body <json|file://...|-> (agent alias: --input)
   --request-format <json|jsonl>
 
 调用方式:
   - path 必须是以 / 开头的 OpenAPI 路径
   - body 支持 inline JSON、file://...、-、裸文件路径
+  - 为了兼容 tool/workflow 的迁移心智，raw 也接受 --input 作为 --body 的别名；不要同时传 --body 和 --input
 
 Examples:
   tlsctl raw --method GET --path /DescribeProjects
   tlsctl raw --method POST --path /CreateProject --body file://./req.json
+  tlsctl raw --method POST --path /CreateProject --input file://./req.json
   tlsctl raw --method GET --path /DescribeProjects --jmes-filter "data.Total"
 `)
 }

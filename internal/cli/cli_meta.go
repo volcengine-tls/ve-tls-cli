@@ -79,6 +79,7 @@ func cliGlobalFlagSpecs() []cliGlobalFlagSpec {
 			continue
 		}
 		if spec.Name == "--output" {
+			spec.Usage = "--output <json|jsonl>"
 			spec.Description = "输出格式（tool/workflow/raw 默认用 json；需要面向机器的逐行结果时可用 jsonl）"
 		}
 		filtered = append(filtered, spec)

@@ -341,3 +341,49 @@ func TestToolExecProfileConflictDoesNotLoadSecretsSideEffects(t *testing.T) {
 		t.Fatalf("expected secrets side effect to be absent, got %q", got)
 	}
 }
+
+func TestToolExecRejectsConflictingGlobalProfileAndSecretsFile(t *testing.T) {
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	tmp := t.TempDir()
+	secretsFile := filepath.Join(tmp, "secrets.env")
+	if err := os.WriteFile(secretsFile, []byte("VOLCENGINE_ACCESS_KEY_ID=from-secrets\nVOLCENGINE_ACCESS_KEY_SECRET=from-secrets\n"), 0o600); err != nil {
+		t.Fatalf("write secrets file: %v", err)
+	}
+	reqFile := filepath.Join(tmp, "req.json")
+	if err := osWriteJSON(reqFile, map[string]any{}); err != nil {
+		t.Fatalf("write request: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"--profile", "selected-profile",
+		"--secrets-file", secretsFile,
+		"tool", "exec", "project.describe-projects",
+		"--input", "file://" + reqFile,
+	}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected conflict failure stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	if out["status"] != "failed" {
+		t.Fatalf("expected failed status, got %#v", out["status"])
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if errObj["kind"] != "validation" {
+		t.Fatalf("expected validation kind, got %#v", errObj)
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "conflicting runtime selectors") {
+		t.Fatalf("unexpected error message: %#v", errObj["message"])
+	}
+}

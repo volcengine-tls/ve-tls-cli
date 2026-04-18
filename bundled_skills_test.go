@@ -102,6 +102,7 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"`deliveryMode`",
 		"`outputMode`",
 		"`--jmes-filter` runs on the complete CLI envelope",
+		"`--jmes-filter` is stdout-only; do not combine it with file delivery",
 		"`execution.projection` is different: it runs on the raw result before envelope wrapping",
 		"stdout returns literal `null` and the command still succeeds",
 		"Failed envelopes use one flat `error` object",

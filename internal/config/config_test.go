@@ -14,19 +14,7 @@ func TestDefaultEndpointForRegion(t *testing.T) {
 	}
 }
 
-func TestDeriveRegionFromEndpoint(t *testing.T) {
-	if got := DeriveRegionFromEndpoint("https://tls-cn-beijing.volces.com"); got != "cn-beijing" {
-		t.Fatalf("unexpected region: %q", got)
-	}
-	if got := DeriveRegionFromEndpoint("tls-ap-singapore-1.volces.com"); got != "ap-singapore-1" {
-		t.Fatalf("unexpected region: %q", got)
-	}
-	if got := DeriveRegionFromEndpoint("https://example.com"); got != "" {
-		t.Fatalf("unexpected region: %q", got)
-	}
-}
-
-func TestEffectiveProfile_ResolveCredRefAndDeriveRegion(t *testing.T) {
+func TestEffectiveProfile_ResolveCredRefRequiresExplicitRegion(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "")
 	t.Setenv("VOLCENGINE_REGION", "")
@@ -38,15 +26,21 @@ func TestEffectiveProfile_ResolveCredRefAndDeriveRegion(t *testing.T) {
 		CredRef:  "ma-abc-root",
 		Endpoint: "https://tls-cn-beijing.volces.com",
 	})
-	p, err := EffectiveProfile(cfg, "p1", ProfileDefaults{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := EffectiveProfile(cfg, "p1", ProfileDefaults{})
+	if err == nil || err.Error() != "missing region" {
+		t.Fatalf("expected missing region, got %v", err)
 	}
-	if p.Region != "cn-beijing" {
-		t.Fatalf("unexpected region: %q", p.Region)
-	}
-	if p.AccessKeyID != "ak" || p.SecretAccessKey != "sk" {
-		t.Fatalf("unexpected creds: %q %q", p.AccessKeyID, p.SecretAccessKey)
+}
+
+func TestEffectiveProfile_EnvEndpointRequiresExplicitRegion(t *testing.T) {
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "env-ak")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "env-sk")
+	t.Setenv("VOLCENGINE_REGION", "")
+	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
+
+	_, err := EffectiveProfile(DefaultConfig(), "", ProfileDefaults{})
+	if err == nil || err.Error() != "missing region" {
+		t.Fatalf("expected missing region, got %v", err)
 	}
 }
 

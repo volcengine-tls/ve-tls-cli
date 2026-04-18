@@ -197,6 +197,63 @@ func TestDoctorResolvesCredRefCredentials(t *testing.T) {
 	}
 }
 
+func TestDoctorDoesNotDeriveRegionFromEndpoint(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	cfg := `{
+  "version": 1,
+  "current_profile": "p1",
+  "profiles": {
+    "p1": {
+      "access_key_id": "ak-inline",
+      "secret_access_key": "sk-inline",
+      "endpoint": "https://tls-cn-beijing.volces.com"
+    }
+  }
+}`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "")
+	t.Setenv("VOLCENGINE_TOKEN", "")
+	t.Setenv("VOLCENGINE_REGION", "")
+	t.Setenv("VOLCENGINE_ENDPOINT", "")
+	t.Setenv("VOLCLOG_CONFIG", cfgPath)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"doctor"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("unexpected exit code: %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var v map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &v); err != nil {
+		t.Fatalf("invalid json: %v stdout=%s", err, stdout.String())
+	}
+	checks, ok := v["checks"].([]any)
+	if !ok {
+		t.Fatalf("missing checks: %v", v)
+	}
+	foundRegion := false
+	for _, c := range checks {
+		m, ok := c.(map[string]any)
+		if !ok {
+			continue
+		}
+		if m["name"] == "region_present" {
+			foundRegion = true
+			if okv, _ := m["ok"].(bool); okv {
+				t.Fatalf("expected region_present=false: %v", m)
+			}
+			if detail, _ := m["detail"].(string); detail != "" {
+				t.Fatalf("expected empty region detail, got %q", detail)
+			}
+		}
+	}
+	if !foundRegion {
+		t.Fatalf("missing region_present check: %v", checks)
+	}
+}
+
 func TestDoctorOnlineUsesCredRefCredentials(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == "" {

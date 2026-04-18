@@ -26,6 +26,7 @@ Key rules:
 ## Envelope Filtering
 
 - `--jmes-filter` runs on the complete CLI envelope.
+- `--jmes-filter` is stdout-only; do not combine it with file delivery.
 - `execution.projection` is different: it runs on the raw result before envelope wrapping.
 - Use `--jmes-filter` for envelope fields such as `data`, `summary`, or `error`.
 - Use `execution.projection` only for raw service-result fields.
@@ -83,6 +84,7 @@ Preferred order:
 Hard rule:
 
 - Environment credentials override profile resolution. If a stateless run must target a specific local profile, use host-generated secrets files instead of sandbox-wide env injection.
+- `--profile`/`context.profile` and `--secrets-file`/`context.secrets_file` are mutually exclusive runtime selectors; conflicting selectors fail fast instead of silently overriding each other.
 
 ## Recovery Signals
 

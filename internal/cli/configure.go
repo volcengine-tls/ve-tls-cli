@@ -173,9 +173,6 @@ func configureSet(ctx *Context, args []string) (any, error) {
 		TimeoutSeconds:  timeout,
 		CredRef:         strings.TrimSpace(credRef),
 	}
-	if p.Region == "" && p.Endpoint != "" {
-		p.Region = config.DeriveRegionFromEndpoint(p.Endpoint)
-	}
 	maskedAK := config.MaskAK(p.AccessKeyID)
 	credPresent := p.AccessKeyID != "" && p.SecretAccessKey != ""
 	if strings.TrimSpace(p.CredRef) != "" {
@@ -201,7 +198,7 @@ func configureSet(ctx *Context, args []string) (any, error) {
 		return nil, errors.New("missing required fields: --endpoint")
 	}
 	if p.Region == "" {
-		return nil, errors.New("missing required fields: --region (or use tls-<region>.volces.com endpoint)")
+		return nil, errors.New("missing required fields: --region")
 	}
 	ctx.cfg.PutProfile(name, p)
 	if ctx.cfg.CurrentProfile == "" {

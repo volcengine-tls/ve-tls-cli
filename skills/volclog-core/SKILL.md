@@ -45,6 +45,6 @@ If both binaries are available, prefer `volclog-agent` for agent or CI sessions.
 
 1. Pick the surface: `tool / workflow / raw`.
 2. Read the contract.
-3. Confirm `profile`, region, and credential injection strategy.
+3. Confirm `profile`, explicit region, and credential injection strategy. Do not infer region from endpoint/domain.
 4. Run with `--dry-run` when the operation mutates state.
 5. Let CLI runtime signals such as `summary.deliveryMode` and the flat `error` object drive the next step.

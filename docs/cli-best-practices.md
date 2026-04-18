@@ -209,7 +209,7 @@ volclog --output json raw --method GET --path /DescribeProjects --query PageSize
 
 ### 4.1 --output
 
-- `--output table`：人类友好格式，仅支持部分常用 list/get 及 search。
+- `--output table`：人类 full 版友好格式，仅支持部分常用 list/get 及 search；`volclog-agent` 不把它当主路径输出格式。
 - `--output json`：默认，适合资源管理类命令（project/topic/index/metric-topic）。
 - `--output jsonl`：每行一条 JSON，适合日志导出/大结果集（便于流式处理）。
 
@@ -328,12 +328,12 @@ VOLCENGINE_ENDPOINT=https://tls-cn-beijing.volces.com
 
 首次创建并绑定：
 ```bash
-volclog configure set --profile demo-bj --cred-ref demo-root --ak <ak> --sk <sk> --endpoint https://tls-cn-beijing.volces.com
+volclog configure set --profile demo-bj --cred-ref demo-root --ak <ak> --sk <sk> --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
 ```
 
 复用创建第二个 profile：
 ```bash
-volclog configure set --profile demo-sg --cred-ref demo-root --endpoint https://tls-ap-singapore-1.volces.com
+volclog configure set --profile demo-sg --cred-ref demo-root --region ap-singapore-1 --endpoint https://tls-ap-singapore-1.volces.com
 ```
 
 切换默认 profile：

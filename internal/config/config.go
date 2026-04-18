@@ -3,10 +3,8 @@ package config
 import (
 	"encoding/json"
 	"errors"
-	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 )
 
@@ -235,9 +233,6 @@ func normalize(p Profile) (Profile, error) {
 	p.Region = strings.TrimSpace(p.Region)
 	p.Endpoint = strings.TrimSpace(p.Endpoint)
 	p.CredRef = strings.TrimSpace(p.CredRef)
-	if p.Region == "" && p.Endpoint != "" {
-		p.Region = DeriveRegionFromEndpoint(p.Endpoint)
-	}
 	if p.TimeoutSeconds <= 0 {
 		p.TimeoutSeconds = 60
 	}
@@ -296,31 +291,6 @@ func DefaultEndpointForRegion(region string) string {
 		return r
 	}
 	return "https://tls-" + r + ".volces.com"
-}
-
-var endpointRegionRe = regexp.MustCompile(`(?i)^tls-([a-z0-9-]+)\.`)
-
-func DeriveRegionFromEndpoint(endpoint string) string {
-	ep := strings.TrimSpace(endpoint)
-	if ep == "" {
-		return ""
-	}
-	host := ep
-	if strings.HasPrefix(ep, "http://") || strings.HasPrefix(ep, "https://") {
-		if u, err := url.Parse(ep); err == nil && u.Hostname() != "" {
-			host = u.Hostname()
-		}
-	} else {
-		if u, err := url.Parse("https://" + ep); err == nil && u.Hostname() != "" {
-			host = u.Hostname()
-		}
-	}
-	host = strings.TrimSpace(host)
-	m := endpointRegionRe.FindStringSubmatch(host)
-	if len(m) != 2 {
-		return ""
-	}
-	return strings.TrimSpace(m[1])
 }
 
 func MaskAK(ak string) string {

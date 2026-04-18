@@ -71,15 +71,29 @@ func loadToolExecContext(value string) (toolExecContext, error) {
 
 func applyToolExecContext(ctx *Context, cfg toolExecContext) error {
 	globalProfile := strings.TrimSpace(ctx.Profile)
+	globalSecretsFile := strings.TrimSpace(ctx.GlobalSecretsFile)
 	contextProfile := strings.TrimSpace(cfg.Profile)
+	contextSecretsFile := strings.TrimSpace(cfg.SecretsFile)
 	if contextProfile != "" {
 		if globalProfile != "" && globalProfile != contextProfile {
 			return errors.New("conflicting profile selectors: global --profile=" + globalProfile + " conflicts with context.profile=" + contextProfile)
 		}
+		if globalSecretsFile != "" {
+			return runtimeSelectorConflict(secretsFileSelector("global --secrets-file", globalSecretsFile), profileSelector("context.profile", contextProfile))
+		}
 		ctx.Profile = contextProfile
 	}
-	if strings.TrimSpace(cfg.SecretsFile) != "" {
-		if err := loadSecretsFile(cfg.SecretsFile); err != nil {
+	if contextSecretsFile != "" {
+		if globalProfile != "" {
+			return runtimeSelectorConflict(profileSelector("global --profile", globalProfile), secretsFileSelector("context.secrets_file", contextSecretsFile))
+		}
+		if contextProfile != "" {
+			return runtimeSelectorConflict(profileSelector("context.profile", contextProfile), secretsFileSelector("context.secrets_file", contextSecretsFile))
+		}
+		if globalSecretsFile != "" {
+			return runtimeSelectorConflict(secretsFileSelector("global --secrets-file", globalSecretsFile), secretsFileSelector("context.secrets_file", contextSecretsFile))
+		}
+		if err := loadSecretsFile(contextSecretsFile); err != nil {
 			return err
 		}
 	}

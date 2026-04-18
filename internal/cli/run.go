@@ -30,12 +30,6 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	if strings.TrimSpace(gf.SecretsFile) != "" {
-		if err := loadSecretsFile(gf.SecretsFile); err != nil {
-			writeCLIError(stderr, err, "", 0, "config", "failed to load --secrets-file")
-			return 2
-		}
-	}
 	wd, err := os.Getwd()
 	if err != nil {
 		writeCLIError(stderr, err, "", 0, "config", "failed to get working directory")
@@ -99,6 +93,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	ctx.OutputModeExplicit = gf.OutputModeExplicit
 	ctx.OutputDir = strings.TrimSpace(gf.OutputDir)
 	ctx.OutputFile = gf.OutputFile
+	ctx.GlobalSecretsFile = strings.TrimSpace(gf.SecretsFile)
 	ctx.TraceDir = gf.TraceDir
 	ctx.TraceRedact = gf.TraceRedact
 	ctx.DryRun = gf.DryRun
@@ -129,6 +124,20 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		if err := preflightOutputFilePath(gf.OutputFile, ctx.OutputDir, g, knownFileDeliveryFormat(g, rest, format)); err != nil {
 			writeCLIError(stderr, err, "", 0, "decode", "output write failed")
 			return 3
+		}
+	}
+	if ctx.GlobalSecretsFile != "" {
+		if strings.TrimSpace(ctx.Profile) != "" {
+			err := runtimeSelectorConflict(profileSelector("global --profile", ctx.Profile), secretsFileSelector("global --secrets-file", ctx.GlobalSecretsFile))
+			if emitsStructuredEnvelope(g, rest) {
+				return writeStructuredError(stdout, stderr, err, "", 0, g, buildAPIErrorEnvelope(ctx, g, err, outputMode))
+			}
+			writeCLIError(stderr, err, "", 0, "validation", "use exactly one runtime selector: --profile or --secrets-file")
+			return 1
+		}
+		if err := loadSecretsFile(ctx.GlobalSecretsFile); err != nil {
+			writeCLIError(stderr, err, "", 0, "config", "failed to load --secrets-file")
+			return 2
 		}
 	}
 
@@ -407,7 +416,11 @@ func usesFixedFileNotice(group string, rest []string) bool {
 func usageText() string {
 	var b strings.Builder
 	b.WriteString("Usage:\n")
-	b.WriteString("  volclog [--profile <name>] [--output json|jsonl|table] [--output-mode stdout|file] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
+	if currentEdition() == cliEditionAgent {
+		b.WriteString("  volclog [--profile <name>] [--output json|jsonl] [--output-mode stdout|file] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
+	} else {
+		b.WriteString("  volclog [--profile <name>] [--output json|jsonl|table] [--output-mode stdout|file] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
+	}
 	b.WriteString("主入口（Agent / 自动化优先）:\n")
 	if currentEdition() == cliEditionAgent {
 		b.WriteString("  用 tool 发现公开 API 并查看契约；需要结构化执行时使用 tool exec。\n")

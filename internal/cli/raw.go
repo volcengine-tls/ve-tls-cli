@@ -18,6 +18,7 @@ func runRaw(ctx *Context, args []string) (any, error) {
 	query := map[string]string{}
 	header := map[string]string{}
 	bodyArg := ""
+	bodyFlag := ""
 	reqFormat := requestFormatJSON
 
 	for len(args) > 0 {
@@ -54,10 +55,14 @@ func runRaw(ctx *Context, args []string) (any, error) {
 			}
 			header[k] = v
 			args = args[2:]
-		case "--body":
+		case "--body", "--input":
 			if len(args) < 2 {
-				return nil, errors.New("missing --body value")
+				return nil, errors.New("missing " + args[0] + " value")
 			}
+			if bodyFlag != "" && bodyFlag != args[0] {
+				return nil, errors.New("conflicting body selectors: " + bodyFlag + " conflicts with " + args[0])
+			}
+			bodyFlag = args[0]
 			bodyArg = args[1]
 			args = args[2:]
 		case "--request-format":

@@ -11,6 +11,10 @@ traps:
     symptom: --jmes-filter 'error' prints null on a successful call
     why: the envelope field exists and its value is null, so the filter matched successfully
     fix: treat literal null as a valid projection result; only investigate when the CLI returns filter matched no value
+  - trap: jmes-filter-does-not-mix-with-file-delivery
+    symptom: a run combines --jmes-filter with file delivery and fails before execution
+    why: --jmes-filter is a stdout projection on the complete envelope, while file delivery writes the full result to disk
+    fix: use stdout when projecting with --jmes-filter; remove the filter if the goal is file delivery
   - trap: deliverymode-belongs-to-runtime
     symptom: skill logic tries to pre-decide stdout vs file_auto for log.search or export flows
     why: surface choice belongs to the skill, but deliveryMode is a CLI runtime decision
@@ -43,3 +47,7 @@ traps:
     symptom: a stateless sandbox run selects profile A but appears to use another account
     why: process-wide environment credentials override local profile resolution
     fix: remove broad env injection and switch to a host-generated one-shot secrets file plus an explicit non-secret profile selector
+  - trap: profile-and-secrets-file-are-exclusive
+    symptom: a run sets profile and secrets-file together and fails fast before the request is sent
+    why: profile and secrets-file are both runtime selectors, so the CLI rejects ambiguous credential selection instead of silently overriding
+    fix: "choose exactly one selector: --profile/context.profile or --secrets-file/context.secrets_file"

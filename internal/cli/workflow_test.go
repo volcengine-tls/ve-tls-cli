@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -257,6 +258,60 @@ func TestWorkflowExecLogIngestRoutesToExistingRuntime(t *testing.T) {
 	summary, ok := out["summary"].(map[string]any)
 	if !ok || summary["dryRun"] != true {
 		t.Fatalf("expected dryRun summary, got %#v", out["summary"])
+	}
+}
+
+func TestWorkflowExecRejectsConflictingProfileAndContextSecretsFile(t *testing.T) {
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	tmp := t.TempDir()
+	secretsFile := filepath.Join(tmp, "secrets.env")
+	if err := os.WriteFile(secretsFile, []byte("VOLCENGINE_ACCESS_KEY_ID=from-secrets\nVOLCENGINE_ACCESS_KEY_SECRET=from-secrets\n"), 0o600); err != nil {
+		t.Fatalf("write secrets file: %v", err)
+	}
+	ctxFile := filepath.Join(tmp, "ctx.json")
+	reqFile := filepath.Join(tmp, "req.json")
+	if err := osWriteJSON(ctxFile, map[string]any{
+		"secrets_file": secretsFile,
+	}); err != nil {
+		t.Fatalf("write context: %v", err)
+	}
+	if err := osWriteJSON(reqFile, map[string]any{
+		"TopicId":   "tid",
+		"Query":     "*",
+		"StartTime": 1710374400000,
+		"EndTime":   1710378000000,
+	}); err != nil {
+		t.Fatalf("write request: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"--profile", "selected-profile",
+		"workflow", "exec", "log.export",
+		"--context", "file://" + ctxFile,
+		"--input", "file://" + reqFile,
+	}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected conflict failure stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if errObj["kind"] != "validation" {
+		t.Fatalf("expected validation kind, got %#v", errObj)
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "conflicting runtime selectors") {
+		t.Fatalf("unexpected error message: %#v", errObj["message"])
 	}
 }
 

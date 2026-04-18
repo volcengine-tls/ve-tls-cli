@@ -25,6 +25,7 @@ type Context struct {
 	OutputDir          string
 	OutputFile         string
 	Profile            string
+	GlobalSecretsFile  string
 	Filter             string
 	TraceDir           string
 	TraceRedact        string

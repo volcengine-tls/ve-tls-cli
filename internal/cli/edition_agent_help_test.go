@@ -11,6 +11,7 @@ func TestAgentEditionUsageTextOmitsShortcutGuidance(t *testing.T) {
 		"\n  workflow",
 		"\n  raw",
 		"当前 edition 只暴露 configure/doctor/skill/tool/workflow/raw",
+		"[--output json|jsonl]",
 		"输出格式（tool/workflow/raw 默认用 json；需要面向机器的逐行结果时可用 jsonl）",
 	} {
 		if !contains(text, want) {
@@ -21,6 +22,8 @@ func TestAgentEditionUsageTextOmitsShortcutGuidance(t *testing.T) {
 		"project/topic/index/log 等 shortcut",
 		"次级入口（仅在你已明确目标资源时使用）:",
 		"--output-file",
+		"[--output json|jsonl|table]",
+		"--output <json|jsonl|table>",
 		"table 适用于常用快捷 list/get、index get、log search",
 		"\n  project",
 		"\n  topic",
