@@ -6,7 +6,7 @@ workflows:
       - topic.create
       - index.create
       - log.search
-    output_strategy: keep ids in stdout; move to file only if later search payload becomes large
+    output_strategy: keep identifiers and narrow validation signals in stdout; let CLI choose file delivery later if needed
     fallback: workflow.log.export
     stop_condition: one read path returns the expected shape
   - name: ingest-and-validate
@@ -14,7 +14,7 @@ workflows:
     steps:
       - workflow.log.ingest
       - log.search
-    output_strategy: keep ingest stdout small; prefer file output once validation results grow
+    output_strategy: keep ingest stdout small; validation stays narrow until a later export is truly needed
     fallback: workflow.log.export
     stop_condition: one write path succeeds and one read path returns rows
   - name: troubleshoot-empty-search
@@ -24,7 +24,7 @@ workflows:
       - topic.describe-topic
       - index.describe
       - log.search
-    output_strategy: keep time range narrow and use projection before widening the query
+    output_strategy: keep the time range narrow and confirm target/profile/index before widening the query
     fallback: raw.SearchLogs
     stop_condition: wrong target identified or search starts returning rows
   - name: preview-search-volume
@@ -34,7 +34,7 @@ workflows:
       - tool.log.search
       - workflow.log.export
       - workflow.log.export-analysis
-    output_strategy: use histogram stdout for pure-search bucket preview first, then choose preview rows or file export
+    output_strategy: use histogram for pure-search bucket preview first, then choose interactive rows or export surface
     fallback: raw.SearchLogs
     stop_condition: bucket distribution and next execution surface are both clear
   - name: export-large-results
@@ -42,6 +42,6 @@ workflows:
     steps:
       - workflow.log.export
       - workflow.log.export-analysis
-    output_strategy: prefer --output-mode file with a writable output_dir; stdout may only return a file notice while the full envelope is written to disk
+    output_strategy: choose the export workflow here; let CLI deliveryMode decide stdout vs file_auto unless the caller explicitly forces file output with a writable output_dir
     fallback: tool.log.search
     stop_condition: stdout returns the result file path and the written full envelope confirms the expected shape

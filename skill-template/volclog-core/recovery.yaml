@@ -2,20 +2,20 @@ recipes:
   - error_signature: unknown tool
     http_status: 0
     error_code: CLIError
-    likely_cause: wrong surface or wrong identity
-    exact_fix: rerun tool list or workflow list for the group before guessing aliases
+    likely_cause: wrong surface or wrong identity was chosen before rediscovery
+    exact_fix: rerun tool list or workflow list for the group before guessing aliases or fallback names
     retry_command: volclog tool list <group>
   - error_signature: missing --input
     http_status: 0
     error_code: CLIError
-    likely_cause: wrong transport or unread contract
-    exact_fix: reread input_schema and input_encoding_hint, then resend inline JSON, stdin, or file input
+    likely_cause: wrong transport or the contract was not read closely enough
+    exact_fix: reread input_schema and input_encoding_hint, then resend inline JSON, stdin, or file input using the documented shape
     retry_command: volclog tool describe <group.action>
   - error_signature: filter matched no value
     http_status: 0
     error_code: CLIError
     likely_cause: jmes path points at the wrong layer of the response
-    exact_fix: inspect one unfiltered response first, then decide whether you are filtering the full CLI envelope via --jmes-filter or the raw result via execution.projection
+    exact_fix: inspect one unfiltered response first, then decide whether the query belongs to the full CLI envelope via --jmes-filter or the raw result via execution.projection
     retry_command: rerun without filter/projection, then retry with a corrected path
   - error_signature: jmes filter returned literal null
     http_status: 0
@@ -63,7 +63,7 @@ recipes:
     http_status: 0
     error_code: ""
     likely_cause: wrong profile, wrong topic, wrong time range, or index not ready
-    exact_fix: verify profile/topic/index first, then retry with narrow time range and trace enabled
+    exact_fix: verify profile, topic, and index first, then retry with a narrow time range and trace enabled
     retry_command: volclog configure list
   - error_signature: huge stdout payload
     http_status: 0

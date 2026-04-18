@@ -445,6 +445,9 @@ func finalizeWorkflowExecEnvelope(ctx *Context, result any, env map[string]any, 
 	}
 	filePath, err := resolveOutputFilePath("", ctx.OutputDir, "workflow", output.FormatJSON)
 	if err != nil {
+		if errors.Is(err, errMissingWritableOutputDir) {
+			return nil, errors.New("result too large for stdout; specify --output-dir <writable-dir> to allow automatic file delivery")
+		}
 		return nil, err
 	}
 	fileArtifact := []map[string]any{{

@@ -1,81 +1,89 @@
 # SOPs
 
-| Workflow | When To Use | First Surface | Output Strategy | Stop Condition |
-| --- | --- | --- | --- | --- |
-| Create a searchable log pipeline | Need project/topic/index and then verify reads | `tool` | stdout for ids, file only if payload gets large | ids confirmed and one read path works |
-| Ingest local logs and validate search | Need to write local data and confirm it is queryable | `workflow log.ingest` then `tool` or `workflow` read path | stdout for preview, file if ingest/search response expands | one write path succeeds and one read path returns rows |
-| Troubleshoot empty search | Write appeared to succeed but search returns empty | `tool` | keep results small with narrow time range and projection | wrong profile/topic/index found or results appear |
-| Preview search volume before reading rows | Need to decide whether to narrow time range, use search preview, or jump to export | `tool log.describe-histogram-v1` | keep stdout small; only switch to file when later row results stay large | bucket distribution and next surface are clear |
-| Export large results | Need full rows or analysis rows beyond token budget | `workflow log.export` or `workflow log.export-analysis` | prefer `--output-mode file --output-dir <writable-dir>` | stdout returns a file notice and the written full envelope is available |
+Use this file only for cross-group execution order, stop conditions, and hand-off points between surfaces.
 
 ## Create A Searchable Log Pipeline
 
-Use when the task is "create a place to write logs, then make them searchable".
+1. `project.create`
+2. `topic.create`
+3. `index.create`
+4. `log.search`
 
-1. `volclog tool describe project.create`
-2. `volclog tool exec project.create --dry-run ...`
-3. `volclog tool describe topic.create`
-4. `volclog tool exec topic.create --dry-run ...`
-5. `volclog tool describe index.create`
-6. `volclog tool exec index.create --dry-run ...`
-7. Wait for index readiness if the next step is immediate search validation.
-8. Readiness check:
-   - Prefer `volclog --dry-run tool exec index.describe --input '{"TopicId":"<TopicId>"}'` first to confirm the request shape.
-   - Then poll `volclog tool exec index.describe --input '{"TopicId":"<TopicId>"}'`.
-   - If the response contains `Status` or `State`, wait until it becomes `Ready`.
-   - If no explicit readiness field is exposed, wait 10-30 seconds and retry the first `log.search` / `log.export` validation path.
-9. Validate with `volclog tool describe log.search` or `volclog workflow describe log.export` depending on result size.
+Stop when:
+- one read path returns the expected searchable shape, or
+- `project` / `topic` / `index` already exists and the pipeline can move to validation
 
-Stop when project/topic/index ids are confirmed and one read path succeeds.
+Notes:
+- After `index.create`, wait for index readiness before trusting search results.
+- Prefer `index.describe` and read `Status` or equivalent readiness fields when available.
+- If readiness is not explicit, wait `10-30 seconds`, then retry one narrow validation query.
 
-## Ingest Local Logs And Validate Search
+## Ingest And Validate
 
-Use when the task is "load local sample logs or jsonl into a topic, then confirm they can be queried".
+1. `workflow log.ingest`
+2. `log.search`
 
-1. `volclog workflow describe log.ingest`
-2. `volclog --dry-run workflow exec log.ingest --input file://req.json`
-3. Execute `log.ingest` with the selected profile/topic.
-4. If the dataset is small, validate with `volclog tool describe log.search` and then `tool exec log.search`.
-5. If validation may return many rows, use `volclog workflow describe log.export` instead of full stdout search.
+Stop when:
+- the write path succeeds, and
+- one narrow validation query returns rows
 
-Output strategy: keep ingest stdout small; prefer `--output-mode file --output-dir <writable-dir>` once read validation becomes large.
+Notes:
+- Keep validation queries small and recent.
+- If the write succeeded but search is empty, switch to the troubleshooting SOP below instead of widening the query immediately.
 
-Stop when one write path succeeds and one read path returns rows from the same topic/time range.
+## Troubleshoot Empty Search
 
-## Troubleshoot "Data Was Written But Search Returns Empty"
+1. `configure.list`
+2. `topic.describe-topic`
+3. `index.describe`
+4. `log.search`
 
-1. Confirm the runtime target with `volclog configure list` and the selected profile.
-2. Re-run the write path in dry-run mode to confirm topic/profile/region.
-3. Inspect topic and index contracts/results with `topic.describe-topic` and `index.describe`.
-4. Re-run `log.search` with a narrow time range and minimal projection.
-5. If results are still empty, collect trace artifacts before falling back to `raw`.
+Stop when:
+- the wrong profile, topic, or time range is identified, or
+- search starts returning rows
 
-Stop when either the wrong profile/topic is identified or search starts returning rows.
+Notes:
+- Reconfirm the target profile before changing business input.
+- If index readiness is unclear, check `Status` first, then retry with a narrow window.
 
 ## Preview Search Volume Before Reading Rows
 
-Use when the task is "for a pure search query, how many hits are there in the whole time window?" or "which time bucket should I inspect first?".
+1. `tool describe log.describe-histogram-v1`
+2. `tool exec log.describe-histogram-v1`
+3. `tool describe log.search`
+4. `tool exec log.search`
 
-1. `volclog tool describe log.describe-histogram-v1`
-2. `volclog tool exec log.describe-histogram-v1 --input '{"TopicId":"<TopicId>","Query":"<query>","StartTime":<ms>,"EndTime":<ms>}'`
-3. Read `Histogram.TotalCount` as the better whole-window hit count for pure search. Do not treat `SearchLogs.HitCount` as the whole-window total.
-4. If `ResultStatus=incomplete`, treat the result as partial only: shrink the time range and rerun before using bucket counts or absence of hits as evidence.
-5. Inspect histogram buckets to find hot time ranges before pulling rows.
-6. If the query is search+analysis or pure analysis, do not rely on histogram counts; instead use SQL such as `select count(*)` for analysis totals.
-7. If only a small preview is needed, switch to `volclog tool describe/exec log.search` on a narrower window.
-8. If the user wants full raw rows and the result is still large, switch to `volclog workflow describe/exec log.export`.
-9. If the user wants SQL/analysis rows and the result is still large, switch to `volclog workflow describe/exec log.export-analysis`.
+Stop when:
+- the next execution surface is clear, and
+- you know whether to stay interactive or switch to export
 
-Stop when the next execution surface is clear and the time window has been narrowed enough for preview or export.
+Notes:
+- Use this only for pure search queries.
+- `Histogram.TotalCount` is the whole-window estimate for pure search.
+- `HitCount` is only the count in the current `SearchLogs` response.
+
+## Interactive SQL Exploration
+
+1. `tool describe log.search`
+2. `tool exec log.search`
+3. If the row set grows beyond comfortable stdout, switch to `workflow log.export-analysis`
+
+Stop when:
+- the user has the answer from preview rows, or
+- the task clearly needs a full analysis row set
+
+Notes:
+- `log.search` supports interactive SQL exploration directly in `Query`.
+- Switch only when the preview no longer answers the user question.
 
 ## Export Large Result Sets
 
-1. If the user needs full search rows, prefer `log.export`.
-2. If the user needs only interactive SQL exploration or a small analysis preview, stay on `tool describe/exec log.search`.
-3. If the user needs a full SQL/analysis row set, prefer `log.export-analysis`.
-4. Keep `--output-mode file` unless the user explicitly asks for full stdout.
-5. Add projection only after the base request returns the expected shape.
+1. `workflow log.export`
+2. `workflow log.export-analysis`
 
-Fallback: if `workflow` is not suitable for the exact need, drop to `tool describe log.search` before considering `raw`.
+Stop when:
+- stdout or the written output confirms the expected envelope shape, and
+- the file contains the full output needed by the user
 
-Stop when stdout returns the result file path and the written full envelope confirms the expected fields.
+Notes:
+- Read the stdout notice or written envelope and stop once the expected output shape is confirmed.

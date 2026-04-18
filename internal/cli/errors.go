@@ -121,10 +121,13 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 	if strings.HasPrefix(msg, "missing required field:") ||
 		strings.HasPrefix(msg, "workflow input missing required fields:") ||
 		strings.HasPrefix(msg, "flat input contains unknown fields:") ||
-		strings.HasPrefix(msg, "conflicting profile selectors:") {
+		strings.HasPrefix(msg, "conflicting profile selectors:") ||
+		strings.HasPrefix(msg, "result too large for stdout;") {
 		hint := "inspect the contract with 'volclog tool describe <group.action>' or 'volclog workflow describe <group.command>' and align the JSON input/context fields"
 		if strings.HasPrefix(msg, "conflicting profile selectors:") {
 			hint = "use exactly one profile selector: global --profile or context.profile"
+		} else if strings.HasPrefix(msg, "result too large for stdout;") {
+			hint = "rerun with --output-dir <writable-dir> to allow file_auto, or reduce stdout with --jmes-filter / execution.projection"
 		}
 		return errPayload{
 			RequestID:  requestID,

@@ -30,12 +30,15 @@ intents:
     fallback: volclog tool describe alarm.describe-alarms
     retry_with_verb: volclog tool list alarm --verb list
   - intent: ingest-logs
-    keywords: [ingest, upload, ship, write logs, put logs]
+    keywords: [ingest, import logs, upload file, upload jsonl, json-array, stdin logs]
     preferred_surface: workflow
     preferred_id: log.ingest
     first_command: volclog workflow describe log.ingest
     fallback: volclog tool describe log.put
     retry_with_verb: volclog tool list log --verb put
+    notes:
+      - Prefer workflow log.ingest when the source is local file or stdin and CLI should normalize lines/jsonl/json-array before PutLogs.
+      - Switch to tool log.put only when the task is explicitly about the public PutLogs contract itself.
   - intent: preview-search-volume
     keywords: [histogram, trend over time, time buckets, peak window, count over time]
     preferred_surface: tool

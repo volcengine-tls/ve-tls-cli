@@ -31,14 +31,15 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 	skill := read("skills/volclog-core/SKILL.md")
 	for _, want := range []string{
 		"agent-only incremental knowledge",
+		"Read `tool describe` or `workflow describe` first",
 		"Do not use human shortcut commands as the primary agent flow.",
-		"Prefer `tool` for published public APIs, `workflow` for CLI-owned high-level flows, and `raw` only when method/path is already known",
+		"Do not repeat schema details that already exist in `tool describe` or `workflow describe`.",
 		"prefer `volclog-agent` for agent or CI sessions",
-		"Prefer file delivery for large responses; use `--output-mode file --output-dir <writable-dir>` when you expect stdout to be too large.",
 		"contract_cache_hint",
-		"reuse the cached contract only while the same CLI build still reports the same contract_digest",
-		"one-shot `--secrets-file`",
-		"host-selected local profile",
+		"volclog workflow describe <group.command>",
+		"references/routing.md",
+		"references/sops.md",
+		"references/best-practices.md",
 	} {
 		if !strings.Contains(skill, want) {
 			t.Fatalf("SKILL.md missing %q", want)
@@ -47,19 +48,18 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 
 	routing := read("skills/volclog-core/references/routing.md")
 	for _, want := range []string{
-		"Ingest local lines, jsonl, or json-array into a topic",
-		"workflow describe/exec log.ingest",
-		"Export large SQL/analysis row sets",
-		"Preview time distribution before narrowing a search window",
-		"tool describe/exec log.describe-histogram-v1",
-		"Exact method/path is already known",
-		"host-group",
-		"alarm",
-		"--verb list",
-		"re-run `volclog tool list <group> --verb <verb>`",
-		"Human shortcut groups are for humans.",
-		"interactive analysis",
+		"Intent",
+		"Prefer",
+		"log.ingest",
+		"tool log.put",
+		"log.describe-histogram-v1",
 		"log.export-analysis",
+		"interactive analysis",
+		"full analysis row set",
+		"Exact method/path is already known",
+		"--verb list",
+		"re-run `volclog tool list <group> --verb <user-intent-verb>`",
+		"Human shortcut groups are for humans.",
 	} {
 		if !strings.Contains(routing, want) {
 			t.Fatalf("routing.md missing %q", want)
@@ -78,7 +78,7 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"10-30 seconds",
 		"Status",
 		"Stop when",
-		"output",
+		"validation query",
 	} {
 		if !strings.Contains(strings.ToLower(sops), strings.ToLower(want)) {
 			t.Fatalf("sops.md missing %q", want)
@@ -87,32 +87,32 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 
 	bestPractices := read("skills/volclog-core/references/best-practices.md")
 	for _, want := range []string{
-		"Token Control",
+		"Runtime Signals",
+		"Search, Histogram, And Analysis",
+		"Error Object",
 		"Profile And Credential Selection",
-		"Stateless Agent / CI Credential Injection",
 		"403 Forbidden",
-		"errorCode",
-		"filter matched no value",
-		"workflow` ids such as `log.ingest` and `log.export` are not public API tool ids",
 		"tool / workflow / raw",
+		"filter matched no value",
 		"`log.search` itself supports plain search and SQL/analysis queries",
-		"`log.describe-histogram-v1` is for time-distribution preview and total hit estimation only for pure search queries before widening or narrowing a search window",
+		"`log.describe-histogram-v1` is for time-distribution preview",
 		"only for pure search queries",
+		"`log.export-analysis` uses the same SearchLogs SQL/analysis `Query` syntax as `log.search`",
+		"let CLI `deliveryMode` decide stdout vs `file_auto`",
+		"`deliveryMode`",
+		"`outputMode`",
 		"`--jmes-filter` runs on the complete CLI envelope",
 		"`execution.projection` is different: it runs on the raw result before envelope wrapping",
 		"stdout returns literal `null` and the command still succeeds",
 		"Failed envelopes use one flat `error` object",
+		"`error.source`",
 		"`error.kind`",
 		"`error.code`",
 		"`error.details`",
-		"`summary.deliveryMode`",
 		"`volclog-agent`",
-		"`HitCount` is only the count returned in the current `SearchLogs` response",
-		"`Histogram.TotalCount` is the better whole-window hit count",
+		"`HitCount`",
+		"`Histogram.TotalCount`",
 		"`ResultStatus=incomplete` means the service returned only a partial scan",
-		"`log.export-analysis` is for large SQL/analysis row exports",
-		`volclog tool exec project.create --input '{"ProjectName":"test","Region":"cn-guilin-boe"}'`,
-		`volclog --dry-run tool exec project.describe-projects --input '{"ProjectName":"demo"}'`,
 		"`--secrets-file`",
 		"`context.secrets_file`",
 		"VOLCENGINE_ACCESS_KEY_ID",

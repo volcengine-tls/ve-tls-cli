@@ -211,7 +211,8 @@ Notes:
   - 业务请求字段放在 --input；运行时/鉴权/trace/output 控制放在 --context
   - execution.* 一律放在 context.execution；不要传独立 execution 文件
   - execution.projection / execution.artifact / execution.dry_run 语义与 tool exec 一致
-  - 大结果优先使用 --output-mode file 或 execution.artifact
+  - 大结果优先使用 --output-mode file --output-dir <writable-dir>
+  - 未显式指定 stdout/file 且 stdout 结果过大时，workflow exec 也可能自动改走 file_auto；若没有可写 output_dir，会直接提示补 --output-dir <writable-dir>
 `)
 }
 
@@ -269,7 +270,8 @@ Notes:
   - tool exec 既支持显式嵌套的 {query,path,header,body}，也支持扁平 JSON；当字段能唯一映射到某个 section 时会自动归位
   - --page-all 是 execution.page.all 的 CLI 入口（等价于 execution.page.all=true）
   - execution.* 一律放在 context.execution；不要传独立 execution 文件
-  - 大结果优先使用 --output-mode file 或 execution.artifact；未显式指定 stdout/file 且 stdout 结果过大时，tool exec 会自动把全量结果写入 artifact，并仅返回摘要预览
+  - 大结果优先使用 --output-mode file --output-dir <writable-dir> 或 execution.artifact
+  - 未显式指定 stdout/file 且 stdout 结果过大时，tool exec 会自动改走 file_auto；若没有可写 output_dir，会直接提示补 --output-dir <writable-dir>
   - execution.projection 支持 "expr"、["expr"]、{"jmes":"expr"}
   - execution.artifact 支持 true、"/tmp/out.json"、{"path":"/tmp/out.json"}
   - execution.page.all 只在 tool describe 返回 execution.supports_all=true 时可用；它提高完整性，可能增加 payload 大小

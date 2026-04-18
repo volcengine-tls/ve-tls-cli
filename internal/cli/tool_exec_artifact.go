@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"sort"
 	"strings"
 
@@ -28,6 +29,9 @@ func finalizeToolExecEnvelope(ctx *Context, result any, env map[string]any, opti
 	}
 	filePath, err := resolveOutputFilePath("", ctx.OutputDir, "tool", output.FormatJSON)
 	if err != nil {
+		if errors.Is(err, errMissingWritableOutputDir) {
+			return nil, errors.New("result too large for stdout; specify --output-dir <writable-dir> to allow automatic file delivery")
+		}
 		return nil, err
 	}
 	fileArtifact := []map[string]any{{

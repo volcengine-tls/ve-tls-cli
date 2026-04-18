@@ -11,6 +11,8 @@ import (
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
+var errMissingWritableOutputDir = errors.New("missing writable output_dir")
+
 func attachMeta(out any, tracePath string) any {
 	m := map[string]any{
 		"trace": map[string]any{
@@ -151,7 +153,7 @@ func writeTextFileToDir(outputFile string, baseDir string, group string, s strin
 func defaultOutputFile(baseDir string, group string, format output.Format) (string, error) {
 	dir := strings.TrimSpace(baseDir)
 	if dir == "" {
-		return "", errors.New("missing writable output_dir")
+		return "", errMissingWritableOutputDir
 	}
 	if !filepath.IsAbs(dir) {
 		wd, err := os.Getwd()
@@ -177,7 +179,7 @@ func defaultOutputFile(baseDir string, group string, format output.Format) (stri
 func defaultBinaryOutputFile(baseDir string, group string, ext string) (string, error) {
 	dir := strings.TrimSpace(baseDir)
 	if dir == "" {
-		return "", errors.New("missing writable output_dir")
+		return "", errMissingWritableOutputDir
 	}
 	if !filepath.IsAbs(dir) {
 		wd, err := os.Getwd()

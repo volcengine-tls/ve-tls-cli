@@ -11,6 +11,10 @@ traps:
     symptom: --jmes-filter 'error' prints null on a successful call
     why: the envelope field exists and its value is null, so the filter matched successfully
     fix: treat literal null as a valid projection result; only investigate when the CLI returns filter matched no value
+  - trap: deliverymode-belongs-to-runtime
+    symptom: skill logic tries to pre-decide stdout vs file_auto for log.search or export flows
+    why: surface choice belongs to the skill, but deliveryMode is a CLI runtime decision
+    fix: choose tool/workflow/raw first, then read summary.deliveryMode from the actual result instead of duplicating output routing in the skill
   - trap: hitcount-is-not-whole-window-total
     symptom: SearchLogs.HitCount is used as the total count for the whole time window
     why: HitCount only reflects the rows returned in the current SearchLogs response window
@@ -23,6 +27,10 @@ traps:
     symptom: log.ingest or log.export returns unknown tool
     why: log.ingest and log.export belong to workflow, not tool
     fix: switch to workflow describe/exec instead of tool describe/exec
+  - trap: ingest-is-not-tool-put
+    symptom: local file/stdin import is routed to tool log.put, or direct PutLogs contract work is routed to workflow log.ingest
+    why: log.ingest is a local import workflow, while tool log.put is the public PutLogs contract surface
+    fix: use workflow log.ingest for local lines/jsonl/json-array import; use tool log.put only when the task is explicitly about the public PutLogs contract
   - trap: shortcuts-are-human-first
     symptom: agent starts from project/topic/log shortcut commands
     why: agent flows should start from tool or workflow instead of shortcut groups
