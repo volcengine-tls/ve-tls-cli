@@ -11,7 +11,7 @@ Use this skill only for agent-only incremental knowledge.
 
 If `volclog tool describe ...` or `volclog workflow describe ...` already answers the question, stop and follow that contract instead of adding duplicate guidance here.
 
-If both binaries are available, prefer `volclog-agent` for agent or CI sessions. If only the full `volclog` binary is installed, stay on `tool / workflow / raw` and ignore human shortcut groups.
+If both binaries are available, prefer `volclog` for agent or CI sessions. If only `volclog-human` is installed, stay on `tool / workflow / raw` and ignore human shortcut groups.
 
 ## Read Order
 

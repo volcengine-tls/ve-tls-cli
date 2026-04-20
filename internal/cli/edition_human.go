@@ -1,7 +1,7 @@
-//go:build agent
+//go:build human
 
 package cli
 
 func currentEdition() cliEdition {
-	return cliEditionAgent
+	return cliEditionVolclogHuman
 }

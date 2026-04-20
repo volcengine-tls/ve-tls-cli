@@ -1,4 +1,4 @@
-//go:build agent
+//go:build !human
 
 package cli
 
@@ -9,14 +9,14 @@ import (
 	"testing"
 )
 
-type agentEditionCLIError struct {
+type defaultEditionCLIError struct {
 	ErrorCode    string `json:"errorCode"`
 	ErrorMessage string `json:"errorMessage"`
 	Kind         string `json:"kind"`
 	Hint         string `json:"hint"`
 }
 
-func TestAgentEditionRejectsShortcutGroups(t *testing.T) {
+func TestDefaultEditionRejectsShortcutGroups(t *testing.T) {
 	for _, group := range []string{"project", "topic", "metric-topic", "index", "log", "host-group", "collector", "assistant"} {
 		t.Run(group, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
@@ -24,7 +24,7 @@ func TestAgentEditionRejectsShortcutGroups(t *testing.T) {
 			if code != 1 {
 				t.Fatalf("expected exit=1 for %s, got=%d stdout=%q stderr=%q", group, code, stdout.String(), stderr.String())
 			}
-			var payload agentEditionCLIError
+			var payload defaultEditionCLIError
 			if err := json.Unmarshal(stderr.Bytes(), &payload); err != nil {
 				t.Fatalf("stderr should be cli error json for %s: %v stderr=%q", group, err, stderr.String())
 			}
@@ -41,7 +41,7 @@ func TestAgentEditionRejectsShortcutGroups(t *testing.T) {
 	}
 }
 
-func TestAgentEditionStillRoutesRemovedLegacyCommandsToMigrationHint(t *testing.T) {
+func TestDefaultEditionStillRoutesRemovedLegacyCommandsToMigrationHint(t *testing.T) {
 	for _, group := range []string{"api", "capabilities"} {
 		t.Run(group, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
@@ -49,7 +49,7 @@ func TestAgentEditionStillRoutesRemovedLegacyCommandsToMigrationHint(t *testing.
 			if code != 1 {
 				t.Fatalf("expected exit=1 for %s, got=%d stdout=%q stderr=%q", group, code, stdout.String(), stderr.String())
 			}
-			var payload agentEditionCLIError
+			var payload defaultEditionCLIError
 			if err := json.Unmarshal(stderr.Bytes(), &payload); err != nil {
 				t.Fatalf("stderr should be cli error json for %s: %v stderr=%q", group, err, stderr.String())
 			}

@@ -1,22 +1,22 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolveBinaryPath, runCLI } = require('../agent-package/lib/run');
+const { resolveBinaryPath, runCLI } = require('../human-package/lib/run');
 
-test('agent resolveBinaryPath points at bundled volclog-agent binary', () => {
+test('human resolveBinaryPath points at bundled volclog-human binary', () => {
   const binaryPath = resolveBinaryPath({
-    packageRoot: '/tmp/pkg-agent',
+    packageRoot: '/tmp/pkg-human',
     platform: 'linux',
   });
 
-  assert.equal(binaryPath, '/tmp/pkg-agent/.volclog-agent/bin/volclog-agent');
+  assert.equal(binaryPath, '/tmp/pkg-human/.volclog-human/bin/volclog-human');
 });
 
-test('agent runCLI forwards args to installed volclog-agent binary', () => {
+test('human runCLI forwards args to installed volclog-human binary', () => {
   const calls = [];
   const exitCode = runCLI({
     argv: ['tool', 'list', 'project'],
-    binaryPath: '/tmp/pkg-agent/.volclog-agent/bin/volclog-agent',
+    binaryPath: '/tmp/pkg-human/.volclog-human/bin/volclog-human',
     existsImpl() {
       return true;
     },
@@ -32,7 +32,7 @@ test('agent runCLI forwards args to installed volclog-agent binary', () => {
   assert.equal(exitCode, 0);
   assert.deepEqual(calls, [
     {
-      command: '/tmp/pkg-agent/.volclog-agent/bin/volclog-agent',
+      command: '/tmp/pkg-human/.volclog-human/bin/volclog-human',
       args: ['tool', 'list', 'project'],
       options: { stdio: 'inherit' },
     },

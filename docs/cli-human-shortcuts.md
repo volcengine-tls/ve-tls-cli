@@ -1,6 +1,6 @@
-# volclog Full 版：人类 Shortcut 使用指南
+# volclog-human：人类 Shortcut 使用指南
 
-> 这篇文档只面向 **full 版 `volclog`** 的人工交互场景。Agent/CI 默认请走 `tool / workflow / raw`，不要把 shortcut 当主路径。
+> 这篇文档只面向 **`volclog-human`** 的人工交互场景。Agent/CI 默认请走 `tool / workflow / raw`，不要把 shortcut 当主路径。
 
 ## 适用范围
 
@@ -13,7 +13,7 @@
 
 不覆盖：
 
-- `volclog-agent`
+- `volclog`
 - Agent 默认执行路径
 - `tool / workflow / raw` 的详细契约说明
 
@@ -27,7 +27,7 @@
 - 创建 topic / index / collector
 - 做一次日志检索、导出、上下文查看
 
-那么 full 版 `volclog` 的 shortcut 往往是最短路径。
+那么 `volclog-human` 的 shortcut 往往是最短路径。
 
 如果你遇到下面任一情况，建议转回 `tool / workflow`：
 
@@ -43,29 +43,29 @@
 ### 资源查看
 
 ```bash
-volclog project list --output table
-volclog topic list --project-id <ProjectId> --output table
-volclog host-group list --all
-volclog collector list --all
+volclog-human project list --output table
+volclog-human topic list --project-id <ProjectId> --output table
+volclog-human host-group list --all
+volclog-human collector list --all
 ```
 
 ### 创建或修改前先看说明
 
 ```bash
-volclog project create --describe
-volclog topic create --describe
-volclog index create --describe
-volclog collector create --describe
-volclog log search --describe
+volclog-human project create --describe
+volclog-human topic create --describe
+volclog-human index create --describe
+volclog-human collector create --describe
+volclog-human log search --describe
 ```
 
 ### 需要复杂请求体时打印模板
 
 ```bash
-volclog topic create --print-request-template=full
-volclog index create --print-request-template=full
-volclog collector create --print-request-template=full
-volclog log put --print-request-template=full
+volclog-human topic create --print-request-template=full
+volclog-human index create --print-request-template=full
+volclog-human collector create --print-request-template=full
+volclog-human log put --print-request-template=full
 ```
 
 ---
@@ -75,26 +75,26 @@ volclog log put --print-request-template=full
 ### 新建 topic 并配置索引
 
 ```bash
-volclog topic create --describe
-volclog topic create --print-request-template=full > topic_req.json
-volclog topic create --request file://topic_req.json
+volclog-human topic create --describe
+volclog-human topic create --print-request-template=full > topic_req.json
+volclog-human topic create --request file://topic_req.json
 
-volclog index create --describe
-volclog index create --print-request-template=full > index_req.json
-volclog index create --topic-id <TopicId> --request file://index_req.json
+volclog-human index create --describe
+volclog-human index create --print-request-template=full > index_req.json
+volclog-human index create --topic-id <TopicId> --request file://index_req.json
 ```
 
 ### 快速检索和导出日志
 
 ```bash
-volclog log search \
+volclog-human log search \
   --topic-id <TopicId> \
   --query "error" \
   --from <StartTimeMs> \
   --to <EndTimeMs> \
   --limit 100
 
-volclog --output jsonl --output-mode file --output-dir ./out \
+volclog-human --output jsonl --output-mode file --output-dir ./out \
   log export \
   --topic-id <TopicId> \
   --query "*" \
@@ -105,7 +105,7 @@ volclog --output jsonl --output-mode file --output-dir ./out \
 ### 导出分析结果
 
 ```bash
-volclog --output jsonl --output-mode file --output-dir ./out \
+volclog-human --output jsonl --output-mode file --output-dir ./out \
   log export-analysis \
   --topic-id <TopicId> \
   --query "* | select status, count(*) as cnt group by status" \
@@ -125,4 +125,4 @@ volclog --output jsonl --output-mode file --output-dir ./out \
 
 一句话：
 
-**shortcut 是 full 版里的人类高频入口，不是 agent 主路径。**
+**shortcut 是 `volclog-human` 里的人类高频入口，不是 agent 主路径。**

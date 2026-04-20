@@ -30,9 +30,11 @@ jobs:
         run: go vet ./...
       - name: Go test
         run: go test ./...
+      - name: install-binary regression test
+        run: bash scripts/install-binary_test.sh
       - name: npm package tests
         run: npm run test:npm --silent
       - name: npm pack dry-run
         run: |
           npm pack --dry-run .
-          npm pack --dry-run ./npm/agent-package
+          npm pack --dry-run ./npm/human-package

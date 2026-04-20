@@ -9,8 +9,8 @@ function resolveBinaryPath(options = {}) {
     return options.binaryPath;
   }
   const packageRoot = options.packageRoot || path.resolve(__dirname, '..');
-  const binaryName = (options.platform || process.platform) === 'win32' ? 'volclog-agent.exe' : 'volclog-agent';
-  return path.join(packageRoot, '.volclog-agent', 'bin', binaryName);
+  const binaryName = (options.platform || process.platform) === 'win32' ? 'volclog-human.exe' : 'volclog-human';
+  return path.join(packageRoot, '.volclog-human', 'bin', binaryName);
 }
 
 function runCLI(options = {}) {
@@ -20,7 +20,7 @@ function runCLI(options = {}) {
   const existsImpl = options.existsImpl || fs.existsSync;
   if (!existsImpl(binaryPath)) {
     throw new Error(
-      `volclog-agent binary not found: ${binaryPath}. Reinstall package or run npm rebuild @volcengine-tls/volclog-agent.`,
+      `volclog-human binary not found: ${binaryPath}. Reinstall package or run npm rebuild @volcengine-tls/volclog-human.`,
     );
   }
   const result = spawnImpl(binaryPath, argv, { stdio: 'inherit' });

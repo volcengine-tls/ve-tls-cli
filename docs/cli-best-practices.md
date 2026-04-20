@@ -1,12 +1,14 @@
 # CLI 参数最佳实践与场景指南（volclog）
 
-这份文档只讲稳定的运行时语义、参数边界、输出行为、错误读取方式，以及凭证与诊断策略。
+这份文档只讲 **Agent/自动化主路径** 的稳定运行时语义、参数边界、输出行为、错误读取方式，以及凭证与诊断策略。
+
+除非明确写的是 `volclog-human` 的人工 shortcut，本篇命令示例默认都使用 `volclog`。
 
 文档边界：
 
 - 想看产品入口、安装和 Quick Start：回到 [README.md](../README.md) 或 [README_CN.md](../README_CN.md)
 - 想看端到端实战链路：看 [cli-practical-guide.md](cli-practical-guide.md)
-- 想看 full 版 shortcut：看 [cli-human-shortcuts.md](cli-human-shortcuts.md)
+- 想看 `volclog-human` 的人工入口与 shortcut：看 [cli-human-shortcuts.md](cli-human-shortcuts.md)
 
 如果你只记住最少几条规则：
 
@@ -15,6 +17,8 @@
 3. 大结果优先 `--output-mode file --output-dir <writable-dir>`
 4. 失败时先读单层 `error`
 5. `region` 必须显式提供，不从 endpoint 反推
+
+这份文档默认不展开 `volclog-human` 的人工入口；除非一条规则同时影响 agent/human 两条路径，否则都以后者专用文档为准。
 
 ---
 
@@ -88,7 +92,7 @@ volclog --profile prod workflow exec ... --context '{"secrets_file":"file://cred
 
 - `json`：默认，适合结构化对象输出
 - `jsonl`：适合大量逐行结果
-- `table`：只属于 full 版的人类友好输出，不是 `volclog-agent` 主路径格式
+- `table`：只属于 `volclog-human` 的人类友好输出；Agent/自动化主路径默认忽略它
 
 ### 2.2 `--output-mode` 与 `--output-dir`
 
@@ -267,5 +271,5 @@ volclog --secrets-file ./.env tool exec project.describe-projects
 
 - 想看入口和安装：回 README
 - 想看长链路实战：回 `cli-practical-guide`
-- 想看 full 版 shortcut：回 `cli-human-shortcuts`
+- 想看 `volclog-human` shortcut：回 `cli-human-shortcuts`
 - 想看稳定 runtime 规则：留在这份文档

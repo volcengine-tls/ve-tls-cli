@@ -7,6 +7,6 @@ try {
   process.exit(runCLI());
 } catch (error) {
   const message = error && error.message ? error.message : String(error);
-  console.error(`[volclog-agent] ${message}`);
+  console.error(`[volclog-human] ${message}`);
   process.exit(1);
 }

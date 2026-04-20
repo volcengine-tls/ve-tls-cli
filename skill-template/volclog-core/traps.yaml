@@ -39,10 +39,10 @@ traps:
     symptom: agent starts from project/topic/log shortcut commands
     why: agent flows should start from tool or workflow instead of shortcut groups
     fix: rediscover with tool list or workflow list and re-enter through the contract surface
-  - trap: agent-binary-exists
+  - trap: default-binary-is-agent-first
     symptom: agent keeps seeing shortcut-oriented help and examples
-    why: the full volclog binary exposes human surfaces that an agent should ignore
-    fix: prefer volclog-agent when it is installed; otherwise stay on tool/workflow/raw only
+    why: volclog-human exposes human surfaces that an agent should ignore
+    fix: prefer volclog when it is installed; otherwise stay on tool/workflow/raw only
   - trap: env-creds-override-profile
     symptom: a stateless sandbox run selects profile A but appears to use another account
     why: process-wide environment credentials override local profile resolution

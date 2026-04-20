@@ -1,6 +1,6 @@
 param(
-  [ValidateSet("full", "agent")]
-  [string]$Edition = $(if ($env:VOLCLOG_EDITION) { $env:VOLCLOG_EDITION } else { "full" }),
+  [ValidateSet("default", "human")]
+  [string]$Edition = $(if ($env:VOLCLOG_EDITION) { $env:VOLCLOG_EDITION } else { "default" }),
   [string]$BaseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download",
   [string]$InstallDir = "$env:LOCALAPPDATA\Programs\volclog"
 )
@@ -15,7 +15,7 @@ function Get-Arch {
 }
 
 $arch = Get-Arch
-$binName = if ($Edition -eq "agent") { "volclog-agent" } else { "volclog" }
+$binName = if ($Edition -eq "human") { "volclog-human" } else { "volclog" }
 $pkg = "$binName" + "_windows_$arch.zip"
 $url = "$BaseUrl/$pkg"
 $shaUrl = "$url.sha256"

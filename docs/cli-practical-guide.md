@@ -1,6 +1,6 @@
 # 把 TLS 装进终端：volclog CLI 实战指导
 
-> <u>***这篇文档只讲端到端实战链路：怎么接入、怎么排障、怎么导出、怎么把一条真实任务走通。稳定的 runtime 语义请看 `cli-best-practices.md`，full 版人工 shortcut 请看 `cli-human-shortcuts.md`。***</u>
+> <u>***这篇文档只讲端到端实战链路：怎么接入、怎么排障、怎么导出、怎么把一条真实任务走通。稳定的 runtime 语义请看 `cli-best-practices.md`，人类 shortcut 请看 `cli-human-shortcuts.md`。***</u>
 
 > \[!NOTE]
 > **阅读指南**
@@ -9,13 +9,13 @@
 >
 > - 想看安装和最短入口：回 [README.md](../README.md) / [README_CN.md](../README_CN.md)
 > - 想看参数、输出、错误、凭证等稳定规则：看 [cli-best-practices.md](cli-best-practices.md)
-> - 想看 full 版人工 shortcut：看 [cli-human-shortcuts.md](cli-human-shortcuts.md)
+> - 想看 `volclog-human` 的人工 shortcut：看 [cli-human-shortcuts.md](cli-human-shortcuts.md)
 >
 > 这篇文档本身只关心一件事：**把真实任务从头走到尾**。
 >
 > **看完能收获什么？**
 >
-> - 5 分钟完成安装、凭证配置与首次验证
+> - 5 分钟按 agent/自动化主路径完成安装、凭证配置与首次验证
 > - 理解 `tool list / tool describe / tool exec`、`workflow describe / workflow exec`、`raw` 三层 agent 主路径
 > - 看清三条最常见 TLS 实战链路如何落地
 > - 明白 Agent 接入 `volclog` 后到底少猜了什么、少踩了什么坑
@@ -26,14 +26,15 @@
 
 ## 概述
 
-`volclog` 是火山引擎 TLS（日志服务）官方 CLI。对 Agent/自动化来说，它的主路径是 `tool / workflow / raw`；对 full 版人工用户来说，仍然保留 `project list`、`topic create`、`log search` 这类 shortcut 入口。
+`volclog` 是火山引擎 TLS（日志服务）官方 CLI。**这篇文档默认按 Agent/自动化视角组织**，主路径是 `tool / workflow / raw`；如果你要看 `volclog-human` 的人工 shortcut，直接跳到 [cli-human-shortcuts.md](cli-human-shortcuts.md)。
+
+除非一节明确写着 `volclog-human` shortcut，这篇文档里的命令示例默认都用 `volclog`。
 
 更值得关注的是，下面这几件事在 `volclog` 里被放到了一条比较顺的执行路径上：
 
 - `tool list`、`tool describe`、`workflow describe`、`tool exec`、`workflow exec`、`--dry-run`：把“发现约束、校验请求、稳定执行”做成 CLI 原生能力
 - `raw`：在 method/path 已明确时保留 transport 级调用
 - `skills`：把这些执行习惯交给 Agent，让它优先选对 group、少猜 body、遇到大结果自动落文件
-- `shortcut`：full 版的人类增强层，适合手工高频操作，但不再是 Agent 主路径
 
 对于已经习惯 Bash、curl 或友商 CLI 的用户来说，是否值得试，不太取决于“是不是又多了一条 `log search` 命令”，而更取决于下面这些场景能不能省事：
 
@@ -84,12 +85,13 @@ flowchart LR
 | 维度       | 常见 CLI / Bash 脚本     | `volclog`                                          |
 | -------- | -------------------- | -------------------------------------------------- |
 | Agent 主入口 | 通常只有资源 CRUD 或 transport | `tool / workflow / raw` 分层清晰，先发现契约再执行                       |
-| 人类高频入口   | 需要自己记 flags 或写脚本       | full 版保留 `shortcut`，但它不再承担 Agent 主路径                     |
-| 复杂请求体    | 需要翻 API 文档、手写 JSON   | `tool/workflow describe` 直接给契约；full 版 shortcut 额外提供模板 |
+| 复杂请求体    | 需要翻 API 文档、手写 JSON   | `tool/workflow describe` 直接给契约；`volclog-human` shortcut 额外提供模板 |
 | 执行前校验    | 往往直接发请求              | `--dry-run` 先在本地校验                                 |
 | 大结果处理    | 容易直接打 stdout 或自己分页导出 | `--output-mode file` + `--output-dir` 适合大结果，CLI 自动生成结果文件 |
 | Agent 接入 | 需要额外写 prompt/胶水层     | 内置 `skills/`，能把最佳实践直接交给 Agent                      |
 | 发现能力     | 靠文档和记忆               | `tool list` / `tool list <x>` 可直接探索 |
+
+如果你关心的是 `volclog-human` 的人工高频命令，而不是 Agent 主路径，直接看 [cli-human-shortcuts.md](cli-human-shortcuts.md) 会更省时间。
 
 如果你的现状是：
 
@@ -107,25 +109,31 @@ flowchart LR
 
 ### Step 1：安装 CLI
 
-推荐直接安装二进制：
+对 Agent/自动化，推荐先安装默认的 `volclog` 二进制：
 
 ```bash
-VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash scripts/install-binary.sh
+VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
+bash scripts/install-binary.sh
 ```
 
-如果你只需要 Agent/CI 命令面，可安装 `volclog-agent`：
+如果你确实需要人工 shortcut，再安装 `volclog-human`：
 
 ```bash
-VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download VOLCLOG_EDITION=agent bash scripts/install-binary.sh
+VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
+bash scripts/install-binary.sh --edition human
 ```
 
-如果你更习惯 npm：
+如果你更习惯 npm，同样优先装 agent 版：
 
 ```bash
 npm install -g @volcengine-tls/volclog
 ```
 
-注意：npm 当前安装的是 full 版 `volclog`，不是只保留 `configure / doctor / skill / tool / workflow / raw` 的 `volclog-agent`。
+只有在你明确需要人工 shortcut 时，再装：
+
+```bash
+npm install -g @volcengine-tls/volclog-human
+```
 
 如果你已经有 Go 1.22+，也可以：
 
@@ -137,6 +145,12 @@ go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
 
 ```bash
 volclog --version
+```
+
+如果你安装的是 `volclog-human`，则改用：
+
+```bash
+volclog-human --version
 ```
 
 ### Step 2：配置凭证
@@ -232,7 +246,7 @@ volclog skill install --dir /path/to/project/.codex/skills
 
 ## 四层命令架构
 
-`volclog` 的命令设计遵循四层递进。对 Agent/自动化，前 3 层是主流程；对 full 版人工用户，第 4 层 shortcut 仍然是高频便利层。
+`volclog` 的命令设计遵循四层递进。对 Agent/自动化，前 3 层是主流程；对 `volclog-human` 人工用户，第 4 层 shortcut 仍然是高频便利层。
 
 ### 第一层：Tool Contract
 
@@ -285,7 +299,7 @@ volclog raw --method GET --path /DescribeProjects
 - 出错概率也最高
 - 不应该作为默认入口
 
-### 第四层：Shortcut（full 版人类增强层）
+### 第四层：Shortcut（`volclog-human` 人类增强层）
 
 适合高频场景，优先给人类使用。
 
@@ -300,18 +314,18 @@ volclog collector create --describe
 
 - 命令短
 - 贴近任务语义
-- 是 full 版人类的第一优先级入口
+- 是 `volclog-human` 人类的第一优先级入口
 - Agent 不应把 shortcut 当默认主流程；更完整的人类链路请看 [cli-human-shortcuts.md](cli-human-shortcuts.md)
 
 选择策略只有一句话：
 
-**Agent 默认应先** **`tool/workflow list -> describe -> exec`，只有在 method/path 已明确时才降级到** **`raw`；full 版人工用户再按需使用 shortcut。**
+**Agent 默认应先** **`tool/workflow list -> describe -> exec`，只有在 method/path 已明确时才降级到** **`raw`；`volclog-human` 人工用户再按需使用 shortcut。**
 
 ***
 
-## 三个实用工作流（full 版人类链路示例）
+## 三个实用工作流（`volclog-human` 人类链路示例）
 
-如果你平时更关心实战，可以直接从这一章开始看。这里继续用 full 版 shortcut 展示“人类在终端里怎么最快走通一条链路”；如果你是 Agent/CI，请把同一链路映射到前面的 `tool / workflow / raw` 主路径，shortcut 细节单独看 [cli-human-shortcuts.md](cli-human-shortcuts.md)。
+如果你平时更关心实战，可以直接从这一章开始看。这里继续用 `volclog-human` shortcut 展示“人类在终端里怎么最快走通一条链路”；如果你是 Agent/CI，请把同一链路映射到前面的 `tool / workflow / raw` 主路径，shortcut 细节单独看 [cli-human-shortcuts.md](cli-human-shortcuts.md)。
 
 ### 工作流 1：把一个新服务接入 TLS，并完成检索验证
 
@@ -625,8 +639,8 @@ volclog log search \
 这也是最适合交给 Agent 的场景之一。好的 Agent 不该直接猜 `/DescribeRules` 或随手拼 JSON，而应该：
 
 ```bash
-volclog host-group list --describe
-volclog collector list --describe
+volclog tool list host-group
+volclog tool list collector
 volclog tool describe collector.apply-rule-to-host-groups
 volclog tool describe host-group.apply-host-group-to-rules
 ```
@@ -791,4 +805,4 @@ volclog skill install --dir /path/to/project/.codex/skills
 
 - 基础安装与能力总览：[README\_CN.md](../README_CN.md)
 - Agent/自动化的参数、输出与恢复建议：[cli-best-practices.md](cli-best-practices.md)
-- full 版人类 shortcut 指南：[cli-human-shortcuts.md](cli-human-shortcuts.md)
+- `volclog-human` shortcut 指南：[cli-human-shortcuts.md](cli-human-shortcuts.md)

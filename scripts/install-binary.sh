@@ -11,14 +11,40 @@ EDITION="${VOLCLOG_EDITION:-}"
 
 usage() {
   cat <<'EOF'
-usage: install-binary.sh [--edition full|agent]
+usage: install-binary.sh [--edition human]
 
 Environment:
   VOLCLOG_DOWNLOAD_URL  direct archive URL
   VOLCLOG_BASE_URL      release base URL
-  VOLCLOG_EDITION       full (default) or agent
+  VOLCLOG_EDITION       human to install volclog-human
   BIN_NAME              override installed binary name
 EOF
+}
+
+verify_archive_checksum() {
+  local archive_path="$1"
+  local sha_path="$2"
+  local expected actual
+
+  expected="$(awk '{print $1}' "$sha_path")"
+  if [[ -z "$expected" ]]; then
+    echo "invalid sha256 file: $sha_path" >&2
+    exit 3
+  fi
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual="$(sha256sum "$archive_path" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    actual="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
+  else
+    echo "missing sha256 tool" >&2
+    exit 3
+  fi
+
+  if [[ "$expected" != "$actual" ]]; then
+    echo "sha256 mismatch" >&2
+    exit 3
+  fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -48,16 +74,16 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$EDITION" ]]; then
-  if [[ "${BIN_NAME:-}" = "volclog-agent" ]]; then
-    EDITION="agent"
+  if [[ "${BIN_NAME:-}" = "volclog-human" ]]; then
+    EDITION="human"
   else
-    EDITION="full"
+    EDITION="default"
   fi
 fi
 
 case "$EDITION" in
-  full) SRC_BIN_NAME="volclog" ;;
-  agent) SRC_BIN_NAME="volclog-agent" ;;
+  default|"") SRC_BIN_NAME="volclog" ;;
+  human) SRC_BIN_NAME="volclog-human" ;;
   *)
     echo "invalid VOLCLOG_EDITION: $EDITION" >&2
     exit 2
@@ -80,12 +106,13 @@ if [[ -z "$DOWNLOAD_URL" ]]; then
     echo "missing VOLCLOG_DOWNLOAD_URL or VOLCLOG_BASE_URL" >&2
     echo "examples:" >&2
     echo "  VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash scripts/install-binary.sh" >&2
+    echo "  VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash scripts/install-binary.sh --edition human" >&2
     echo "  VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/download/<tag> bash scripts/install-binary.sh" >&2
     exit 2
   fi
   pkg="volclog_${os}_${arch}.tar.gz"
-  if [[ "$EDITION" = "agent" ]]; then
-    pkg="volclog-agent_${os}_${arch}.tar.gz"
+  if [[ "$SRC_BIN_NAME" = "volclog-human" ]]; then
+    pkg="volclog-human_${os}_${arch}.tar.gz"
   fi
   DOWNLOAD_URL="${BASE_URL%/}/$pkg"
 fi
@@ -103,16 +130,7 @@ curl -fsSL "$DOWNLOAD_URL" -o "$archive_path"
 sha_url="${DOWNLOAD_URL}.sha256"
 sha_path="${archive_path}.sha256"
 if curl -fsSL "$sha_url" -o "$sha_path" 2>/dev/null; then
-  if command -v sha256sum >/dev/null 2>&1; then
-    (cd "$tmp" && sha256sum -c "$(basename "$sha_path")")
-  elif command -v shasum >/dev/null 2>&1; then
-    expected="$(awk '{print $1}' "$sha_path")"
-    actual="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
-    if [[ "$expected" != "$actual" ]]; then
-      echo "sha256 mismatch" >&2
-      exit 3
-    fi
-  fi
+  verify_archive_checksum "$archive_path" "$sha_path"
 fi
 
 tar -xzf "$archive_path" -C "$tmp"
