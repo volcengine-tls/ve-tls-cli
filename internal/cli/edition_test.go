@@ -8,8 +8,8 @@ import (
 func TestCliGroupsMatchCurrentEdition(t *testing.T) {
 	names := cliGroupNames()
 
-	switch currentEdition() {
-	case cliEditionFull:
+	switch string(currentEdition()) {
+	case "volclog-human":
 		for _, want := range []string{
 			"configure",
 			"doctor",
@@ -26,20 +26,20 @@ func TestCliGroupsMatchCurrentEdition(t *testing.T) {
 			"collector",
 		} {
 			if !slices.Contains(names, want) {
-				t.Fatalf("full edition missing group %q in %v", want, names)
+				t.Fatalf("volclog-human missing group %q in %v", want, names)
 			}
 		}
 		if slices.Contains(names, "assistant") {
 			t.Fatalf("assistant shortcut group should stay hidden from top-level groups: %v", names)
 		}
-	case cliEditionAgent:
+	case "volclog":
 		want := []string{"configure", "doctor", "skill", "tool", "workflow", "raw"}
 		if len(names) != len(want) {
-			t.Fatalf("agent edition groups = %v, want only %v", names, want)
+			t.Fatalf("default volclog groups = %v, want only %v", names, want)
 		}
 		for _, group := range want {
 			if !slices.Contains(names, group) {
-				t.Fatalf("agent edition missing group %q in %v", group, names)
+				t.Fatalf("default volclog missing group %q in %v", group, names)
 			}
 		}
 	default:
@@ -61,22 +61,22 @@ func TestCliGroupNamesStayAlignedWithCliGroups(t *testing.T) {
 }
 
 func TestEditionRuntimeAvailability(t *testing.T) {
-	switch currentEdition() {
-	case cliEditionFull:
+	switch string(currentEdition()) {
+	case "volclog-human":
 		for _, group := range []string{"project", "assistant", "tool", "workflow", "raw"} {
 			if !isGroupEnabledInCurrentEdition(group) {
-				t.Fatalf("full edition should enable %q", group)
+				t.Fatalf("volclog-human should enable %q", group)
 			}
 		}
-	case cliEditionAgent:
+	case "volclog":
 		for _, group := range []string{"configure", "doctor", "skill", "tool", "workflow", "raw"} {
 			if !isGroupEnabledInCurrentEdition(group) {
-				t.Fatalf("agent edition should enable %q", group)
+				t.Fatalf("default volclog should enable %q", group)
 			}
 		}
 		for _, group := range []string{"project", "topic", "metric-topic", "index", "log", "host-group", "collector", "assistant"} {
 			if isGroupEnabledInCurrentEdition(group) {
-				t.Fatalf("agent edition should reject %q", group)
+				t.Fatalf("default volclog should reject %q", group)
 			}
 		}
 	default:

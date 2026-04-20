@@ -5,11 +5,11 @@ import "strings"
 type cliEdition string
 
 const (
-	cliEditionFull  cliEdition = "full"
-	cliEditionAgent cliEdition = "agent"
+	cliEditionVolclog      cliEdition = "volclog"
+	cliEditionVolclogHuman cliEdition = "volclog-human"
 )
 
-var agentEditionGroupNames = map[string]bool{
+var volclogPrimaryGroupNames = map[string]bool{
 	"configure": true,
 	"doctor":    true,
 	"skill":     true,
@@ -23,7 +23,7 @@ var legacyEditionAgnosticGroupNames = map[string]bool{
 	"capabilities": true,
 }
 
-var hiddenFullEditionGroupNames = map[string]bool{
+var hiddenVolclogHumanGroupNames = map[string]bool{
 	"assistant": true,
 }
 
@@ -32,10 +32,10 @@ func isGroupEnabledInCurrentEdition(group string) bool {
 	if legacyEditionAgnosticGroupNames[group] {
 		return true
 	}
-	if currentEdition() != cliEditionAgent {
+	if currentEdition() != cliEditionVolclog {
 		return true
 	}
-	return agentEditionGroupNames[group]
+	return volclogPrimaryGroupNames[group]
 }
 
 func isRecognizedGroup(group string) bool {
@@ -43,7 +43,7 @@ func isRecognizedGroup(group string) bool {
 	if group == "" {
 		return false
 	}
-	if legacyEditionAgnosticGroupNames[group] || hiddenFullEditionGroupNames[group] {
+	if legacyEditionAgnosticGroupNames[group] || hiddenVolclogHumanGroupNames[group] {
 		return true
 	}
 	for _, item := range visibleCliGroups() {
@@ -57,7 +57,7 @@ func isRecognizedGroup(group string) bool {
 func editionGroupHint(group string) string {
 	group = strings.TrimSpace(group)
 	if group == "" {
-		return "use one of configure/doctor/skill/tool/workflow/raw in this edition"
+		return "use one of configure/doctor/skill/tool/workflow/raw in the default volclog build"
 	}
-	return "this edition only exposes configure/doctor/skill/tool/workflow/raw; use 'volclog tool list', 'volclog workflow list', or switch to the full volclog build for human shortcuts"
+	return "the default volclog build only exposes configure/doctor/skill/tool/workflow/raw; use 'volclog tool list', 'volclog workflow list', or switch to the volclog-human build (-tags=human) for human shortcuts"
 }

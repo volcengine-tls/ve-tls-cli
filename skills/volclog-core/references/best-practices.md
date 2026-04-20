@@ -13,7 +13,8 @@ Read these signals in this order:
 Key rules:
 
 - Keep surface choice and delivery choice separate. Skill decides `tool / workflow / raw`; CLI decides stdout vs file delivery.
-- If both binaries are available, prefer `volclog-agent` for agent or CI sessions.
+- If both binaries are available, prefer `volclog` for agent or CI sessions.
+- `volclog-human` keeps the human shortcut layer; do not let that change the runtime reading order described here.
 - Let CLI `deliveryMode` decide stdout vs `file_auto`.
 - For `log.search`, let CLI `deliveryMode` decide stdout vs `file_auto` after the surface is already chosen.
 - Treat `outputMode` as caller intent and `deliveryMode` as runtime result:

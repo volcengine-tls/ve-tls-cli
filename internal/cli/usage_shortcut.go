@@ -1,4 +1,4 @@
-//go:build !agent
+//go:build human
 
 package cli
 
@@ -8,7 +8,7 @@ func usageProject() string {
 
 Human Shortcut:
   - 面向人工交互的高频命令；已明确要做 project 操作时可直接使用。
-  - Agent 默认不要停在 shortcut 元命令；先转到 tlsctl tool list/describe project。
+  - 默认 volclog 不要停在 shortcut 元命令；先转到 tlsctl tool list/describe project。
   - 当前 shortcut 仍支持 --describe；只有明确要走人工 shortcut 时再看 --print-request-template=full。
   - 需要公开 API 契约时，转到 tlsctl tool list project / tlsctl tool describe project.create。
   - 字段较多时，用 --print-request-template=full + --request file://req.json 组织完整 JSON。
@@ -41,7 +41,7 @@ func usageTopic() string {
 
 Human Shortcut:
   - 面向人工交互的高频命令；已明确要做 topic 操作时可直接使用。
-  - Agent 默认不要停在 shortcut 元命令；先转到 tlsctl tool list/describe topic。
+  - 默认 volclog 不要停在 shortcut 元命令；先转到 tlsctl tool list/describe topic。
   - 当前 shortcut 仍支持 --describe；只有明确要走人工 shortcut 时再看 --print-request-template=full。
   - 需要公开 API 契约时，转到 tlsctl tool list topic / tlsctl tool describe topic.<action>。
   - 字段较多时，用 --print-request-template=full + --request file://req.json 组织完整 JSON。
@@ -78,9 +78,9 @@ func usageMetricTopic() string {
 
 Human Shortcut:
   - 面向人工交互的高频命令；已明确要做 metric-topic 操作时可直接使用。
-  - Agent 不要把这里当主流程；对外 agent tool 不暴露 metric-topic。
+  - 默认 volclog 不要把这里当主流程；对外 tool 不暴露 metric-topic。
   - 当前 shortcut 仍支持 --describe；只有明确要走人工 shortcut 时再看 --print-request-template=full。
-  - 对外 agent tool 不暴露 metric-topic；这里保留人工 shortcut。
+  - 对外 tool 不暴露 metric-topic；这里保留人工 shortcut。
   - 字段较多时，用 --print-request-template=full + --request file://req.json 组织完整 JSON。
 
 Commands:
@@ -147,7 +147,7 @@ func usageIndex() string {
 
 Human Shortcut:
   - 面向人工交互的高频命令；已明确要做 index 操作时可直接使用。
-  - Agent 默认不要停在 shortcut 元命令；先转到 tlsctl tool list/describe index。
+  - 默认 volclog 不要停在 shortcut 元命令；先转到 tlsctl tool list/describe index。
   - 当前 shortcut 仍支持 --describe；只有明确要走人工 shortcut 时再看 --print-request-template=full。
   - 需要公开 API 契约时，转到 tlsctl tool list index / tlsctl tool describe index.<action>。
   - 字段较多时，用 --print-request-template=full + --request file://req.json 组织完整 JSON。
@@ -176,7 +176,7 @@ func usageLog() string {
 
 Human Shortcut:
   - 面向人工交互的高频命令；已明确要做 log 操作时可直接使用。
-  - Agent 默认先用 tlsctl tool/workflow describe；只有用户明确要 shortcut flags 或模板时再留在这里。
+  - 默认 volclog 先用 tlsctl tool/workflow describe；只有用户明确要 shortcut flags 或模板时再留在这里。
   - 当前 shortcut 仍支持 --describe；复杂写入体只有明确要走人工 shortcut 时再看 --print-request-template=full。
   - 需要公开 API 契约时，转到 tlsctl tool list log / tlsctl tool describe log.<action>。
   - CLI workflow 约束与执行请看 tlsctl workflow describe/exec log.<command>。
@@ -226,7 +226,7 @@ func usageHostGroup() string {
 
 Human Shortcut:
   - 面向人工交互的高频命令；已明确要做 host-group 操作时可直接使用。
-  - Agent 默认不要停在 shortcut 元命令；先转到 tlsctl tool list/describe host-group。
+  - 默认 volclog 不要停在 shortcut 元命令；先转到 tlsctl tool list/describe host-group。
   - 当前 shortcut 仍支持 --describe；只有明确要走人工 shortcut 时再看 --print-request-template=full。
   - 需要公开 API 契约时，转到 tlsctl tool list host-group / tlsctl tool describe host-group.<action>。
   - 字段较多时，用 --print-request-template=full + --request file://req.json 组织完整 JSON。
@@ -257,7 +257,7 @@ func usageCollector() string {
 
 Human Shortcut:
   - 面向人工交互的高频命令；已明确要做 collector 操作时可直接使用。
-  - Agent 默认不要停在 shortcut 元命令；先转到 tlsctl tool list/describe collector。
+  - 默认 volclog 不要停在 shortcut 元命令；先转到 tlsctl tool list/describe collector。
   - 当前 shortcut 仍支持 --describe；只有明确要走人工 shortcut 时再看 --print-request-template=full。
   - 需要公开 API 契约时，转到 tlsctl tool list collector / tlsctl tool describe collector.<action>。
   - 字段较多时，用 --print-request-template=full + --request file://req.json 组织完整 JSON。

@@ -35,13 +35,13 @@ function normalizeArch(arch) {
 }
 
 function releaseBaseURL(pkgVersion, env) {
-  if (env.VOLCLOG_AGENT_BASE_URL) {
-    return env.VOLCLOG_AGENT_BASE_URL.replace(/\/+$/, '');
+  if (env.VOLCLOG_HUMAN_BASE_URL) {
+    return env.VOLCLOG_HUMAN_BASE_URL.replace(/\/+$/, '');
   }
   if (env.VOLCLOG_BASE_URL) {
     return env.VOLCLOG_BASE_URL.replace(/\/+$/, '');
   }
-  const version = String(env.VOLCLOG_AGENT_VERSION || env.VOLCLOG_VERSION || pkgVersion || '').trim();
+  const version = String(env.VOLCLOG_HUMAN_VERSION || env.VOLCLOG_VERSION || pkgVersion || '').trim();
   if (!version || version.includes('dev')) {
     return `${REPO_BASE_URL}/latest/download`;
   }
@@ -59,14 +59,14 @@ function resolveInstallPlan(options) {
 
   const normalizedPlatform = normalizePlatform(platform);
   const normalizedArch = normalizeArch(arch);
-  const binaryName = normalizedPlatform === 'windows' ? 'volclog-agent.exe' : 'volclog-agent';
+  const binaryName = normalizedPlatform === 'windows' ? 'volclog-human.exe' : 'volclog-human';
   const archiveName =
     normalizedPlatform === 'windows'
-      ? `volclog-agent_${normalizedPlatform}_${normalizedArch}.zip`
-      : `volclog-agent_${normalizedPlatform}_${normalizedArch}.tar.gz`;
-  const binaryDir = path.join(packageRoot, '.volclog-agent', 'bin');
+      ? `volclog-human_${normalizedPlatform}_${normalizedArch}.zip`
+      : `volclog-human_${normalizedPlatform}_${normalizedArch}.tar.gz`;
+  const binaryDir = path.join(packageRoot, '.volclog-human', 'bin');
   const binaryPath = path.join(binaryDir, binaryName);
-  const downloadURL = env.VOLCLOG_AGENT_DOWNLOAD_URL || `${releaseBaseURL(pkgVersion, env)}/${archiveName}`;
+  const downloadURL = env.VOLCLOG_HUMAN_DOWNLOAD_URL || `${releaseBaseURL(pkgVersion, env)}/${archiveName}`;
   const sha256URL = `${downloadURL}.sha256`;
 
   return {
@@ -140,14 +140,14 @@ function extractArchive(archivePath, destination, platform) {
 
 async function installBinary(options) {
   const plan = resolveInstallPlan(options);
-  if (process.env.VOLCLOG_NPM_SKIP_DOWNLOAD === '1' || process.env.VOLCLOG_AGENT_NPM_SKIP_DOWNLOAD === '1') {
+  if (process.env.VOLCLOG_NPM_SKIP_DOWNLOAD === '1' || process.env.VOLCLOG_HUMAN_NPM_SKIP_DOWNLOAD === '1') {
     return plan;
   }
   if (fs.existsSync(plan.binaryPath)) {
     return plan;
   }
 
-  const tmpRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'volclog-agent-npm-'));
+  const tmpRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'volclog-human-npm-'));
   try {
     const archivePath = path.join(tmpRoot, plan.archiveName);
     const shaPath = `${archivePath}.sha256`;

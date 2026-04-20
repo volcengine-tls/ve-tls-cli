@@ -2,12 +2,12 @@
 
 [中文版](README_CN.md) | [English](README.md)
 
-The official Volcengine TLS CLI for both human operators and AI agents. Agent and automation flows use the contract-first `tool / workflow / raw` path, while the full `volclog` edition still keeps human shortcuts for frequent interactive work.
+The official Volcengine TLS CLI. `volclog` is the default agent and automation edition with the contract-first `tool / workflow / raw` path, while `volclog-human` keeps the human shortcut layer for frequent interactive work.
 
 **What volclog provides**
 
 - **Agent-native contract path** — Use `tool describe/exec`, `workflow describe/exec`, and `raw` instead of guessing flags or request shapes.
-- **Dual editions** — Ship both `volclog` (full, human-friendly) and `volclog-agent` (agent/CI focused) while keeping the same `tool / workflow / raw` runtime semantics.
+- **Dual editions** — Ship both `volclog` (agent/CI focused) and `volclog-human` (human-friendly shortcut layer) while keeping the same `tool / workflow / raw` runtime semantics.
 - **Broad TLS coverage** — Covers projects, topics, indexes, search and analysis, alarms, host groups, collectors, ETL, consumer groups, and more.
 - **Safer execution flow** — `--dry-run`, structured envelopes, trace artifacts, and file delivery make preview, validation, and recovery easier.
 - **Flexible credential setup** — Supports local profiles, explicit region/endpoint, environment variables, and one-shot `--secrets-file` injection.
@@ -47,23 +47,24 @@ Before you start, make sure you have:
 
 This is the recommended path for Agent, CI, and automation.
 
+Commands in this section use `volclog` by default.
+
 #### 1. Install
 
-Recommended: install the dedicated agent edition binary:
+Recommended: install the default `volclog` binary:
 
 ```bash
 VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-VOLCLOG_EDITION=agent \
 bash scripts/install-binary.sh
 ```
 
-You can also pass the edition explicitly:
+You can also install the human shortcut edition explicitly:
 
 ```bash
-bash scripts/install-binary.sh --edition agent
+bash scripts/install-binary.sh --edition human
 ```
 
-`volclog-agent` only exposes:
+`volclog` only exposes:
 
 - `configure`
 - `doctor`
@@ -72,12 +73,13 @@ bash scripts/install-binary.sh --edition agent
 - `workflow`
 - `raw`
 
-If you install via npm, you can choose either edition:
+If you install via npm, install the default package first:
 
 ```bash
 npm install -g @volcengine-tls/volclog
-npm install -g @volcengine-tls/volclog-agent
 ```
+
+Install `@volcengine-tls/volclog-human` only if you explicitly need the human shortcut layer.
 
 #### 2. Configure And Verify
 
@@ -157,7 +159,7 @@ volclog tool exec project.describe-projects \
 
 ### Quick Start (Human Users)
 
-If you are working directly in a terminal and want the shortcut layer, install the full `volclog` binary.
+If you are working directly in a terminal and want the shortcut layer, install `volclog-human`.
 
 #### 1. Install
 
@@ -165,14 +167,13 @@ If you are working directly in a terminal and want the shortcut layer, install t
 
 ```bash
 VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-bash scripts/install-binary.sh
+bash scripts/install-binary.sh --edition human
 ```
 
 **Option 2: Install via npm**
 
 ```bash
-npm install -g @volcengine-tls/volclog
-npm install -g @volcengine-tls/volclog-agent
+npm install -g @volcengine-tls/volclog-human
 ```
 
 **Option 3: Install with Go**
@@ -180,7 +181,7 @@ npm install -g @volcengine-tls/volclog-agent
 Requires Go 1.22+.
 
 ```bash
-go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
+go build -tags=human -o /usr/local/bin/volclog-human ./cmd/volclog
 ```
 
 **Option 4: Install from Local Source**
@@ -188,20 +189,20 @@ go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
 ```bash
 git clone https://github.com/volcengine-tls/ve-tls-cli.git
 cd ve-tls-cli
-bash scripts/install-local.sh
+VOLCLOG_EDITION=human bash scripts/install-local.sh
 ```
 
 #### 2. Configure Credentials
 
 ```bash
-volclog configure
+volclog-human configure
 ```
 
 #### 3. Start Using
 
 ```bash
-volclog project list
-volclog topic list --project-id <your-project-id>
+volclog-human project list
+volclog-human topic list --project-id <your-project-id>
 ```
 
 For the full shortcut layer, see [docs/cli-human-shortcuts.md](docs/cli-human-shortcuts.md).
@@ -232,7 +233,7 @@ npx @volcengine-tls/volclog skill install --dir <agent-skills-dir>
 
 ## Advanced & Best Practices
 
-- **Prefer `tool / workflow / raw` for agent flows** — Human shortcuts remain in the full edition, but they are not the default agent path.
+- **Prefer `tool / workflow / raw` for agent flows** — Human shortcuts remain in `volclog-human`, but they are not the default agent path.
 - **Read the contract before execution** — Start with `tool describe` or `workflow describe`, then build `context` and `input`.
 - **Use `--dry-run` for writes** — Preview request shape and runtime selection before sending mutating calls.
 - **Use file delivery for large results** — Prefer `--output-mode file --output-dir <writable-dir>` when stdout may be too large.

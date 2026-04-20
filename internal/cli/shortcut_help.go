@@ -1,4 +1,4 @@
-//go:build !agent
+//go:build human
 
 package cli
 
@@ -25,8 +25,8 @@ func shortcutCommandUsage(spec shortcutCommandSpec) string {
 	b.WriteString("  volclog " + spec.Group + " " + spec.Command + " [flags]\n\n")
 
 	b.WriteString("Agent:\n")
-	b.WriteString("  - 这是 human shortcut，不是 agent 主流程。\n")
-	b.WriteString("  - Agent 默认先走 volclog tool/workflow describe/exec；只有用户明确要求 shortcut flags 或模板时再留在这里。\n\n")
+	b.WriteString("  - 这是 volclog-human 提供的 human shortcut，不是默认 volclog 主流程。\n")
+	b.WriteString("  - 默认 volclog 先走 volclog tool/workflow describe/exec；只有用户明确要求 shortcut flags 或模板时再留在这里。\n\n")
 
 	if strings.TrimSpace(spec.Summary) != "" {
 		b.WriteString("Summary:\n")

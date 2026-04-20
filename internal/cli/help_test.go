@@ -1,4 +1,4 @@
-//go:build !agent
+//go:build human
 
 package cli
 
@@ -66,7 +66,7 @@ func TestUsageTextMentionsShortcutDescribeAndSkills(t *testing.T) {
 	text := usageText()
 	for _, want := range []string{
 		"project/topic/index/log 等 shortcut 仅供人工交互",
-		"volclog skill install --dir <agent-skills-dir>",
+		"volclog skill install --dir <skills-dir>",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q in usage text: %q", want, text)
@@ -170,7 +170,7 @@ func TestManualGroupHelpMentionsShortcutAndToolWorkflow(t *testing.T) {
 	out := stdout.String()
 	for _, want := range []string{
 		"Human Shortcut:",
-		"Agent 默认不要停在 shortcut 元命令",
+		"默认 volclog 不要停在 shortcut 元命令",
 		"volclog project create --describe",
 		"volclog project create --print-request-template=full",
 		"场景速选:",
@@ -252,7 +252,7 @@ func TestShortcutSubcommandHelpIsCommandScopedForTopicList(t *testing.T) {
 		"Usage:",
 		"volclog topic list",
 		"Agent:",
-		"Agent 默认先走 volclog tool/workflow describe/exec",
+		"默认 volclog 先走 volclog tool/workflow describe/exec",
 		"列出日志主题",
 		"Required:",
 		"(none)",
@@ -328,7 +328,7 @@ func TestShortcutSubcommandHelpIsCommandScopedForLogSearch(t *testing.T) {
 	out := stdout.String()
 	for _, want := range []string{
 		"volclog log search",
-		"这是 human shortcut，不是 agent 主流程",
+		"这是 volclog-human 提供的 human shortcut，不是默认 volclog 主流程",
 		"执行日志检索",
 		"--topic-id",
 		"--query",

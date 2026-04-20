@@ -34,7 +34,7 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"Read `tool describe` or `workflow describe` first",
 		"Do not use human shortcut commands as the primary agent flow.",
 		"Do not repeat schema details that already exist in `tool describe` or `workflow describe`.",
-		"prefer `volclog-agent` for agent or CI sessions",
+		"prefer `volclog` for agent or CI sessions",
 		"contract_cache_hint",
 		"volclog workflow describe <group.command>",
 		"references/routing.md",
@@ -110,7 +110,7 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"`error.kind`",
 		"`error.code`",
 		"`error.details`",
-		"`volclog-agent`",
+		"`volclog-human`",
 		"`HitCount`",
 		"`Histogram.TotalCount`",
 		"`ResultStatus=incomplete` means the service returned only a partial scan",
@@ -173,7 +173,7 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 		if principle == "host_managed_secret_injection_for_stateless_agents" {
 			foundStatelessSecretPrinciple = true
 		}
-		if principle == "prefer_volclog_agent_when_available" {
+		if principle == "prefer_volclog_default_when_available" {
 			foundAgentEditionPrinciple = true
 		}
 	}
@@ -184,7 +184,7 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 		t.Fatalf("manifest missing host_managed_secret_injection_for_stateless_agents principle: %+v", m)
 	}
 	if !foundAgentEditionPrinciple {
-		t.Fatalf("manifest missing prefer_volclog_agent_when_available principle: %+v", m)
+		t.Fatalf("manifest missing prefer_volclog_default_when_available principle: %+v", m)
 	}
 	for _, want := range []string{"routing", "workflows", "recovery", "traps"} {
 		if _, ok := m.Sources[want]; !ok {

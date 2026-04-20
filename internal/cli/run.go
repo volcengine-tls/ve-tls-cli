@@ -416,13 +416,13 @@ func usesFixedFileNotice(group string, rest []string) bool {
 func usageText() string {
 	var b strings.Builder
 	b.WriteString("Usage:\n")
-	if currentEdition() == cliEditionAgent {
+	if currentEdition() == cliEditionVolclog {
 		b.WriteString("  volclog [--profile <name>] [--output json|jsonl] [--output-mode stdout|file] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
 	} else {
 		b.WriteString("  volclog [--profile <name>] [--output json|jsonl|table] [--output-mode stdout|file] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
 	}
 	b.WriteString("主入口（Agent / 自动化优先）:\n")
-	if currentEdition() == cliEditionAgent {
+	if currentEdition() == cliEditionVolclog {
 		b.WriteString("  用 tool 发现公开 API 并查看契约；需要结构化执行时使用 tool exec。\n")
 		b.WriteString("  用 workflow 执行 CLI 提供的高层编排能力；只有已明确 method/path 时才使用 raw。\n")
 		b.WriteString("  tool/workflow 走 JSON input/context；raw 走 method/path 与 transport flags。\n\n")
@@ -448,12 +448,12 @@ func usageText() string {
 		b.WriteString(group.Description)
 		b.WriteString("\n")
 	}
-	if currentEdition() == cliEditionAgent {
-		b.WriteString("\n  可用 volclog skill install --dir <agent-skills-dir> 安装内置 Agent 技能。\n")
-		b.WriteString("  当前 edition 只暴露 configure/doctor/skill/tool/workflow/raw，不包含 human shortcut。\n\n")
+	if currentEdition() == cliEditionVolclog {
+		b.WriteString("\n  可用 volclog skill install --dir <skills-dir> 安装内置 volclog 技能。\n")
+		b.WriteString("  当前 volclog 只暴露 configure/doctor/skill/tool/workflow/raw；human shortcut 需切到 volclog-human（-tags=human）。\n\n")
 	} else {
-		b.WriteString("\n  project/topic/index/log 等 shortcut 仅供人工交互；Agent 不要把它们当主流程，也不要默认停在 shortcut 的 --describe / --print-request-template。\n")
-		b.WriteString("  可用 volclog skill install --dir <agent-skills-dir> 安装内置 Agent 技能。\n")
+		b.WriteString("\n  project/topic/index/log 等 shortcut 仅供人工交互；默认 volclog 不把它们当主流程，也不要默认停在 shortcut 的 --describe / --print-request-template。\n")
+		b.WriteString("  可用 volclog skill install --dir <skills-dir> 安装内置 volclog 技能。\n")
 		b.WriteString("  仓库内提供可直接安装的 skills/ 目录。\n\n")
 		b.WriteString("次级入口（仅在你已明确目标资源时使用）:\n")
 		for _, group := range cliGroups() {

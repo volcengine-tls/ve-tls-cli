@@ -1,16 +1,16 @@
-//go:build agent
+//go:build !human
 
 package cli
 
 import "testing"
 
-func TestAgentEditionUsageTextOmitsShortcutGuidance(t *testing.T) {
+func TestDefaultUsageTextOmitsShortcutGuidance(t *testing.T) {
 	text := usageText()
 	for _, want := range []string{
 		"\n  tool",
 		"\n  workflow",
 		"\n  raw",
-		"当前 edition 只暴露 configure/doctor/skill/tool/workflow/raw",
+		"当前 volclog 只暴露 configure/doctor/skill/tool/workflow/raw",
 		"[--output json|jsonl]",
 		"输出格式（tool/workflow/raw 默认用 json；需要面向机器的逐行结果时可用 jsonl）",
 	} {

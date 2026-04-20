@@ -2,16 +2,16 @@
 
 [中文版](README_CN.md) | [English](README.md)
 
-火山引擎 TLS 官方 CLI，兼顾人工操作与 AI Agent 使用场景。Agent 与自动化主路径使用契约优先的 `tool / workflow / raw`，full 版 `volclog` 则继续保留面向人工交互的 shortcut。
+火山引擎 TLS 官方 CLI。`volclog` 是默认的 agent/自动化版，主路径使用契约优先的 `tool / workflow / raw`；`volclog-human` 则保留面向人工交互的 shortcut。
 
 **volclog 提供什么？**
 
 - **Agent-native 契约主路径** — 通过 `tool describe/exec`、`workflow describe/exec` 与 `raw`，先读契约再执行，而不是先猜 flags 和请求体。
-- **双发行版** — 同时提供 `volclog`（full，人类友好）和 `volclog-agent`（agent/CI 优先），两者共享相同的 `tool / workflow / raw` 运行时语义。
+- **双发行版** — 同时提供 `volclog`（agent/CI 优先）和 `volclog-human`（人类 shortcut 版），两者共享相同的 `tool / workflow / raw` 运行时语义。
 - **TLS 覆盖范围完整** — 覆盖项目、主题、索引、检索分析、告警、机器组、采集规则、ETL、消费组等主要领域。
 - **执行路径更安全** — `--dry-run`、结构化 envelope、trace 工件与 file delivery 让预检查、验证和恢复更直接。
 - **凭证接入更灵活** — 支持本地 profile、显式 region/endpoint、环境变量，以及一次性的 `--secrets-file` 注入。
-- **分层使用** — 默认从 `tool / workflow / raw` 开始；只有你明确需要 full 版人工交互层时，才进入 shortcut。
+- **分层使用** — 默认从 `tool / workflow / raw` 开始；只有你明确需要 `volclog-human` 的人工交互层时，才进入 shortcut。
 
 ---
 
@@ -47,23 +47,24 @@
 
 这是 Agent、CI 和自动化推荐的主路径。
 
+这一节里的命令默认都用 `volclog`。
+
 #### 1. 安装
 
-推荐直接安装 agent 版二进制：
+推荐直接安装默认的 `volclog` 二进制：
 
 ```bash
 VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-VOLCLOG_EDITION=agent \
 bash scripts/install-binary.sh
 ```
 
-也可以显式传 edition：
+如果你明确需要人类 shortcut 版，可以显式指定：
 
 ```bash
-bash scripts/install-binary.sh --edition agent
+bash scripts/install-binary.sh --edition human
 ```
 
-`volclog-agent` 只暴露：
+`volclog` 只暴露：
 
 - `configure`
 - `doctor`
@@ -72,12 +73,13 @@ bash scripts/install-binary.sh --edition agent
 - `workflow`
 - `raw`
 
-如果你通过 npm 安装，现在可以按 edition 选择：
+如果你通过 npm 安装，优先先装默认包：
 
 ```bash
 npm install -g @volcengine-tls/volclog
-npm install -g @volcengine-tls/volclog-agent
 ```
+
+只有在你明确需要人工 shortcut 时，再额外安装 `@volcengine-tls/volclog-human`。
 
 #### 2. 配置并验证
 
@@ -161,7 +163,7 @@ volclog tool exec project.describe-projects \
 
 ### 快速开始（人类用户）
 
-如果你是在终端里直接操作，并且希望使用 shortcut 层，请安装 full 版 `volclog`。
+如果你是在终端里直接操作，并且希望使用 shortcut 层，请安装 `volclog-human`。
 
 #### 1. 安装
 
@@ -169,14 +171,13 @@ volclog tool exec project.describe-projects \
 
 ```bash
 VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-bash scripts/install-binary.sh
+bash scripts/install-binary.sh --edition human
 ```
 
 **方式二：npm 全局安装**
 
 ```bash
-npm install -g @volcengine-tls/volclog
-npm install -g @volcengine-tls/volclog-agent
+npm install -g @volcengine-tls/volclog-human
 ```
 
 **方式三：Go 安装**
@@ -184,7 +185,7 @@ npm install -g @volcengine-tls/volclog-agent
 需要 Go 1.22+。
 
 ```bash
-go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
+go build -tags=human -o /usr/local/bin/volclog-human ./cmd/volclog
 ```
 
 **方式四：本地源码安装**
@@ -192,23 +193,23 @@ go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
 ```bash
 git clone https://github.com/volcengine-tls/ve-tls-cli.git
 cd ve-tls-cli
-bash scripts/install-local.sh
+VOLCLOG_EDITION=human bash scripts/install-local.sh
 ```
 
 #### 2. 配置凭证
 
 ```bash
-volclog configure
+volclog-human configure
 ```
 
 #### 3. 开始使用
 
 ```bash
-volclog project list
-volclog topic list --project-id <your-project-id>
+volclog-human project list
+volclog-human topic list --project-id <your-project-id>
 ```
 
-如果你要使用 full 版 shortcut，请看 [docs/cli-human-shortcuts.md](docs/cli-human-shortcuts.md)。
+如果你要使用 `volclog-human` shortcut，请看 [docs/cli-human-shortcuts.md](docs/cli-human-shortcuts.md)。
 
 ---
 
@@ -236,7 +237,7 @@ npx @volcengine-tls/volclog skill install --dir <agent-skills-dir>
 
 ## 高级与最佳实践
 
-- **Agent 流程优先使用 `tool / workflow / raw`** — 人类 shortcut 仍保留在 full 版，但不是 agent 默认主路径。
+- **Agent 流程优先使用 `tool / workflow / raw`** — 人类 shortcut 仍保留在 `volclog-human`，但不是 agent 默认主路径。
 - **先看契约再执行** — 从 `tool describe` 或 `workflow describe` 开始，再准备 `context` 与 `input`。
 - **写操作优先 `--dry-run`** — 先预览请求形状和运行时选择，再真正发出变更请求。
 - **大结果优先 file delivery** — 当 stdout 可能过大时，优先使用 `--output-mode file --output-dir <writable-dir>`。

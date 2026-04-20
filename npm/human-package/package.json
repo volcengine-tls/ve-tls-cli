@@ -1,10 +1,10 @@
 {
-  "name": "@volcengine-tls/volclog-agent",
+  "name": "@volcengine-tls/volclog-human",
   "version": "1.0.1",
-  "description": "Volcengine TLS CLI agent edition",
+  "description": "Volcengine TLS CLI human edition",
   "license": "Apache-2.0",
   "bin": {
-    "volclog-agent": "bin/volclog-agent.js"
+    "volclog-human": "bin/volclog-human.js"
   },
   "files": [
     "bin",

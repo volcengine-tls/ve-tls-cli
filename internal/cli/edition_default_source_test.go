@@ -1,4 +1,4 @@
-//go:build agent
+//go:build !human
 
 package cli
 
@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestAgentEditionRunSourceDoesNotReferenceShortcutRunners(t *testing.T) {
+func TestDefaultEditionRunSourceDoesNotReferenceShortcutRunners(t *testing.T) {
 	root, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -30,12 +30,12 @@ func TestAgentEditionRunSourceDoesNotReferenceShortcutRunners(t *testing.T) {
 		"runAssistant(",
 	} {
 		if strings.Contains(text, forbidden) {
-			t.Fatalf("agent edition shared run.go should not directly reference %q", forbidden)
+			t.Fatalf("default volclog shared run.go should not directly reference %q", forbidden)
 		}
 	}
 }
 
-func TestAgentEditionSharedUsageSourceDoesNotDefineShortcutUsage(t *testing.T) {
+func TestDefaultEditionSharedUsageSourceDoesNotDefineShortcutUsage(t *testing.T) {
 	root, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -55,7 +55,7 @@ func TestAgentEditionSharedUsageSourceDoesNotDefineShortcutUsage(t *testing.T) {
 		"func usageCollector()",
 	} {
 		if strings.Contains(text, forbidden) {
-			t.Fatalf("agent edition shared usage.go should not define %q", forbidden)
+			t.Fatalf("default volclog shared usage.go should not define %q", forbidden)
 		}
 	}
 }

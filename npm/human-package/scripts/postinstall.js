@@ -16,6 +16,6 @@ async function main() {
 
 main().catch((error) => {
   const message = error && error.message ? error.message : String(error);
-  console.error(`[volclog-agent] postinstall failed: ${message}`);
+  console.error(`[volclog-human] postinstall failed: ${message}`);
   process.exit(1);
 });

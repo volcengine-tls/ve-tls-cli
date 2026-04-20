@@ -52,12 +52,12 @@ jobs:
           mkdir -p dist
           set -euo pipefail
           version="${{ github.ref_name }}"
-          for edition in full agent; do
+          for edition in default human; do
             bin_name="volclog"
             build_tags=()
-            if [ "$edition" = "agent" ]; then
-              bin_name="volclog-agent"
-              build_tags=(-tags=agent)
+            if [ "$edition" = "human" ]; then
+              bin_name="volclog-human"
+              build_tags=(-tags=human)
             fi
             out="dist/$bin_name"
             if [ "$GOOS" = "windows" ]; then
@@ -75,7 +75,7 @@ jobs:
               (cd "$pkg_dir" && tar -czf "$pkg" "$(basename "$out")")
             fi
             mv "$pkg_dir/$pkg" "dist/$pkg"
-            sha256sum "dist/$pkg" > "dist/${pkg}.sha256"
+            (cd dist && sha256sum "$pkg" > "${pkg}.sha256")
             rm -rf "$pkg_dir"
           done
       - name: Upload artifacts
@@ -86,12 +86,12 @@ jobs:
           path: |
             dist/volclog_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
             dist/volclog_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz.sha256
-            dist/volclog-agent_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
-            dist/volclog-agent_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz.sha256
+            dist/volclog-human_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
+            dist/volclog-human_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz.sha256
             dist/volclog_${{ matrix.goos }}_${{ matrix.goarch }}.zip
             dist/volclog_${{ matrix.goos }}_${{ matrix.goarch }}.zip.sha256
-            dist/volclog-agent_${{ matrix.goos }}_${{ matrix.goarch }}.zip
-            dist/volclog-agent_${{ matrix.goos }}_${{ matrix.goarch }}.zip.sha256
+            dist/volclog-human_${{ matrix.goos }}_${{ matrix.goarch }}.zip
+            dist/volclog-human_${{ matrix.goos }}_${{ matrix.goarch }}.zip.sha256
 
   release:
     needs: [build]
@@ -109,7 +109,7 @@ jobs:
             dist/volclog_*.tar.gz.sha256
             dist/volclog_*.zip
             dist/volclog_*.zip.sha256
-            dist/volclog-agent_*.tar.gz
-            dist/volclog-agent_*.tar.gz.sha256
-            dist/volclog-agent_*.zip
-            dist/volclog-agent_*.zip.sha256
+            dist/volclog-human_*.tar.gz
+            dist/volclog-human_*.tar.gz.sha256
+            dist/volclog-human_*.zip
+            dist/volclog-human_*.zip.sha256
