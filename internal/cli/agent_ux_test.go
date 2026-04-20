@@ -1,5 +1,3 @@
-//go:build !agent
-
 package cli
 
 import (
@@ -197,63 +195,6 @@ func TestDoctorResolvesCredRefCredentials(t *testing.T) {
 	}
 }
 
-func TestDoctorDoesNotDeriveRegionFromEndpoint(t *testing.T) {
-	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	cfg := `{
-  "version": 1,
-  "current_profile": "p1",
-  "profiles": {
-    "p1": {
-      "access_key_id": "ak-inline",
-      "secret_access_key": "sk-inline",
-      "endpoint": "https://tls-cn-beijing.volces.com"
-    }
-  }
-}`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "")
-	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "")
-	t.Setenv("VOLCENGINE_TOKEN", "")
-	t.Setenv("VOLCENGINE_REGION", "")
-	t.Setenv("VOLCENGINE_ENDPOINT", "")
-	t.Setenv("VOLCLOG_CONFIG", cfgPath)
-
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{"doctor"}, &stdout, &stderr)
-	if code != 2 {
-		t.Fatalf("unexpected exit code: %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
-	}
-	var v map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &v); err != nil {
-		t.Fatalf("invalid json: %v stdout=%s", err, stdout.String())
-	}
-	checks, ok := v["checks"].([]any)
-	if !ok {
-		t.Fatalf("missing checks: %v", v)
-	}
-	foundRegion := false
-	for _, c := range checks {
-		m, ok := c.(map[string]any)
-		if !ok {
-			continue
-		}
-		if m["name"] == "region_present" {
-			foundRegion = true
-			if okv, _ := m["ok"].(bool); okv {
-				t.Fatalf("expected region_present=false: %v", m)
-			}
-			if detail, _ := m["detail"].(string); detail != "" {
-				t.Fatalf("expected empty region detail, got %q", detail)
-			}
-		}
-	}
-	if !foundRegion {
-		t.Fatalf("missing region_present check: %v", checks)
-	}
-}
-
 func TestDoctorOnlineUsesCredRefCredentials(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == "" {
@@ -332,7 +273,7 @@ func TestDoctorOnlineUsesCredRefCredentials(t *testing.T) {
 	}
 }
 
-func TestRawAllowsTrailingDryRunGlobalFlag(t *testing.T) {
+func TestAPICallAllowsTrailingDryRunGlobalFlag(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
@@ -341,7 +282,7 @@ func TestRawAllowsTrailingDryRunGlobalFlag(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"raw", "--method", "GET", "--path", "/DescribeProjects", "--dry-run"}, &stdout, &stderr)
+	code := Run([]string{"api", "call", "--method", "GET", "--path", "/DescribeProjects", "--dry-run"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit code: %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -358,12 +299,27 @@ func TestRawAllowsTrailingDryRunGlobalFlag(t *testing.T) {
 	}
 }
 
-func TestToolDescribeRejectsTrailingOutputFileGlobals(t *testing.T) {
+func TestAPIGeneratedAllowsTrailingOutputFileGlobals(t *testing.T) {
+	dir := t.TempDir()
+	outFile := filepath.Join(dir, "describe.json")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"tool", "describe", "project.create", "--output-mode", "file", "--output-file", filepath.Join(t.TempDir(), "describe.json")}, &stdout, &stderr)
-	if code == 0 {
-		t.Fatalf("expected output-file to be rejected stdout=%q stderr=%q", stdout.String(), stderr.String())
+	code := Run([]string{"api", "project", "CreateProject", "--describe", "--output-mode", "file", "--output-file", outFile}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("unexpected exit code: %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if stdout.String() != outFile+"\n" {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+	if _, err := os.Stat(outFile); err != nil {
+		t.Fatalf("expected output file: %v", err)
+	}
+	b, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("read output file: %v", err)
+	}
+	if !bytes.Contains(b, []byte(`"action": "CreateProject"`)) {
+		t.Fatalf("unexpected output file content: %s", string(b))
 	}
 }
 
@@ -447,27 +403,6 @@ func TestExtractTrailingGlobalsAllowsShortcutJMESFilter(t *testing.T) {
 	}
 	if merged.DryRun {
 		t.Fatalf("shortcut trailing globals should not enable dry-run")
-	}
-}
-
-func TestAllowsTrailingDryRunScope(t *testing.T) {
-	if !allowsTrailingDryRun("raw", []string{"--method", "GET"}) {
-		t.Fatalf("expected raw to allow trailing dry-run")
-	}
-	if !allowsTrailingDryRun("tool", []string{"exec", "topic.create"}) {
-		t.Fatalf("expected tool exec to allow trailing dry-run")
-	}
-	if allowsTrailingDryRun("tool", []string{"describe", "topic.create"}) {
-		t.Fatalf("expected tool describe to reject trailing dry-run")
-	}
-	if !allowsTrailingDryRun("workflow", []string{"exec", "log.export"}) {
-		t.Fatalf("expected workflow exec to allow trailing dry-run")
-	}
-	if allowsTrailingDryRun("workflow", []string{"describe", "log.export"}) {
-		t.Fatalf("expected workflow describe to reject trailing dry-run")
-	}
-	if allowsTrailingDryRun("project", []string{"list"}) {
-		t.Fatalf("expected shortcut groups to reject trailing dry-run")
 	}
 }
 

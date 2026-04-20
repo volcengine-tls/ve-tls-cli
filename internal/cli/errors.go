@@ -6,8 +6,6 @@ import (
 	"errors"
 	"io"
 	"strings"
-
-	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
 type errPayload struct {
@@ -17,22 +15,6 @@ type errPayload struct {
 	StatusCode   int    `json:"statusCode,omitempty"`
 	Kind         string `json:"kind,omitempty"`
 	Hint         string `json:"hint,omitempty"`
-}
-
-type removedCommandError struct {
-	Command string
-	Hint    string
-}
-
-func (e *removedCommandError) Error() string {
-	return "legacy command removed: " + strings.TrimSpace(e.Command)
-}
-
-func removedLegacyCommandError(command string, hint string) error {
-	return &removedCommandError{
-		Command: strings.TrimSpace(command),
-		Hint:    strings.TrimSpace(hint),
-	}
 }
 
 func writeCLIError(w io.Writer, err error, requestID string, statusCode int, kind string, hint string) {
@@ -57,19 +39,6 @@ func writeCLIError(w io.Writer, err error, requestID string, statusCode int, kin
 
 func classifyError(err error, requestID string, statusCode int, group string) (errPayload, int) {
 	msg := strings.TrimSpace(err.Error())
-	var removed *removedCommandError
-	if errors.As(err, &removed) {
-		hint := strings.TrimSpace(removed.Hint)
-		if hint == "" {
-			hint = "use 'volclog tool list' or 'volclog raw --method <METHOD> --path <PATH>'"
-		}
-		return errPayload{
-			RequestID:  requestID,
-			StatusCode: statusCode,
-			Kind:       "usage",
-			Hint:       hint,
-		}, 1
-	}
 	if he, ok := isHTTPError(err); ok {
 		kind := "server"
 		hint := ""
@@ -96,44 +65,20 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 	if strings.HasPrefix(msg, "missing --") ||
 		strings.HasPrefix(msg, "unknown flag:") ||
 		strings.HasPrefix(msg, "unknown api group:") ||
-		strings.Contains(msg, "must use file://") ||
-		strings.Contains(msg, "inline JSON object") ||
-		strings.Contains(msg, "json must be object") ||
 		strings.HasPrefix(msg, "action not found:") ||
 		strings.HasPrefix(msg, "group not found:") ||
 		(strings.Contains(msg, "unknown ") && strings.Contains(msg, " command:")) {
-		hint := "start with 'volclog tool list' or inspect 'volclog tool describe <group.action>'"
+		hint := "start with 'volclog capabilities --view text' or inspect 'volclog api <group> <action> --describe'"
 		if strings.HasPrefix(msg, "missing --") || strings.HasPrefix(msg, "unknown flag:") {
-			hint = "inspect constraints with 'volclog tool describe <group.action>' or run --help"
+			hint = "inspect constraints with 'volclog api <group> <action> --describe' or run --help"
 			if flag := strings.TrimSpace(strings.TrimPrefix(msg, "unknown flag:")); isGlobalFlagName(flag) {
 				hint = globalFlagPositionHint(flag, group)
 			}
-		} else if strings.Contains(msg, "must use file://") || strings.Contains(msg, "inline JSON object") || strings.Contains(msg, "json must be object") {
-			hint = "use file://ctx.json, -, or inline JSON object with 'volclog tool exec <group.action>'; tool exec also accepts flat JSON when fields map cleanly to query/path/header/body"
 		}
 		return errPayload{
 			RequestID:  requestID,
 			StatusCode: statusCode,
 			Kind:       "usage",
-			Hint:       hint,
-		}, 1
-	}
-	if strings.HasPrefix(msg, "missing required field:") ||
-		strings.HasPrefix(msg, "workflow input missing required fields:") ||
-		strings.HasPrefix(msg, "flat input contains unknown fields:") ||
-		strings.HasPrefix(msg, "conflicting profile selectors:") ||
-		strings.HasPrefix(msg, "conflicting runtime selectors:") ||
-		strings.HasPrefix(msg, "result too large for stdout;") {
-		hint := "inspect the contract with 'volclog tool describe <group.action>' or 'volclog workflow describe <group.command>' and align the JSON input/context fields"
-		if strings.HasPrefix(msg, "conflicting profile selectors:") || strings.HasPrefix(msg, "conflicting runtime selectors:") {
-			hint = "use exactly one runtime selector: --profile, --secrets-file, context.profile, or context.secrets_file"
-		} else if strings.HasPrefix(msg, "result too large for stdout;") {
-			hint = "rerun with --output-dir <writable-dir> to allow file_auto, or reduce stdout with --jmes-filter / execution.projection"
-		}
-		return errPayload{
-			RequestID:  requestID,
-			StatusCode: statusCode,
-			Kind:       "validation",
 			Hint:       hint,
 		}, 1
 	}
@@ -188,9 +133,6 @@ func globalFlagPositionHint(flag string, group string) string {
 			break
 		}
 	}
-	if flag == "--output-file" {
-		usage = "--output-file <path>"
-	}
 	example := "volclog " + usage
 	if group != "" {
 		example += " " + group + " ..."
@@ -199,26 +141,10 @@ func globalFlagPositionHint(flag string, group string) string {
 	return "flag " + flag + " is global and position-sensitive; move it before the group, e.g. '" + example + " <group> ...'"
 }
 
-func writeStructuredError(stdout, stderr io.Writer, err error, requestID string, statusCode int, group string, env map[string]any) int {
-	payload, code := classifyError(err, requestID, statusCode, group)
-	if env != nil {
-		if err2 := output.Write(stdout, env, output.FormatJSON); err2 != nil {
-			writeCLIError(stderr, err2, payload.RequestID, payload.StatusCode, "decode", "output write failed")
-			return 3
-		}
-		return code
-	}
-	writeCLIError(stderr, err, payload.RequestID, payload.StatusCode, payload.Kind, payload.Hint)
-	return code
-}
-
 func isGlobalFlagName(flag string) bool {
 	flag = strings.TrimSpace(flag)
 	if flag == "" {
 		return false
-	}
-	if flag == "--output-file" {
-		return true
 	}
 	for _, name := range cliGlobalFlags() {
 		if flag == name {

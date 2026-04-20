@@ -64,7 +64,6 @@ func prepareSpecialIORequest(meta apiIOMeta, header map[string]string, body []by
 		if err != nil {
 			return nil, nil, nil, true, err
 		}
-		applyPutLogsStatsHeaders(outHeader, list)
 		compression := normalizeCompression(outHeader["x-tls-compresstype"])
 		encoded, rawSize, err := tlssdk.GetPutLogsBody(compression, list)
 		if err != nil {
@@ -496,43 +495,6 @@ func cloneStringMap(in map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
-}
-
-func applyPutLogsStatsHeaders(header map[string]string, list *tlspb.LogGroupList) {
-	count, earliest, latest, ok := summarizePutLogs(list)
-	header["log-count"] = strconv.Itoa(count)
-	if !ok {
-		delete(header, "earliest-log-time")
-		delete(header, "latest-log-time")
-		return
-	}
-	header["earliest-log-time"] = strconv.FormatInt(earliest, 10)
-	header["latest-log-time"] = strconv.FormatInt(latest, 10)
-}
-
-func summarizePutLogs(list *tlspb.LogGroupList) (count int, earliest int64, latest int64, ok bool) {
-	if list == nil {
-		return 0, 0, 0, false
-	}
-	for _, group := range list.LogGroups {
-		if group == nil {
-			continue
-		}
-		for _, logItem := range group.Logs {
-			if logItem == nil {
-				continue
-			}
-			count++
-			if !ok || logItem.Time < earliest {
-				earliest = logItem.Time
-			}
-			if !ok || logItem.Time > latest {
-				latest = logItem.Time
-			}
-			ok = true
-		}
-	}
-	return count, earliest, latest, ok
 }
 
 func normalizeCompression(s string) string {

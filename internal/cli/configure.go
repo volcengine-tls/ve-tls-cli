@@ -14,7 +14,7 @@ func runConfigure(ctx *Context, args []string) (any, error) {
 	if err := ctx.LoadConfig(); err != nil {
 		return nil, err
 	}
-	return runSubcommandGroup(args, usageConfigure(), nil, nil, func(command string, commandArgs []string) (any, error) {
+	return runSubcommandGroup(args, usageConfigure(), nil, func(command string, commandArgs []string) (any, error) {
 		switch command {
 		case "set":
 			return configureSet(ctx, commandArgs)
@@ -173,6 +173,9 @@ func configureSet(ctx *Context, args []string) (any, error) {
 		TimeoutSeconds:  timeout,
 		CredRef:         strings.TrimSpace(credRef),
 	}
+	if p.Region == "" && p.Endpoint != "" {
+		p.Region = config.DeriveRegionFromEndpoint(p.Endpoint)
+	}
 	maskedAK := config.MaskAK(p.AccessKeyID)
 	credPresent := p.AccessKeyID != "" && p.SecretAccessKey != ""
 	if strings.TrimSpace(p.CredRef) != "" {
@@ -198,7 +201,7 @@ func configureSet(ctx *Context, args []string) (any, error) {
 		return nil, errors.New("missing required fields: --endpoint")
 	}
 	if p.Region == "" {
-		return nil, errors.New("missing required fields: --region")
+		return nil, errors.New("missing required fields: --region (or use tls-<region>.volces.com endpoint)")
 	}
 	ctx.cfg.PutProfile(name, p)
 	if ctx.cfg.CurrentProfile == "" {

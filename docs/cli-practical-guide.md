@@ -2,7 +2,7 @@
 
 > <u>***这篇文档不打算按 API 清单展开，而是想把几条最常见的 TLS 实战链路讲清楚：怎么接入、怎么排障、怎么导出、怎么让 Agent 少走弯路。***</u>
 
-> \[!NOTE]
+> [!NOTE]
 > **阅读指南**
 >
 > 这篇文章讲什么？
@@ -12,24 +12,23 @@
 > **看完能收获什么？**
 >
 > - 5 分钟完成安装、凭证配置与首次验证
-> - 理解 `tool list / tool describe / tool exec`、`workflow describe / workflow exec`、`raw` 三层 agent 主路径
-> - 先掌握 Agent/自动化怎么稳定发现、执行与落盘，再按需阅读 full 版的人类 shortcut 链路
+> - 理解 `shortcut -> api --describe -> api call` 的三层命令架构
+> - 掌握 3 条常用实战链路：新服务接入、线上排障、采集异常修复
 > - 明白 Agent 接入 `volclog` 后到底少猜了什么、少踩了什么坑
 >
-> \*\*预计阅读时间：\*\*通读 `18` 分钟 / 快速浏览 `8` 分钟 / 只看工作流 `10` 分钟
+> **预计阅读时间：**通读 `18` 分钟 / 快速浏览 `8` 分钟 / 只看工作流 `10` 分钟
 
-***
+---
 
 ## 概述
 
-`volclog` 是火山引擎 TLS（日志服务）官方 CLI。对 Agent/自动化来说，它的主路径是 `tool / workflow / raw`；对 full 版人工用户来说，仍然保留 `project list`、`topic create`、`log search` 这类 shortcut 入口。
+`volclog` 是火山引擎 TLS（日志服务）官方 CLI。它当然可以做 `project list`、`topic create`、`log search` 这类常规动作，但这篇文档不准备把它写成一份接口目录。
 
 更值得关注的是，下面这几件事在 `volclog` 里被放到了一条比较顺的执行路径上：
 
-- `tool list`、`tool describe`、`workflow describe`、`tool exec`、`workflow exec`、`--dry-run`：把“发现约束、校验请求、稳定执行”做成 CLI 原生能力
-- `raw`：在 method/path 已明确时保留 transport 级调用
+- `shortcut`：把高频场景压成更短、更稳的命令入口
+- `capabilities`、`--describe`、`--print-request-template`、`--dry-run`：把“发现约束、拿模板、校验请求”做成 CLI 原生能力
 - `skills`：把这些执行习惯交给 Agent，让它优先选对 group、少猜 body、遇到大结果自动落文件
-- `shortcut`：full 版的人类增强层，适合手工高频操作，但不再是 Agent 主路径
 
 对于已经习惯 Bash、curl 或友商 CLI 的用户来说，是否值得试，不太取决于“是不是又多了一条 `log search` 命令”，而更取决于下面这些场景能不能省事：
 
@@ -49,7 +48,7 @@ flowchart LR
     B --> B2["index"]
     B --> B3["collector"]
     B --> B4["host-group"]
-    B --> B5["log search / ingest"]
+    B --> B5["log search / put"]
 
     C --> C1["log search"]
     C --> C2["log histogram"]
@@ -58,11 +57,11 @@ flowchart LR
 
     D --> D1["host-group list/get"]
     D --> D2["collector list/get"]
-    D --> D3["bind / unbind (tool fallback)"]
-    D --> D4["host cleanup (tool fallback)"]
+    D --> D3["bind / unbind"]
+    D --> D4["delete-host"]
 
-    E["执行保障"] --> E1["tool list"]
-    E --> E2["tool describe"]
+    E["执行保障"] --> E1["capabilities"]
+    E --> E2["--describe"]
     E --> E3["--print-request-template"]
     E --> E4["--dry-run"]
     E --> E5["--output-mode file"]
@@ -71,21 +70,20 @@ flowchart LR
 
 一句话概括：
 
-**如果只是查一个资源，很多工具都能做；如果你经常要把几步 TLS 操作串起来做，`volclog`** **会更顺手一些。**
+**如果只是查一个资源，很多工具都能做；如果你经常要把几步 TLS 操作串起来做，`volclog` 会更顺手一些。**
 
 ## 为什么可能值得试试
 
 和常见的 TLS CLI、Shell 脚本相比，`volclog` 的差异不在覆盖范围，而在执行体验和失败成本。
 
-| 维度       | 常见 CLI / Bash 脚本     | `volclog`                                          |
-| -------- | -------------------- | -------------------------------------------------- |
-| Agent 主入口 | 通常只有资源 CRUD 或 transport | `tool / workflow / raw` 分层清晰，先发现契约再执行                       |
-| 人类高频入口   | 需要自己记 flags 或写脚本       | full 版保留 `shortcut`，但它不再承担 Agent 主路径                     |
-| 复杂请求体    | 需要翻 API 文档、手写 JSON   | `tool/workflow describe` 直接给契约；full 版 shortcut 额外提供模板 |
-| 执行前校验    | 往往直接发请求              | `--dry-run` 先在本地校验                                 |
-| 大结果处理    | 容易直接打 stdout 或自己分页导出 | `--output-mode file` + `--output-dir` 适合大结果，CLI 自动生成结果文件 |
-| Agent 接入 | 需要额外写 prompt/胶水层     | 内置 `skills/`，能把最佳实践直接交给 Agent                      |
-| 发现能力     | 靠文档和记忆               | `tool list` / `tool list <x>` 可直接探索 |
+| 维度 | 常见 CLI / Bash 脚本 | `volclog` |
+| --- | --- | --- |
+| 高阶入口 | 通常只有资源 CRUD | 有 `shortcut`，直接对准高频任务 |
+| 复杂请求体 | 需要翻 API 文档、手写 JSON | `--describe` + `--print-request-template` 直接给约束和模板 |
+| 执行前校验 | 往往直接发请求 | `--dry-run` 先在本地校验 |
+| 大结果处理 | 容易直接打 stdout 或自己分页导出 | `--output-mode file` 适合大结果，`log export` 已支持分页批次写文件 |
+| Agent 接入 | 需要额外写 prompt/胶水层 | 内置 `skills/`，能把最佳实践直接交给 Agent |
+| 发现能力 | 靠文档和记忆 | `capabilities --view groups` / `--group <x>` 可直接探索 |
 
 如果你的现状是：
 
@@ -95,7 +93,7 @@ flowchart LR
 
 那 `volclog` 更适合补上的是后两者。
 
-***
+---
 
 ## 5 分钟完成可用环境
 
@@ -109,19 +107,11 @@ flowchart LR
 VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash scripts/install-binary.sh
 ```
 
-如果你只需要 Agent/CI 命令面，可安装 `volclog-agent`：
-
-```bash
-VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download VOLCLOG_EDITION=agent bash scripts/install-binary.sh
-```
-
 如果你更习惯 npm：
 
 ```bash
 npm install -g @volcengine-tls/volclog
 ```
-
-注意：npm 当前安装的是 full 版 `volclog`，不是只保留 `configure / doctor / skill / tool / workflow / raw` 的 `volclog-agent`。
 
 如果你已经有 Go 1.22+，也可以：
 
@@ -159,7 +149,7 @@ volclog configure set \
 ```bash
 export VOLCENGINE_ACCESS_KEY_ID=<ak>
 export VOLCENGINE_ACCESS_KEY_SECRET=<sk>
-volclog tool exec project.describe-projects
+volclog project list
 ```
 
 ### Step 3：先跑健康检查
@@ -173,26 +163,10 @@ volclog doctor
 ### Step 4：做第一次真实请求
 
 ```bash
-volclog tool exec project.describe-projects \
-  --jmes-filter "data.Projects[].{ProjectId: ProjectId, ProjectName: ProjectName}"
+volclog project list --all
 ```
 
 如果这里都不通，不要继续看 `topic`、`index`、`log`，先回去修 `doctor` 暴露的问题。
-
-这里顺手记住两条执行语义：
-
-- `--jmes-filter` 作用于完整 CLI envelope，所以失败结果也可以直接筛 `error.kind`、`error.code`、`error.message`。
-- 如果目标字段真实存在但值为 `null`，stdout 会直接输出 `null`，这仍然是一次成功筛选，不要把它和 `filter matched no value` 混为一谈。
-
-失败 envelope 里的 `error` 现在是单层对象，优先读取：
-
-- `error.source`
-- `error.kind`
-- `error.code`
-- `error.message`
-- `error.requestId`
-- `error.statusCode`
-- `error.details`
 
 ### Step 5：按需安装 Agent Skills
 
@@ -213,66 +187,66 @@ npx @volcengine-tls/volclog skill install --dir /path/to/agent/global-skills
 安装到当前项目目录：
 
 ```bash
-volclog skill install --dir /path/to/project/.codex/skills
+volclog skill install --dir ./skills
 ```
 
 这一步重点不在“文件装到哪个目录”，而在于把下面这些执行习惯交给 Agent：
 
-- 先在 `tool / workflow / raw` 三个面里选对入口
-- 先看 `tool describe` 或 `workflow describe`
-- 写操作正式执行前先 `--dry-run`
-- 结果过大时优先 `--output-mode file --output-dir <writable-dir>`
-- method/path 明确时才退回 `raw`
+- 先选对 `group`
+- 先看 `--describe`
+- 复杂 body 先拿模板
+- 正式执行前先 `--dry-run`
+- 结果过大时优先 `--output-mode file`
 
-***
+---
 
-## 四层命令架构
+## 三层命令架构
 
-`volclog` 的命令设计遵循四层递进。对 Agent/自动化，前 3 层是主流程；对 full 版人工用户，第 4 层 shortcut 仍然是高频便利层。
+`volclog` 的命令设计遵循三层递进：
 
-### 第一层：Tool Contract
+### 第一层：Shortcut
 
-默认公开 API 主入口。
+适合高频场景，优先使用。
 
 例如：
 
 ```bash
-volclog tool list collector
-volclog tool describe collector.create-rule
-volclog tool describe collector.apply-rule-to-host-groups
+volclog project list --all
+volclog topic create --describe
+volclog log export --describe
+volclog collector bind-host-groups --describe
+```
+
+特点：
+
+- 命令短
+- 贴近任务语义
+- 是人类和 Agent 的第一优先级入口
+
+### 第二层：Generated API
+
+当 shortcut 没覆盖，或者你要精确控制某个 OpenAPI action 时，再进入这一层。
+
+例如：
+
+```bash
+volclog capabilities --group collector --view text
+volclog api collector CreateRule --describe
+volclog api host-group ApplyHostGroupToRules --print-request-template=full
 ```
 
 特点：
 
 - 与平台 action 一一对应
-- 可直接落到 `tool exec`
-- 可先用 `tool describe` 读取契约、输入编码提示和执行约束
-- 是 Agent 默认最应该先看的层
+- 能看到更完整的参数约束
+- 适合复杂 body 或低频动作
 
-### 第二层：Workflow Contract
-
-当需求本身就是 CLI 高层编排，而不是单个公开 API action 时，进入这一层。
-
-例如：
-
-```bash
-volclog workflow list log
-volclog workflow describe log.ingest
-volclog workflow describe log.export
-```
-
-特点：
-
-- 暴露 `log.ingest / log.export / log.export-analysis` 这类 CLI workflow
-- 仍然返回机器契约，适合 Agent 执行
-- 不混入公开 OpenAPI tool catalog
-
-### 第三层：Raw Transport
+### 第三层：Raw API
 
 只在你已经明确 `method + path` 时使用：
 
 ```bash
-volclog raw --method GET --path /DescribeProjects
+volclog api call --method GET --path /DescribeProjects
 ```
 
 特点：
@@ -281,33 +255,15 @@ volclog raw --method GET --path /DescribeProjects
 - 出错概率也最高
 - 不应该作为默认入口
 
-### 第四层：Shortcut（full 版人类增强层）
-
-适合高频场景，优先给人类使用。
-
-```bash
-volclog project list --all
-volclog topic create --describe
-volclog log export --describe
-volclog collector create --describe
-```
-
-特点：
-
-- 命令短
-- 贴近任务语义
-- 是 full 版人类的第一优先级入口
-- Agent 不应把 shortcut 当默认主流程；更完整的人类链路请看 [cli-human-shortcuts.md](cli-human-shortcuts.md)
-
 选择策略只有一句话：
 
-**Agent 默认应先** **`tool/workflow list -> describe -> exec`，只有在 method/path 已明确时才降级到** **`raw`；full 版人工用户再按需使用 shortcut。**
+**先 shortcut，再 `api --describe`，最后才是 `api call`。**
 
-***
+---
 
-## 三个实用工作流（full 版人类链路示例）
+## 三个实用工作流
 
-如果你平时更关心实战，可以直接从这一章开始看。这里继续用 full 版 shortcut 展示“人类在终端里怎么最快走通一条链路”；如果你是 Agent/CI，请把同一链路映射到前面的 `tool / workflow / raw` 主路径，shortcut 细节单独看 [cli-human-shortcuts.md](cli-human-shortcuts.md)。
+如果你平时更关心实战，可以直接从这一章开始看。
 
 ### 工作流 1：把一个新服务接入 TLS，并完成检索验证
 
@@ -367,24 +323,21 @@ volclog collector create --print-request-template=full > collector_req.json
 volclog --dry-run collector create --request file://collector_req.json
 volclog collector create --request file://collector_req.json
 
-volclog tool describe collector.apply-rule-to-host-groups
-volclog --dry-run tool exec collector.apply-rule-to-host-groups --context file://ctx.json --input file://bind_req.json
-volclog tool exec collector.apply-rule-to-host-groups --context file://ctx.json --input file://bind_req.json
+volclog collector bind-host-groups --describe
+volclog collector bind-host-groups --rule-id <RuleId> --host-group-ids '["<HostGroupId>"]'
 ```
 
 #### Step 6：先验证索引是否生效，再判断采集是否正常
 
 这里最好把两件事分开看：
 
- - `log ingest` 适合快速验证 topic 写入链路和索引检索是否正常
- - `log put` 更适合你已经按 PutLogs 结构准备好原始请求体的场景
- - 采集规则是否真的采到了机器日志，不能只靠手动写入判断
+- `log put` 适合验证 topic 写入链路和索引检索是否正常
+- 采集规则是否真的采到了机器日志，不能只靠 `log put` 判断
 
 如果你刚完成的是 `topic + index` 配置，最直接的办法是先手动写一条测试日志，确认这条日志能被检索到：
 
 ```bash
-printf 'volclog-smoke-check trace_id=smoke-001 status=ok\n' | \
-  volclog log ingest --topic-id <TopicId> --input - --input-format lines
+volclog log put --topic-id <TopicId> --request-format jsonl --request file://./smoke.jsonl
 ```
 
 然后马上检索确认：
@@ -424,8 +377,8 @@ volclog log search \
 如果这一步还没有结果，再去看配置细节：
 
 ```bash
-volclog collector get --rule-id <RuleId> --output-mode file --output-dir ./out
-volclog host-group get --host-group-id <HostGroupId> --output-mode file --output-dir ./out
+volclog collector get --rule-id <RuleId> --output-mode file --output-file ./collector_rule.json
+volclog host-group get --host-group-id <HostGroupId> --output-mode file --output-file ./host_group.json
 ```
 
 #### 这条链路里，`volclog` 顺手的地方
@@ -439,13 +392,14 @@ volclog host-group get --host-group-id <HostGroupId> --output-mode file --output
 安装好 `skills` 后，Agent 的典型执行顺序应该是：
 
 ```bash
-volclog tool list project
-volclog tool describe topic.create
-volclog tool describe index.create
-volclog tool describe host-group.describe-host-groups
-volclog tool describe collector.create
-volclog tool describe collector.apply-rule-to-host-groups
-volclog workflow describe log.ingest
+volclog capabilities --view groups
+volclog project list --describe
+volclog topic create --describe
+volclog index create --describe
+volclog host-group list --describe
+volclog collector create --describe
+volclog collector bind-host-groups --describe
+volclog log search --describe
 ```
 
 省心的地方主要在于：先用哪个 group、哪个动作、body 从哪里起步、哪些命令最好先 `--dry-run`，这些都更容易收敛下来。
@@ -488,7 +442,7 @@ volclog log histogram \
 #### Step 3：导出原始样本
 
 ```bash
-volclog --output jsonl --output-mode file --output-dir ./out \
+volclog --output jsonl --output-mode file --output-file ./error-samples.jsonl \
   log export \
   --topic-id <TopicId> \
   --query "level:error" \
@@ -501,7 +455,7 @@ volclog --output jsonl --output-mode file --output-dir ./out \
 #### Step 4：导出聚合分析结果
 
 ```bash
-volclog --output jsonl --output-mode file --output-dir ./out \
+volclog --output jsonl --output-mode file --output-file ./error-summary.jsonl \
   log export-analysis \
   --topic-id <TopicId> \
   --query "* | select status, count(*) as cnt group by status order by cnt desc limit 20" \
@@ -560,7 +514,7 @@ volclog host-group list --all \
 如果你怀疑返回对象层级复杂，不要硬读 stdout，直接把详情写文件：
 
 ```bash
-volclog --output-mode file --output-dir ./out \
+volclog --output-mode file --output-file ./host-group.json \
   host-group get --host-group-id <HostGroupId>
 ```
 
@@ -568,7 +522,7 @@ volclog --output-mode file --output-dir ./out \
 
 ```bash
 volclog collector list --all --project-id <ProjectId>
-volclog --output-mode file --output-dir ./out \
+volclog --output-mode file --output-file ./collector-rule.json \
   collector get --rule-id <RuleId>
 ```
 
@@ -577,30 +531,28 @@ volclog --output-mode file --output-dir ./out \
 从规则侧绑定机器组：
 
 ```bash
-volclog tool describe collector.apply-rule-to-host-groups
-volclog --dry-run tool exec collector.apply-rule-to-host-groups --context file://ctx.json --input file://bind_req.json
-volclog tool exec collector.apply-rule-to-host-groups --context file://ctx.json --input file://bind_req.json
+volclog collector bind-host-groups --describe
+volclog collector bind-host-groups --rule-id <RuleId> --host-group-ids '["<HostGroupId>"]'
 ```
 
 从机器组侧绑定规则：
 
 ```bash
-volclog tool describe host-group.apply-host-group-to-rules
-volclog --dry-run tool exec host-group.apply-host-group-to-rules --context file://ctx.json --input file://host_group_bind_req.json
-volclog tool exec host-group.apply-host-group-to-rules --context file://ctx.json --input file://host_group_bind_req.json
+volclog host-group bind-rules --describe
+volclog host-group bind-rules --host-group-id <HostGroupId> --rule-ids '["<RuleId>"]'
 ```
 
 解绑同理：
 
 ```bash
-volclog tool describe collector.delete-rule-from-host-groups
-volclog tool describe host-group.delete-host-group-from-rules
+volclog collector unbind-host-groups --rule-id <RuleId> --host-group-ids file://./host_group_ids.json
+volclog host-group unbind-rules --host-group-id <HostGroupId> --rule-ids file://./rule_ids.json
 ```
 
 #### Step 4：必要时清理失效主机
 
 ```bash
-volclog tool describe host-group.delete-host
+volclog host-group delete-host --host-group-id <HostGroupId> --ip <StaleIp>
 ```
 
 #### Step 5：回到日志层验证
@@ -621,15 +573,17 @@ volclog log search \
 这也是最适合交给 Agent 的场景之一。好的 Agent 不该直接猜 `/DescribeRules` 或随手拼 JSON，而应该：
 
 ```bash
+volclog capabilities --group host-group --view text
+volclog capabilities --group collector --view text
 volclog host-group list --describe
 volclog collector list --describe
-volclog tool describe collector.apply-rule-to-host-groups
-volclog tool describe host-group.apply-host-group-to-rules
+volclog collector bind-host-groups --describe
+volclog host-group bind-rules --describe
 ```
 
 这也是 `skills` 更实际的作用：不是替 Agent 执行，而是先把路走对。
 
-***
+---
 
 ## Agent 在这里能帮上什么忙
 
@@ -639,24 +593,25 @@ volclog tool describe host-group.apply-host-group-to-rules
 
 没有 guidance 的 Agent，很容易把“看机器组和采集规则关系”误判成底层 API 探索问题。
 
-而安装了 `volclog-core` 之后，Agent 更容易先走：
+而安装了 `volclog-shared`、`volclog-host-group`、`volclog-collector` 之后，Agent 更容易先走：
 
 ```bash
-volclog tool list host-group
-volclog tool list collector
+volclog host-group list --describe
+volclog collector list --describe
 ```
 
-这样比直接跳到 `raw` 稳一些。
+这样比直接跳到 `api call` 稳一些。
 
 ### 2. 少做“复杂 body 从哪里起步”的试错
 
-像 `index create`、`collector create` 这类动作，费时间的通常是 body，不是动作名。
+像 `index create`、`collector create` 这类命令，费时间的通常是 body，不是动作名。
 
 `volclog` 的更优路径是：
 
 ```bash
-volclog tool describe collector.create --view full
-volclog --dry-run tool exec collector.create --input file://collector_req.json
+volclog collector create --describe
+volclog collector create --print-request-template=full
+volclog --dry-run collector create --request file://collector_req.json
 ```
 
 对 Agent 来说，这比“先猜一个 JSON，再被 `InvalidArgument` 打回”稳得多。
@@ -672,8 +627,8 @@ TLS 场景里比较常见的问题是：
 `volclog` 的建议路径是：
 
 ```bash
-volclog --output jsonl --output-mode file --output-dir ./out log export ...
-volclog --output jsonl --output-mode file --output-dir ./out log export-analysis ...
+volclog --output jsonl --output-mode file --output-file ./logs.jsonl log export ...
+volclog --output jsonl --output-mode file --output-file ./analysis.jsonl log export-analysis ...
 ```
 
 对 Agent 来说，这比“先搜索，再把大段结果塞进自己的上下文里处理”可控得多。
@@ -684,13 +639,13 @@ volclog --output jsonl --output-mode file --output-dir ./out log export-analysis
 
 `volclog` 文档和 skills 都应该强调：
 
-- 列表先看 `tool describe` 里的 `execution.supports_all`；只有为 `true` 时才考虑 `page.all`，否则用 workflow 自带翻页
+- 列表先考虑 `--all`
 - 深层对象优先 `--output-mode file`
 - 只拿关键字段时再加 `--jmes-filter`
 
 这通常不是风格偏好，而是正确性问题。
 
-***
+---
 
 ## Skills 与集成
 
@@ -715,28 +670,34 @@ npx @volcengine-tls/volclog skill install --dir /path/to/agent/global-skills
 适合团队仓库内固化：
 
 ```bash
-volclog skill install --dir /path/to/project/.codex/skills
+volclog skill install --dir ./skills
 ```
 
 同样可以写成：
 
 ```bash
-npx @volcengine-tls/volclog skill install --dir /path/to/project/.codex/skills
+npx @volcengine-tls/volclog skill install --dir ./skills
 ```
 
 ### 按需安装最小集合
 
-如果你只想先试一条完整链路，先装 `volclog-core` 就够了：
+如果你只想先试一条完整链路，建议先装这几个：
 
 ```bash
 volclog skill install \
-  --dir /path/to/project/.codex/skills \
-  --name volclog-core
+  --dir ./skills \
+  --name volclog-shared \
+  --name volclog-project \
+  --name volclog-topic \
+  --name volclog-index \
+  --name volclog-log \
+  --name volclog-host-group \
+  --name volclog-collector
 ```
 
-这个 skill 已经覆盖本文的三个核心工作流所需的路由、SOP 和恢复配方。
+这组 skill 已经足够覆盖本文的三个核心工作流。
 
-***
+---
 
 ## 常见误区
 
@@ -746,7 +707,7 @@ volclog skill install \
 
 ### 2. 直接猜 body，不走 `--describe`
 
-对 `index`、`collector`、低频 `tool action` 尤其危险。
+对 `index`、`collector`、低频 `api action` 尤其危险。
 
 ### 3. 列表动作忘记 `--all`
 
@@ -757,34 +718,31 @@ volclog skill install \
 更稳的默认姿势是：
 
 ```bash
---output-mode file --output-dir <writable-dir>
+--output-mode file --output-file <path>
 ```
 
 ### 5. 装了 skill，却没有把它当成执行规则
 
-`skill install` 的意义不只是把文件放进去，而是把“先选对 `tool / workflow / raw` 面、再 describe、再 exec、写操作先 dry-run”这套顺序交给 Agent。
+`skill install` 的意义不只是把文件放进去，而是把“先 shortcut、再 describe、再 template、再 dry-run”这套顺序交给 Agent。
 
-***
+---
 
-## 如果你只记住 7 条命令
+## 如果你只记住 6 条命令
 
 ```bash
 volclog doctor
-volclog tool list
-volclog tool describe <group.action>
-volclog workflow describe <group.workflow>
-volclog tool exec <group.action> --context file://ctx.json --input file://req.json
-volclog raw --method GET --path /DescribeProjects
-volclog --output-mode file --output-dir <writable-dir> <command>
-volclog skill install --dir /path/to/project/.codex/skills
+volclog capabilities --view groups
+volclog <shortcut> --describe
+volclog --dry-run <command>
+volclog --output-mode file --output-file <path> <command>
+volclog skill install --dir ./skills
 ```
 
 这六条命令背后，其实是一种比较朴素的用法：
 
-**不要只把** **`volclog`** **当作一个“能查日志的 CLI”，更可以把它当作一套把 TLS 工作流走顺的执行面。**
+**不要只把 `volclog` 当作一个“能查日志的 CLI”，更可以把它当作一套把 TLS 工作流走顺的执行面。**
 
 ## 进一步阅读
 
-- 基础安装与能力总览：[README\_CN.md](../README_CN.md)
-- Agent/自动化的参数、输出与恢复建议：[cli-best-practices.md](cli-best-practices.md)
-- full 版人类 shortcut 指南：[cli-human-shortcuts.md](cli-human-shortcuts.md)
+- 基础安装与能力总览：[README_CN.md](../README_CN.md)
+- 参数、输出与自动化建议：[cli-best-practices.md](cli-best-practices.md)

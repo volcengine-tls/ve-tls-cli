@@ -105,31 +105,13 @@ func loadAPICapabilities() (apiCapabilitiesDoc, error) {
 }
 
 func normalizeLoadedAPICapabilities(doc apiCapabilitiesDoc) apiCapabilitiesDoc {
-	filtered := make([]apiCapabilityCommand, 0, len(doc.Commands))
 	for i := range doc.Commands {
 		if summary := strings.TrimSpace(doc.Commands[i].Summary); summary != "" {
 			doc.Commands[i].Action = summary
 		}
-		if !isPublishedOfficialCommand(doc.Commands[i]) {
-			continue
-		}
 		enrichCapabilitySemantics(&doc.Commands[i])
-		filtered = append(filtered, doc.Commands[i])
 	}
-	doc.Commands = filtered
 	return doc
-}
-
-func isPublishedOfficialCommand(cmd apiCapabilityCommand) bool {
-	if len(sanitizeRequestParamsDocForOutput(cmd.RequestParamsDoc)) > 0 {
-		return true
-	}
-	switch strings.ToLower(strings.TrimSpace(cmd.Path)) {
-	case "/activetlsaccount", "/getaccountstatus", "/describecursortime", "/describeprocessorfunctions":
-		return true
-	default:
-		return false
-	}
 }
 
 func buildAPIIndex(doc apiCapabilitiesDoc) map[string]map[string][]apiActionOp {
@@ -238,6 +220,11 @@ func listGroupActions(group string, groupTitle string, actions map[string][]apiA
 		if desc := strings.TrimSpace(op.Cmd.Description); desc != "" {
 			b.WriteString(": ")
 			b.WriteString(desc)
+		}
+		if shortcuts := relatedShortcutLabelsForAPI(group, actionName); len(shortcuts) > 0 {
+			b.WriteString(" [shortcut: ")
+			b.WriteString(strings.Join(shortcuts, ", "))
+			b.WriteString("]")
 		}
 		b.WriteString("\n")
 	}

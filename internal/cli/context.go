@@ -15,25 +15,21 @@ import (
 )
 
 type Context struct {
-	Stdout             io.Writer
-	Stderr             io.Writer
-	Format             output.Format
-	FormatOverride     output.Format
-	OutputExplicit     bool
-	OutputMode         string
-	OutputModeExplicit bool
-	OutputDir          string
-	OutputFile         string
-	Profile            string
-	GlobalSecretsFile  string
-	Filter             string
-	TraceDir           string
-	TraceRedact        string
-	TracePath          string
-	RequestID          string
-	StatusCode         int
-	DryRun             bool
-	Action             string
+	Stdout      io.Writer
+	Stderr      io.Writer
+	Format      output.Format
+	OutputMode  string
+	OutputDir   string
+	OutputFile  string
+	Profile     string
+	Filter      string
+	TraceDir    string
+	TraceRedact string
+	TracePath   string
+	RequestID   string
+	StatusCode  int
+	DryRun      bool
+	Action      string
 
 	cfg       config.Config
 	cfgPath   string
@@ -313,23 +309,14 @@ func bytesTrimSpaceLocal(b []byte) []byte {
 	return b[i:j]
 }
 
-func (c *Context) validateDryRunScope(group string, rest []string) error {
+func (c *Context) validateDryRunScope(group string) error {
 	if !c.DryRun {
 		return nil
 	}
-	switch strings.TrimSpace(group) {
-	case "raw":
-		return nil
-	case "tool":
-		if len(rest) > 0 && strings.TrimSpace(rest[0]) == "exec" {
-			return nil
-		}
-	case "workflow":
-		if len(rest) > 0 && strings.TrimSpace(rest[0]) == "exec" {
-			return nil
-		}
+	if strings.TrimSpace(group) != "api" {
+		return errors.New("--dry-run currently supports api group only")
 	}
-	return errors.New("--dry-run currently supports raw, tool exec, and workflow exec only")
+	return nil
 }
 
 func (c *Context) Close() {

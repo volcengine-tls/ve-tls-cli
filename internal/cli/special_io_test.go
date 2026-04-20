@@ -64,50 +64,6 @@ func TestPrepareSpecialIORequest_PutLogsJSONEncodesProtobuf(t *testing.T) {
 	}
 }
 
-func TestPrepareSpecialIORequest_PutLogsAddsStatsHeaders(t *testing.T) {
-	meta := apiIOMeta{
-		Group:         "log",
-		Action:        "PutLogs",
-		Method:        "POST",
-		Path:          "/PutLogs",
-		RequestFormat: requestFormatJSON,
-	}
-	body := []byte(`{
-  "LogGroups": [
-    {
-      "Source": "host-1",
-      "Logs": [
-        {"Time": 1710000000000, "Contents": [{"Key":"msg","Value":"a"}]},
-        {"Time": 1710000002000, "Contents": [{"Key":"msg","Value":"b"}]}
-      ]
-    },
-    {
-      "Source": "host-2",
-      "Logs": [
-        {"Time": 1709999999000, "Contents": [{"Key":"msg","Value":"c"}]}
-      ]
-    }
-  ]
-}`)
-
-	gotHeader, _, _, handled, err := prepareSpecialIORequest(meta, nil, body)
-	if err != nil {
-		t.Fatalf("prepareSpecialIORequest error: %v", err)
-	}
-	if !handled {
-		t.Fatalf("expected request to be handled")
-	}
-	if gotHeader["log-count"] != "3" {
-		t.Fatalf("unexpected log-count: %q", gotHeader["log-count"])
-	}
-	if gotHeader["earliest-log-time"] != "1709999999000" {
-		t.Fatalf("unexpected earliest-log-time: %q", gotHeader["earliest-log-time"])
-	}
-	if gotHeader["latest-log-time"] != "1710000002000" {
-		t.Fatalf("unexpected latest-log-time: %q", gotHeader["latest-log-time"])
-	}
-}
-
 func TestPrepareSpecialIORequest_WebTracksJSONLEncodesJSONArray(t *testing.T) {
 	meta := apiIOMeta{
 		Group:         "log",

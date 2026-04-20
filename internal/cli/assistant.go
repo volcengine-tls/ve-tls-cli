@@ -1,5 +1,3 @@
-//go:build !agent
-
 package cli
 
 import (
@@ -22,7 +20,7 @@ import (
 )
 
 func runAssistant(ctx *Context, args []string) (any, error) {
-	return runSubcommandGroup(args, usageAssistant(), nil, shortcutCommandHelpLookup("assistant"), func(command string, commandArgs []string) (any, error) {
+	return runSubcommandGroup(args, usageAssistant(), nil, func(command string, commandArgs []string) (any, error) {
 		ctx.Action = "assistant." + strings.TrimSpace(command)
 		if out, handled, err := maybeHandleShortcutMeta("assistant", command, commandArgs); handled {
 			return out, err

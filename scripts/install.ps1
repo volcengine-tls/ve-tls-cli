@@ -1,6 +1,4 @@
 param(
-  [ValidateSet("full", "agent")]
-  [string]$Edition = $(if ($env:VOLCLOG_EDITION) { $env:VOLCLOG_EDITION } else { "full" }),
   [string]$BaseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download",
   [string]$InstallDir = "$env:LOCALAPPDATA\Programs\volclog"
 )
@@ -15,8 +13,7 @@ function Get-Arch {
 }
 
 $arch = Get-Arch
-$binName = if ($Edition -eq "agent") { "volclog-agent" } else { "volclog" }
-$pkg = "$binName" + "_windows_$arch.zip"
+$pkg = "volclog_windows_$arch.zip"
 $url = "$BaseUrl/$pkg"
 $shaUrl = "$url.sha256"
 
@@ -39,14 +36,14 @@ try {
   }
 
   Expand-Archive -Path $zipPath -DestinationPath $tmp.FullName -Force
-  $exePath = Join-Path $tmp.FullName ($binName + ".exe")
+  $exePath = Join-Path $tmp.FullName "volclog.exe"
   if (-not (Test-Path $exePath)) {
-    throw ($binName + ".exe not found in package")
+    throw "volclog.exe not found in package"
   }
-  Copy-Item -Force -Path $exePath -Destination (Join-Path $InstallDir ($binName + ".exe"))
+  Copy-Item -Force -Path $exePath -Destination (Join-Path $InstallDir "volclog.exe")
 
-  Write-Output ("installed: " + (Join-Path $InstallDir ($binName + ".exe")))
-  & (Join-Path $InstallDir ($binName + ".exe")) --version
+  Write-Output ("installed: " + (Join-Path $InstallDir "volclog.exe"))
+  & (Join-Path $InstallDir "volclog.exe") --version
   Write-Output ""
   Write-Output "Add to PATH (optional):"
   Write-Output "  setx PATH `"$InstallDir;$env:PATH`""

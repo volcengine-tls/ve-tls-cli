@@ -1,5 +1,3 @@
-//go:build !agent
-
 package cli
 
 import (
@@ -12,9 +10,9 @@ import (
 	"testing"
 )
 
-func TestRawErrorIsWrappedInEnvelope(t *testing.T) {
+func TestAPIErrorIsWrappedInEnvelope(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"raw", "--method", "POST", "--path", "/CreateProject", "--body", "file://req.json"}, &stdout, &stderr)
+	code := Run([]string{"api", "project", "CreateProject", "--request", "file://req.json"}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatalf("expected non-zero exit code")
 	}
@@ -37,7 +35,7 @@ func TestRawErrorIsWrappedInEnvelope(t *testing.T) {
 	}
 }
 
-func TestRawServerErrorIsWrappedInEnvelope(t *testing.T) {
+func TestAPIServerErrorIsWrappedInEnvelope(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("x-tls-requestid", "req-123")
 		w.WriteHeader(http.StatusConflict)
@@ -52,7 +50,7 @@ func TestRawServerErrorIsWrappedInEnvelope(t *testing.T) {
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"raw", "--method", "POST", "--path", "/CreateTopic", "--body", `{"TopicName":"demo"}`}, &stdout, &stderr)
+	code := Run([]string{"api", "call", "--method", "POST", "--path", "/CreateTopic", "--body", `{"TopicName":"demo"}`}, &stdout, &stderr)
 	if code != 2 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -78,63 +76,6 @@ func TestRawServerErrorIsWrappedInEnvelope(t *testing.T) {
 	}
 	if errObj["kind"] != "server" {
 		t.Fatalf("unexpected kind: %v", errObj["kind"])
-	}
-	if errObj["source"] != "upstream" {
-		t.Fatalf("unexpected source: %#v", errObj["source"])
-	}
-	if errObj["code"] != "TopicAlreadyExist" {
-		t.Fatalf("unexpected code: %#v", errObj["code"])
-	}
-	if errObj["message"] != "Topic already exists" {
-		t.Fatalf("unexpected message: %#v", errObj["message"])
-	}
-}
-
-func TestRawServerErrorWithNestedJSONMessageAddsUpstreamDetails(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("x-tls-requestid", "req-bad-body")
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"ErrorCode":"BadBodyParameter","ErrorMessage":"{\"ErrorCode\":\"BadBodyParameter\",\"ErrorMessage\":\"invalid body field\"}"}`))
-	}))
-	defer srv.Close()
-
-	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
-	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
-	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
-	t.Setenv("VOLCENGINE_ENDPOINT", srv.URL)
-	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
-
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{"raw", "--method", "POST", "--path", "/CreateTopic", "--body", `{"TopicName":"demo"}`}, &stdout, &stderr)
-	if code != 2 {
-		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-	}
-	if strings.TrimSpace(stderr.String()) != "" {
-		t.Fatalf("expected empty stderr, got %q", stderr.String())
-	}
-	var out map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
-		t.Fatalf("invalid stdout json: %v; stdout=%q", err, stdout.String())
-	}
-	errObj, ok := out["error"].(map[string]any)
-	if !ok {
-		t.Fatalf("missing error object: %v", out["error"])
-	}
-	if errObj["source"] != "upstream" {
-		t.Fatalf("unexpected source: %#v", errObj["source"])
-	}
-	if errObj["code"] != "BadBodyParameter" {
-		t.Fatalf("unexpected code: %#v", errObj["code"])
-	}
-	if errObj["message"] != "invalid body field" {
-		t.Fatalf("unexpected message: %#v", errObj["message"])
-	}
-	details, ok := errObj["details"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected upstream details, got %#v", errObj["details"])
-	}
-	if details["ErrorCode"] != "BadBodyParameter" || details["ErrorMessage"] != "invalid body field" {
-		t.Fatalf("unexpected details: %#v", details)
 	}
 }
 

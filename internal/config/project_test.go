@@ -28,7 +28,6 @@ func TestEffectiveProfileUsesDefaults(t *testing.T) {
 		SecretAccessKey: "sk",
 	})
 	p, err := EffectiveProfile(cfg, "default", ProfileDefaults{
-		Region:   "cn-beijing",
 		Endpoint: "https://tls-cn-beijing.volces.com",
 	})
 	if err != nil {

@@ -41,7 +41,7 @@ func TestClassifyError_UsageUnknownActionOrGroup(t *testing.T) {
 		if p.Kind != "usage" {
 			t.Fatalf("%q unexpected kind: %q", msg, p.Kind)
 		}
-		if !strings.Contains(p.Hint, "volclog tool list") {
+		if !strings.Contains(p.Hint, "volclog capabilities --view text") {
 			t.Fatalf("%q unexpected hint: %q", msg, p.Hint)
 		}
 	}
@@ -52,7 +52,7 @@ func TestClassifyError_UsageMissingFlagHasDescribeHint(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("unexpected code: %d", code)
 	}
-	if !strings.Contains(p.Hint, "volclog tool describe <group.action>") {
+	if !strings.Contains(p.Hint, "volclog api <group> <action> --describe") {
 		t.Fatalf("unexpected hint: %q", p.Hint)
 	}
 }
@@ -70,7 +70,7 @@ func TestClassifyError_GlobalFlagHasPositionHint(t *testing.T) {
 func TestRunMisplacedGlobalFlagHintIncludesFlagAndExample(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"configure", "set", "--output-file", "/tmp/out.json"}, &stdout, &stderr)
+	code := Run([]string{"capabilities", "--output-file", "/tmp/out.json"}, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("unexpected code: %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -85,52 +85,20 @@ func TestRunMisplacedGlobalFlagHintIncludesFlagAndExample(t *testing.T) {
 	if !strings.Contains(hint, "volclog --output-file") {
 		t.Fatalf("hint should include example: %q", hint)
 	}
-	if !strings.Contains(hint, "before 'configure'") {
+	if !strings.Contains(hint, "before 'capabilities'") {
 		t.Fatalf("hint should include group position: %q", hint)
 	}
 }
 
 func TestWriteCLIErrorDoesNotEscapeAngleBrackets(t *testing.T) {
 	var buf bytes.Buffer
-	writeCLIError(&buf, errString("bad args"), "", 0, "usage", "inspect constraints with 'volclog tool describe <group.action>' or run --help")
+	writeCLIError(&buf, errString("bad args"), "", 0, "usage", "inspect constraints with 'volclog api <group> <action> --describe' or run --help")
 	out := buf.String()
 	if strings.Contains(out, `\u003c`) || strings.Contains(out, `\u003e`) {
 		t.Fatalf("angle brackets should not be escaped: %q", out)
 	}
-	if !strings.Contains(out, "volclog tool describe <group.action>") {
+	if !strings.Contains(out, "volclog api <group> <action> --describe") {
 		t.Fatalf("expected raw angle bracket hint in output: %q", out)
-	}
-}
-
-func TestClassifyError_ToolExecRequiresFileURLIsUsage(t *testing.T) {
-	p, code := classifyError(errString("--context must use file://"), "", 0, "tool")
-	if code != 1 {
-		t.Fatalf("unexpected code: %d", code)
-	}
-	if p.Kind != "usage" {
-		t.Fatalf("unexpected kind: %q", p.Kind)
-	}
-	if !strings.Contains(p.Hint, "volclog tool exec") {
-		t.Fatalf("unexpected hint: %q", p.Hint)
-	}
-}
-
-func TestClassifyError_MissingRequiredFieldIsValidation(t *testing.T) {
-	cases := []string{
-		"missing required field: input.query.ProjectId",
-		"workflow input missing required fields: TopicId, Input",
-	}
-	for _, msg := range cases {
-		p, code := classifyError(errString(msg), "", 0, "tool")
-		if code != 1 {
-			t.Fatalf("%q unexpected code: %d", msg, code)
-		}
-		if p.Kind != "validation" {
-			t.Fatalf("%q unexpected kind: %q", msg, p.Kind)
-		}
-		if strings.TrimSpace(p.Hint) == "" {
-			t.Fatalf("%q expected validation hint", msg)
-		}
 	}
 }
 

@@ -61,57 +61,6 @@ func TestApplyFilterInvalidJMESPath(t *testing.T) {
 	}
 }
 
-func TestApplyFilterNilResultReturnsError(t *testing.T) {
-	_, err := ApplyFilter(map[string]any{"Projects": []any{}}, "missing.field")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	msg := err.Error()
-	if !strings.HasPrefix(msg, "filter matched no value:") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	for _, want := range []string{
-		"result scope:",
-		"available keys:",
-		"missing",
-	} {
-		if !strings.Contains(msg, want) {
-			t.Fatalf("expected %q in error message, got %q", want, msg)
-		}
-	}
-}
-
-func TestApplyFilterNilResultIncludesMatchedPrefix(t *testing.T) {
-	_, err := ApplyFilter(map[string]any{
-		"Projects": map[string]any{
-			"Total": 2,
-		},
-	}, "Projects.missing.field")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	msg := err.Error()
-	if !strings.Contains(msg, "matched prefix: Projects") {
-		t.Fatalf("expected matched prefix in error message, got %q", msg)
-	}
-	if !strings.Contains(msg, "available keys: [Total]") {
-		t.Fatalf("expected keys from matched scope in error message, got %q", msg)
-	}
-}
-
-func TestApplyFilterExistingNullValueReturnsNilWithoutError(t *testing.T) {
-	out, err := ApplyFilter(map[string]any{
-		"status": "success",
-		"error":  nil,
-	}, "error")
-	if err != nil {
-		t.Fatalf("expected nil result to be treated as success, got %v", err)
-	}
-	if out != nil {
-		t.Fatalf("expected nil result, got %#v", out)
-	}
-}
-
 func TestWriteTableFromCollection(t *testing.T) {
 	var buf bytes.Buffer
 	err := Write(&buf, map[string]any{

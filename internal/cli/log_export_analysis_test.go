@@ -1,5 +1,3 @@
-//go:build !agent
-
 package cli
 
 import (
@@ -175,7 +173,7 @@ func TestLogExportAnalysis_RejectsArrayRows(t *testing.T) {
 		t.Fatalf("invalid stdout json: %v; %q", err, stdout.String())
 	}
 	errObj, ok := out["error"].(map[string]any)
-	if !ok || !strings.Contains(toString(errObj["message"]), "invalid AnalysisResult.Data row") {
+	if !ok || !strings.Contains(toString(errObj["errorMessage"]), "invalid AnalysisResult.Data row") {
 		t.Fatalf("unexpected error object: %v", out["error"])
 	}
 }
@@ -213,12 +211,12 @@ func TestLogExportAnalysis_RejectsMaxPages(t *testing.T) {
 		t.Fatalf("invalid stdout json: %v; %q", err, stdout.String())
 	}
 	errObj, ok := out["error"].(map[string]any)
-	if !ok || !strings.Contains(toString(errObj["message"]), "--max-pages is not supported") {
+	if !ok || !strings.Contains(toString(errObj["errorMessage"]), "--max-pages is not supported") {
 		t.Fatalf("unexpected error object: %v", out["error"])
 	}
 }
 
-func TestShortcutDescribeLogExportAnalysisMentionsIndexIncrementalEffect(t *testing.T) {
+func TestLogExportAnalysisDescribeMentionsIndexIncrementalEffect(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"log", "export-analysis", "--describe"}, &stdout, &stderr)
 	if code != 0 {

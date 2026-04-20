@@ -7,18 +7,6 @@ import (
 	"strings"
 )
 
-func runtimeSelectorConflict(left string, right string) error {
-	return errors.New("conflicting runtime selectors: " + strings.TrimSpace(left) + " conflicts with " + strings.TrimSpace(right))
-}
-
-func profileSelector(flag string, value string) string {
-	return strings.TrimSpace(flag) + "=" + strings.TrimSpace(value)
-}
-
-func secretsFileSelector(flag string, value string) string {
-	return strings.TrimSpace(flag) + "=" + strings.TrimSpace(value)
-}
-
 func loadSecretsFile(path string) error {
 	p := strings.TrimSpace(path)
 	if p == "" {

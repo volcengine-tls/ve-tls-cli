@@ -28,8 +28,8 @@ func TestConfigure_ListAndDelete(t *testing.T) {
 		return m
 	}
 
-	run("configure", "set", "--profile", "tenant-a-cn", "--ak", "akA", "--sk", "skA", "--region", "cn-beijing", "--endpoint", "https://tls-cn-beijing.volces.com")
-	run("configure", "set", "--profile", "tenant-b-cn", "--ak", "akB", "--sk", "skB", "--region", "cn-beijing", "--endpoint", "https://tls-cn-beijing.volces.com")
+	run("configure", "set", "--profile", "tenant-a-cn", "--ak", "akA", "--sk", "skA", "--endpoint", "https://tls-cn-beijing.volces.com")
+	run("configure", "set", "--profile", "tenant-b-cn", "--ak", "akB", "--sk", "skB", "--endpoint", "https://tls-cn-beijing.volces.com")
 	run("configure", "use", "tenant-b-cn")
 
 	out := run("configure", "list")
@@ -94,14 +94,14 @@ func TestConfigure_DeletePrefixRequiresYes(t *testing.T) {
 		}
 	}
 
-	runOK("configure", "set", "--profile", "tenant-a-cn", "--ak", "akA", "--sk", "skA", "--region", "cn-beijing", "--endpoint", "https://tls-cn-beijing.volces.com")
-	runOK("configure", "set", "--profile", "tenant-a-sg", "--ak", "akA", "--sk", "skA", "--region", "ap-singapore-1", "--endpoint", "https://tls-ap-singapore-1.volces.com")
+	runOK("configure", "set", "--profile", "tenant-a-cn", "--ak", "akA", "--sk", "skA", "--endpoint", "https://tls-cn-beijing.volces.com")
+	runOK("configure", "set", "--profile", "tenant-a-sg", "--ak", "akA", "--sk", "skA", "--endpoint", "https://tls-ap-singapore-1.volces.com")
 
 	runErr("configure", "delete", "--prefix", "tenant-a")
 	runOK("configure", "delete", "--prefix", "tenant-a", "--yes")
 }
 
-func TestConfigure_CredRefReuseRequiresExplicitRegion(t *testing.T) {
+func TestConfigure_CredRefReuseAndDeriveRegionFromEndpoint(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "config.json")
 	t.Setenv("VOLCLOG_CONFIG", cfgPath)
@@ -120,7 +120,7 @@ func TestConfigure_CredRefReuseRequiresExplicitRegion(t *testing.T) {
 		return m
 	}
 
-	run("configure", "set", "--profile", "abc-bj", "--cred-ref", "ma-abc-root", "--ak", "akA", "--sk", "skA", "--region", "cn-beijing", "--endpoint", "https://tls-cn-beijing.volces.com")
+	run("configure", "set", "--profile", "abc-bj", "--cred-ref", "ma-abc-root", "--ak", "akA", "--sk", "skA", "--endpoint", "https://tls-cn-beijing.volces.com")
 	out := run("configure", "show", "--profile", "abc-bj")
 	if out["cred_ref"] != "ma-abc-root" {
 		t.Fatalf("cred_ref=%v", out["cred_ref"])
@@ -132,7 +132,7 @@ func TestConfigure_CredRefReuseRequiresExplicitRegion(t *testing.T) {
 		t.Fatalf("credential_present=%v", out["credential_present"])
 	}
 
-	run("configure", "set", "--profile", "abc-sg", "--cred-ref", "ma-abc-root", "--region", "ap-singapore-1", "--endpoint", "https://tls-ap-singapore-1.volces.com")
+	run("configure", "set", "--profile", "abc-sg", "--cred-ref", "ma-abc-root", "--endpoint", "https://tls-ap-singapore-1.volces.com")
 	out = run("configure", "show", "--profile", "abc-sg")
 	if out["cred_ref"] != "ma-abc-root" {
 		t.Fatalf("cred_ref=%v", out["cred_ref"])
@@ -142,28 +142,6 @@ func TestConfigure_CredRefReuseRequiresExplicitRegion(t *testing.T) {
 	}
 	if out["credential_present"] != true {
 		t.Fatalf("credential_present=%v", out["credential_present"])
-	}
-}
-
-func TestConfigure_SetRequiresExplicitRegionEvenWhenEndpointLooksCanonical(t *testing.T) {
-	tmp := t.TempDir()
-	cfgPath := filepath.Join(tmp, "config.json")
-	t.Setenv("VOLCLOG_CONFIG", cfgPath)
-
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{
-		"configure", "set",
-		"--profile", "abc-bj",
-		"--ak", "akA",
-		"--sk", "skA",
-		"--endpoint", "https://tls-cn-beijing.volces.com",
-	}, &stdout, &stderr)
-	if code == 0 {
-		t.Fatalf("expected non-zero exit; stdout=%q stderr=%q", stdout.String(), stderr.String())
-	}
-	out := stdout.String() + stderr.String()
-	if !strings.Contains(out, "missing required fields: --region") {
-		t.Fatalf("unexpected output: %q", out)
 	}
 }
 
@@ -186,7 +164,7 @@ func TestConfigure_ProfileAliasAddUse(t *testing.T) {
 		return m
 	}
 
-	run("configure", "profile", "add", "stage", "--ak", "akS", "--sk", "skS", "--region", "cn-beijing", "--endpoint", "https://tls-cn-beijing.volces.com")
+	run("configure", "profile", "add", "stage", "--ak", "akS", "--sk", "skS", "--endpoint", "https://tls-cn-beijing.volces.com")
 	out := run("configure", "profile", "use", "stage")
 	if out["current_profile"] != "stage" {
 		t.Fatalf("current_profile=%v", out["current_profile"])
@@ -212,8 +190,8 @@ func TestConfigure_ShowAndListExposeAgentContextFields(t *testing.T) {
 		return m
 	}
 
-	run("configure", "set", "--profile", "inline-cn", "--ak", "akA", "--sk", "skA", "--region", "cn-beijing", "--endpoint", "https://tls-cn-beijing.volces.com")
-	run("configure", "set", "--profile", "ref-cn", "--cred-ref", "ma-root", "--ak", "akR", "--sk", "skR", "--region", "cn-beijing", "--endpoint", "https://tls-cn-beijing.volces.com")
+	run("configure", "set", "--profile", "inline-cn", "--ak", "akA", "--sk", "skA", "--endpoint", "https://tls-cn-beijing.volces.com")
+	run("configure", "set", "--profile", "ref-cn", "--cred-ref", "ma-root", "--ak", "akR", "--sk", "skR", "--endpoint", "https://tls-cn-beijing.volces.com")
 
 	show := run("configure", "show", "--profile", "inline-cn")
 	if show["effective_profile"] != "inline-cn" {
@@ -277,7 +255,7 @@ func TestConfigure_CredDelete_SuccessAndInUseGuard(t *testing.T) {
 		return stdout.String() + stderr.String()
 	}
 
-	runOK("configure", "set", "--profile", "ref-cn", "--cred-ref", "ma-root", "--ak", "akR", "--sk", "skR", "--region", "cn-beijing", "--endpoint", "https://tls-cn-beijing.volces.com")
+	runOK("configure", "set", "--profile", "ref-cn", "--cred-ref", "ma-root", "--ak", "akR", "--sk", "skR", "--endpoint", "https://tls-cn-beijing.volces.com")
 
 	errOut := runErr("configure", "cred", "delete", "ma-root")
 	if !strings.Contains(errOut, "credential in use by profiles") {

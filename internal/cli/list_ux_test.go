@@ -1,5 +1,3 @@
-//go:build !agent
-
 package cli
 
 import (
@@ -180,5 +178,69 @@ func TestIndexCreateSuggestsClosestBodyField(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "EnableAutoIndex") {
 		t.Fatalf("expected suggestion in stdout: %s", stdout.String())
+	}
+}
+
+func TestAPIGeneratedDescribeProjectsAllAggregatesPages(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/DescribeProjects" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		switch r.URL.Query().Get("PageNumber") {
+		case "1":
+			_, _ = w.Write([]byte(`{"Projects":[{"ProjectId":"p1"},{"ProjectId":"p2"}],"Total":3}`))
+		case "2":
+			_, _ = w.Write([]byte(`{"Projects":[{"ProjectId":"p3"}],"Total":3}`))
+		default:
+			t.Fatalf("unexpected page number: %q", r.URL.Query().Get("PageNumber"))
+		}
+	})
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("listen tcp4 not permitted in this environment: %v", err)
+	}
+	srv := &http.Server{Handler: handler}
+	go func() {
+		_ = srv.Serve(ln)
+	}()
+	defer srv.Close()
+
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
+	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
+	t.Setenv("VOLCENGINE_ENDPOINT", "http://"+ln.Addr().String())
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"api", "project", "DescribeProjects", "--all", "--PageSize", "2"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var env map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("invalid json: %v stdout=%s", err, stdout.String())
+	}
+	data, ok := env["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing data: %v", env)
+	}
+	items, ok := data["Projects"].([]any)
+	if !ok || len(items) != 3 {
+		t.Fatalf("unexpected projects: %v", data["Projects"])
+	}
+}
+
+func TestAPIGeneratedSingularDescribeRejectsAll(t *testing.T) {
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
+	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
+	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"api", "project", "DescribeProject", "--project-id", "pid", "--all"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "paginated plural Describe actions") {
+		t.Fatalf("expected all-scope error: %s", stdout.String())
 	}
 }

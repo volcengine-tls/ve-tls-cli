@@ -1,6 +1,6 @@
 {
   "name": "@volcengine-tls/volclog",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "Volcengine TLS CLI with bundled Agent skill installer",
   "license": "MIT",
   "bin": {

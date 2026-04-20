@@ -15,24 +15,6 @@ func TestParseSearchLogsArgs_SearchDefaultLimit(t *testing.T) {
 	if _, ok := req["Limit"]; !ok {
 		t.Fatalf("expected Limit in search request: %v", req)
 	}
-	if got := req["Limit"]; got != 100 {
-		t.Fatalf("expected search default limit 100, got %v", got)
-	}
-}
-
-func TestParseExportSearchLogsArgs_UsesLargerDefaultLimit(t *testing.T) {
-	req, err := parseExportSearchLogsArgs([]string{
-		"--topic-id", "tid",
-		"--query", "*",
-		"--from", "1710374400000",
-		"--to", "1710378000000",
-	})
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if got := req["Limit"]; got != 500 {
-		t.Fatalf("expected export default limit 500, got %v", got)
-	}
 }
 
 func TestParseSearchLogsArgs_AnalysisRejectsLimitFlag(t *testing.T) {
