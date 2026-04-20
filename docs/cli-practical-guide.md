@@ -1,22 +1,26 @@
 # 把 TLS 装进终端：volclog CLI 实战指导
 
-> <u>***这篇文档不打算按 API 清单展开，而是想把几条最常见的 TLS 实战链路讲清楚：怎么接入、怎么排障、怎么导出、怎么让 Agent 少走弯路。***</u>
+> <u>***这篇文档只讲端到端实战链路：怎么接入、怎么排障、怎么导出、怎么把一条真实任务走通。稳定的 runtime 语义请看 `cli-best-practices.md`，full 版人工 shortcut 请看 `cli-human-shortcuts.md`。***</u>
 
 > \[!NOTE]
 > **阅读指南**
 >
-> 这篇文章讲什么？
+> 先看哪份文档：
 >
-> 这篇文档更关心 `volclog` 在真实使用里的样子：当 TLS 操作跨了多个资源、多个步骤、还夹着几段 JSON body 时，它怎么帮你把事情做顺，而不是只展示零散的 `list/create/search`。
+> - 想看安装和最短入口：回 [README.md](../README.md) / [README_CN.md](../README_CN.md)
+> - 想看参数、输出、错误、凭证等稳定规则：看 [cli-best-practices.md](cli-best-practices.md)
+> - 想看 full 版人工 shortcut：看 [cli-human-shortcuts.md](cli-human-shortcuts.md)
+>
+> 这篇文档本身只关心一件事：**把真实任务从头走到尾**。
 >
 > **看完能收获什么？**
 >
 > - 5 分钟完成安装、凭证配置与首次验证
 > - 理解 `tool list / tool describe / tool exec`、`workflow describe / workflow exec`、`raw` 三层 agent 主路径
-> - 先掌握 Agent/自动化怎么稳定发现、执行与落盘，再按需阅读 full 版的人类 shortcut 链路
+> - 看清三条最常见 TLS 实战链路如何落地
 > - 明白 Agent 接入 `volclog` 后到底少猜了什么、少踩了什么坑
 >
-> \*\*预计阅读时间：\*\*通读 `18` 分钟 / 快速浏览 `8` 分钟 / 只看工作流 `10` 分钟
+> **预计阅读时间：** 通读 `18` 分钟 / 快速浏览 `8` 分钟 / 只看工作流 `10` 分钟
 
 ***
 

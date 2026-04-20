@@ -1,11 +1,6 @@
 # volclog Full 版：人类 Shortcut 使用指南
 
-> 这篇文档只面向 **full 版 `volclog`** 的人工交互场景。  
-> 如果你是 Agent/CI，请优先看：
->
-> - [README.md](/Users/bytedance/workspace/src/sdk/github/ve-tls-cli/README.md)
-> - [README_CN.md](/Users/bytedance/workspace/src/sdk/github/ve-tls-cli/README_CN.md)
-> - [docs/cli-practical-guide.md](/Users/bytedance/workspace/src/sdk/github/ve-tls-cli/docs/cli-practical-guide.md)
+> 这篇文档只面向 **full 版 `volclog`** 的人工交互场景。Agent/CI 默认请走 `tool / workflow / raw`，不要把 shortcut 当主路径。
 
 ## 适用范围
 
