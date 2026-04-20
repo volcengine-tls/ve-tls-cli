@@ -1,3 +1,5 @@
+//go:build !agent
+
 package cli
 
 import (
@@ -153,5 +155,61 @@ func TestLogExport_FileModeAvoidsReturningInMemoryRows(t *testing.T) {
 	}
 	if _, err := os.Stat(ctx.OutputFile); err != nil {
 		t.Fatalf("expected output file to be written: %v", err)
+	}
+}
+
+func TestLogExport_UsesLargerDefaultBatchSizeThanSearch(t *testing.T) {
+	var gotLimit float64
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/SearchLogs" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		gotLimit, _ = body["Limit"].(float64)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"Logs":[],"ListOver":true,"Context":""}`))
+	})
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("listen tcp4 not permitted in this environment: %v", err)
+	}
+	srv := &http.Server{Handler: handler}
+	go func() {
+		_ = srv.Serve(ln)
+	}()
+	defer srv.Close()
+
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
+	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
+	t.Setenv("VOLCENGINE_ENDPOINT", "http://"+ln.Addr().String())
+	t.Setenv("VOLCLOG_CONFIG", t.TempDir()+"/config.json")
+
+	var stdout, stderr bytes.Buffer
+	ctx := newContext(&stdout, &stderr, output.FormatJSON, "", "")
+
+	out, err := logExport(ctx, []string{
+		"--topic-id", "tid",
+		"--query", "*",
+		"--from", "1710374400000",
+		"--to", "1710378000000",
+		"--max-pages", "1",
+	})
+	if err != nil {
+		t.Fatalf("logExport error: %v", err)
+	}
+	rows, ok := out.([]any)
+	if !ok {
+		t.Fatalf("expected rows slice, got %T", out)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("expected empty rows, got %v", rows)
+	}
+	if gotLimit != 500 {
+		t.Fatalf("expected export default limit 500, got %v", gotLimit)
 	}
 }

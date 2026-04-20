@@ -1,3 +1,5 @@
+//go:build !agent
+
 package cli
 
 import (
@@ -8,7 +10,7 @@ import (
 )
 
 func runIndex(ctx *Context, args []string) (any, error) {
-	return runSubcommandGroup(args, usageIndex(), nil, func(command string, commandArgs []string) (any, error) {
+	return runSubcommandGroup(args, usageIndex(), nil, shortcutCommandHelpLookup("index"), func(command string, commandArgs []string) (any, error) {
 		ctx.Action = "index." + strings.TrimSpace(command)
 		if out, handled, err := maybeHandleShortcutMeta("index", command, commandArgs); handled {
 			return out, err

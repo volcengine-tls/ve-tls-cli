@@ -12,7 +12,7 @@ import (
 )
 
 func runSkill(ctx *Context, args []string) (any, error) {
-	return runSubcommandGroup(args, usageSkill(), nil, func(command string, commandArgs []string) (any, error) {
+	return runSubcommandGroup(args, usageSkill(), nil, nil, func(command string, commandArgs []string) (any, error) {
 		ctx.Action = "skill." + strings.TrimSpace(command)
 		switch command {
 		case "list":

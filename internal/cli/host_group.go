@@ -1,3 +1,5 @@
+//go:build !agent
+
 package cli
 
 import (
@@ -8,7 +10,7 @@ import (
 )
 
 func runHostGroup(ctx *Context, args []string) (any, error) {
-	return runSubcommandGroup(args, usageHostGroup(), nil, func(command string, commandArgs []string) (any, error) {
+	return runSubcommandGroup(args, usageHostGroup(), nil, shortcutCommandHelpLookup("host-group"), func(command string, commandArgs []string) (any, error) {
 		ctx.Action = "host-group." + strings.TrimSpace(command)
 		if out, handled, err := maybeHandleShortcutMeta("host-group", command, commandArgs); handled {
 			return out, err
@@ -24,12 +26,6 @@ func runHostGroup(ctx *Context, args []string) (any, error) {
 			return hostGroupModify(ctx, commandArgs)
 		case "delete":
 			return hostGroupDelete(ctx, commandArgs)
-		case "bind-rules":
-			return hostGroupBindRules(ctx, commandArgs)
-		case "unbind-rules":
-			return hostGroupUnbindRules(ctx, commandArgs)
-		case "delete-host":
-			return hostGroupDeleteHost(ctx, commandArgs)
 		default:
 			return nil, errors.New("unknown host-group command: " + command)
 		}

@@ -1,3 +1,5 @@
+//go:build !agent
+
 package cli
 
 import (
@@ -9,7 +11,7 @@ import (
 )
 
 func runCollector(ctx *Context, args []string) (any, error) {
-	return runSubcommandGroup(args, usageCollector(), nil, func(command string, commandArgs []string) (any, error) {
+	return runSubcommandGroup(args, usageCollector(), nil, shortcutCommandHelpLookup("collector"), func(command string, commandArgs []string) (any, error) {
 		ctx.Action = "collector." + strings.TrimSpace(command)
 		if out, handled, err := maybeHandleShortcutMeta("collector", command, commandArgs); handled {
 			return out, err
@@ -25,10 +27,6 @@ func runCollector(ctx *Context, args []string) (any, error) {
 			return collectorModify(ctx, commandArgs)
 		case "delete":
 			return collectorDelete(ctx, commandArgs)
-		case "bind-host-groups":
-			return collectorBindHostGroups(ctx, commandArgs)
-		case "unbind-host-groups":
-			return collectorUnbindHostGroups(ctx, commandArgs)
 		default:
 			return nil, errors.New("unknown collector command: " + command)
 		}
