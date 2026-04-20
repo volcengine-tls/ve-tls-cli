@@ -1289,7 +1289,7 @@ func defaultToolContextSchema() map[string]any {
 				"description":    "Load credentials and defaults from a secrets file before applying the rest of the context.",
 				"when_to_use":    "Set this when credentials are stored in a file instead of relying on the active profile or environment variables.",
 				"default":        "Do not load an extra secrets file.",
-				"runtime_effect": "Calls loadSecretsFile before profile/region/endpoint overrides are applied.",
+				"runtime_effect": "Resolves profile/secrets selectors first; if this secrets_file wins, runtime loads supported VOLCENGINE_* values from the file before the request is built.",
 			},
 			"endpoint": map[string]any{
 				"type":           "string",
@@ -1302,7 +1302,7 @@ func defaultToolContextSchema() map[string]any {
 				"description":    "Control request/response tracing for tool execution.",
 				"when_to_use":    "Set this when you need transport traces for debugging, auditing, or acceptance verification.",
 				"default":        false,
-				"runtime_effect": "Enables trace capture, chooses the trace directory, and optionally adjusts redaction mode.",
+				"runtime_effect": "Enables trace capture, chooses the trace directory, and normalizes legacy strict/default redact inputs to the current on/off setting.",
 				"oneOf": []any{
 					map[string]any{
 						"type":        "boolean",

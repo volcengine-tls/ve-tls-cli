@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -247,10 +248,76 @@ func parsePutLogsInput(format requestFormat, body []byte) (*tlspb.LogGroupList, 
 	if len(bytesTrimSpaceLocal(body)) == 0 {
 		return out, nil
 	}
-	if err := json.Unmarshal(body, out); err != nil {
+	normalizedBody, err := normalizePutLogsObjectForms(body)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(normalizedBody, out); err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+func normalizePutLogsObjectForms(body []byte) ([]byte, error) {
+	trimmed := bytesTrimSpaceLocal(body)
+	if len(trimmed) == 0 {
+		return body, nil
+	}
+	v, err := util.UnmarshalJSON(trimmed)
+	if err != nil {
+		return nil, err
+	}
+	root, ok := v.(map[string]any)
+	if !ok {
+		return body, nil
+	}
+	groups, ok := root["LogGroups"].([]any)
+	if !ok {
+		return body, nil
+	}
+	for _, rawGroup := range groups {
+		group, ok := rawGroup.(map[string]any)
+		if !ok {
+			continue
+		}
+		if rawLogTags, exists := group["LogTags"]; exists {
+			group["LogTags"] = normalizeKVObjectField(rawLogTags)
+		}
+		logs, ok := group["Logs"].([]any)
+		if !ok {
+			continue
+		}
+		for _, rawLog := range logs {
+			logItem, ok := rawLog.(map[string]any)
+			if !ok {
+				continue
+			}
+			if rawContents, exists := logItem["Contents"]; exists {
+				logItem["Contents"] = normalizeKVObjectField(rawContents)
+			}
+		}
+	}
+	return json.Marshal(root)
+}
+
+func normalizeKVObjectField(v any) any {
+	obj, ok := v.(map[string]any)
+	if !ok {
+		return v
+	}
+	keys := make([]string, 0, len(obj))
+	for key := range obj {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	items := make([]map[string]string, 0, len(keys))
+	for _, key := range keys {
+		items = append(items, map[string]string{
+			"Key":   key,
+			"Value": toString(obj[key]),
+		})
+	}
+	return items
 }
 
 func parseWebTracksInput(format requestFormat, body []byte) (*tlssdk.WebTracksRequest, error) {

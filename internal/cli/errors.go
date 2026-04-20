@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
@@ -119,12 +120,18 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		}, 1
 	}
 	if strings.HasPrefix(msg, "missing required field:") ||
+		strings.HasPrefix(msg, "missing required fields:") ||
 		strings.HasPrefix(msg, "workflow input missing required fields:") ||
 		strings.HasPrefix(msg, "flat input contains unknown fields:") ||
 		strings.HasPrefix(msg, "conflicting profile selectors:") ||
 		strings.HasPrefix(msg, "conflicting runtime selectors:") ||
+		strings.Contains(msg, "must be json object") ||
+		strings.Contains(msg, "jsonl line must be object") ||
+		strings.Contains(msg, "json-array input must be json array") ||
+		strings.Contains(msg, "unsupported log contents type") ||
+		strings.HasPrefix(msg, "json: cannot unmarshal ") ||
 		strings.HasPrefix(msg, "result too large for stdout;") {
-		hint := "inspect the contract with 'volclog tool describe <group.action>' or 'volclog workflow describe <group.command>' and align the JSON input/context fields"
+		hint := validationHint(group, msg)
 		if strings.HasPrefix(msg, "conflicting profile selectors:") || strings.HasPrefix(msg, "conflicting runtime selectors:") {
 			hint = "use exactly one runtime selector: --profile, --secrets-file, context.profile, or context.secrets_file"
 		} else if strings.HasPrefix(msg, "result too large for stdout;") {
@@ -136,6 +143,70 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 			Kind:       "validation",
 			Hint:       hint,
 		}, 1
+	}
+	if strings.HasPrefix(msg, "execution.page.all is not supported for tool:") ||
+		strings.Contains(msg, "declares page.all support but runtime pagination metadata is unavailable") {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "unsupported_feature",
+			Hint:       "remove execution.page.all/--page-all, or switch to an action/workflow whose contract reports execution.supports_all=true",
+		}, 1
+	}
+	if strings.Contains(msg, "cannot be combined with file delivery") ||
+		strings.HasPrefix(msg, "--output-file is not supported for ") ||
+		strings.Contains(msg, "requires --output-mode file") ||
+		strings.Contains(msg, "cannot be used with PageNumber") ||
+		strings.Contains(msg, "cannot be used with Cursor") ||
+		strings.Contains(msg, "--all cannot be used with --page-number") ||
+		strings.Contains(msg, "--all cannot be used with --cursor") {
+		hint := "remove one of the conflicting output flags and retry"
+		if strings.Contains(msg, "PageNumber") || strings.Contains(msg, "Cursor") || strings.Contains(msg, "--page-number") || strings.Contains(msg, "--cursor") {
+			hint = "remove PageNumber/Cursor when execution.page.all or --page-all is enabled"
+		}
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "incompatible_flags",
+			Hint:       hint,
+		}, 1
+	}
+	var secretsErr *secretsFileError
+	if errors.As(err, &secretsErr) {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "config",
+			Hint:       "check --secrets-file path/content and ensure it sets supported VOLCENGINE_* variables",
+		}, 2
+	}
+	var pathErr *os.PathError
+	if msg == "missing writable output_dir" || errors.As(err, &pathErr) {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "filesystem",
+			Hint:       "provide a writable --output-dir or check the local file path and permissions",
+		}, 2
+	}
+	if strings.HasPrefix(msg, "unexpected list response") ||
+		strings.HasPrefix(msg, "unexpected list field:") ||
+		strings.HasPrefix(msg, "cannot infer list field for --all") ||
+		strings.HasPrefix(msg, "path still contains unresolved params") {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "decode",
+			Hint:       "inspect response shape or rerun with --dry-run / --trace-dir to confirm the request/response contract",
+		}, 3
+	}
+	if msg == "working directory not found" {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "filesystem",
+			Hint:       "check the current working directory and local filesystem permissions",
+		}, 2
 	}
 	if strings.HasPrefix(msg, "filter ") || msg == "empty filter" || strings.HasPrefix(msg, "invalid --jmes-filter") || strings.HasPrefix(msg, "invalid jmes-filter expression:") {
 		return errPayload{
@@ -157,8 +228,26 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		RequestID:  requestID,
 		StatusCode: statusCode,
 		Kind:       "unknown",
-		Hint:       "",
+		Hint:       "inspect error.message and rerun with --dry-run or --trace-dir when you need more detail",
 	}, 2
+}
+
+func validationHint(group string, msg string) string {
+	group = strings.TrimSpace(group)
+	switch {
+	case strings.HasPrefix(msg, "workflow input missing required fields:"):
+		return "inspect the contract with 'volclog workflow describe <group.command>' and align the JSON input/context fields"
+	case strings.HasPrefix(msg, "missing required field:"),
+		strings.HasPrefix(msg, "missing required fields:"),
+		strings.HasPrefix(msg, "flat input contains unknown fields:"):
+		return "inspect the contract with 'volclog tool describe <group.action>' and align the JSON input/context fields"
+	case group == "workflow":
+		return "inspect the contract with 'volclog workflow describe <group.command>' and align the JSON input/context fields"
+	case group == "tool":
+		return "inspect the contract with 'volclog tool describe <group.action>' and align the JSON input/context fields"
+	default:
+		return "inspect the contract with 'volclog tool describe <group.action>' or 'volclog workflow describe <group.command>' and align the JSON input/context fields"
+	}
 }
 
 func httpErrorCode(body []byte) string {

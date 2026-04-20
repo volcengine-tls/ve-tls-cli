@@ -112,11 +112,17 @@ func usageRaw() string {
   --header k=v
   --body <json|file://...|-> (agent alias: --input)
   --request-format <json|jsonl>
+  --output-mode <stdout|file>
+  --output-dir <path>
 
 调用方式:
   - path 必须是以 / 开头的 OpenAPI 路径
   - body 支持 inline JSON、file://...、-、裸文件路径
   - 为了兼容 tool/workflow 的迁移心智，raw 也接受 --input 作为 --body 的别名；不要同时传 --body 和 --input
+  - raw 的 --input/--body 只是 literal request body；即使是 GET，也不会像 tool exec 那样把 JSON 自动映射到 query/path/header
+  - raw --dry-run 只做 transport/local checks；它不会像 tool/workflow 那样校验 API 必填字段
+  - 大结果优先使用 --output-mode file --output-dir <writable-dir>
+  - --jmes-filter 命中 null 仍输出 null；缺字段或数组越界会报 filter matched no value
 
 Examples:
   tlsctl raw --method GET --path /DescribeProjects
@@ -211,10 +217,12 @@ Notes:
   - --context 可省略；省略时默认使用空对象 {}
   - --input 支持 file://...、-、inline JSON object
   - 业务请求字段放在 --input；运行时/鉴权/trace/output 控制放在 --context
+  - input/context 校验失败时优先回到 workflow describe；不要先去 tool describe 找 workflow 契约
   - execution.* 一律放在 context.execution；不要传独立 execution 文件
   - execution.projection / execution.artifact / execution.dry_run 语义与 tool exec 一致
   - 大结果优先使用 --output-mode file --output-dir <writable-dir>
   - 未显式指定 stdout/file 且 stdout 结果过大时，workflow exec 也可能自动改走 file_auto；若没有可写 output_dir，会直接提示补 --output-dir <writable-dir>
+  - --jmes-filter 命中 null 仍输出 null；缺字段或数组越界会报 filter matched no value
 `)
 }
 
@@ -274,10 +282,11 @@ Notes:
   - execution.* 一律放在 context.execution；不要传独立 execution 文件
   - 大结果优先使用 --output-mode file --output-dir <writable-dir> 或 execution.artifact
   - 未显式指定 stdout/file 且 stdout 结果过大时，tool exec 会自动改走 file_auto；若没有可写 output_dir，会直接提示补 --output-dir <writable-dir>
+  - --jmes-filter 命中 null 仍输出 null；缺字段或数组越界会报 filter matched no value
   - execution.projection 支持 "expr"、["expr"]、{"jmes":"expr"}
   - execution.artifact 支持 true、"/tmp/out.json"、{"path":"/tmp/out.json"}
   - execution.page.all 只在 tool describe 返回 execution.supports_all=true 时可用；它提高完整性，可能增加 payload 大小
-  - context.trace 支持 true、"/tmp/traces"、{"dir":"/tmp/traces","redact":"strict"}
+  - context.trace 支持 true、"/tmp/traces"、{"dir":"/tmp/traces","redact":"on"}；当前不区分 strict/default 模式
 `)
 }
 

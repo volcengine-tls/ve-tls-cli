@@ -8,6 +8,8 @@ import (
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
+const pageAllDefaultPageSize = 100
+
 func extractBoolFlag(args []string, flag string) ([]string, bool) {
 	out := make([]string, 0, len(args))
 	found := false
@@ -22,21 +24,14 @@ func extractBoolFlag(args []string, flag string) ([]string, bool) {
 }
 
 func listAllByPageNumber(ctx *Context, path string, baseQuery map[string]string, listField string) (map[string]any, error) {
-	query := cloneStringMap(baseQuery)
-	if strings.TrimSpace(query["PageNumber"]) != "" {
-		return nil, errors.New("--all cannot be used with --page-number")
+	query, pageSize, err := preparePageAllPageNumberQuery(baseQuery)
+	if err != nil {
+		return nil, errors.New(strings.ReplaceAll(err.Error(), "--page-all", "--all"))
 	}
-	if strings.TrimSpace(query["Cursor"]) != "" {
-		return nil, errors.New("--all cannot be used with --cursor")
-	}
-	pageSize := 20
-	if v, err := strconv.Atoi(strings.TrimSpace(query["PageSize"])); err == nil && v > 0 {
-		pageSize = v
-	}
-	query["PageSize"] = strconv.Itoa(pageSize)
 
 	all := make([]any, 0)
 	var last map[string]any
+	pageCount := 0
 	for page := 1; page <= 1000; page++ {
 		query["PageNumber"] = strconv.Itoa(page)
 		body, _ := util.MustJSON(map[string]any{})
@@ -49,6 +44,7 @@ func listAllByPageNumber(ctx *Context, path string, baseQuery map[string]string,
 			return nil, errors.New("unexpected list response")
 		}
 		last = resp
+		pageCount++
 		rows, ok := toAnySlice(resp[listField])
 		if !ok {
 			return nil, errors.New("unexpected list field: " + listField)
@@ -65,6 +61,7 @@ func listAllByPageNumber(ctx *Context, path string, baseQuery map[string]string,
 	if last == nil {
 		last = map[string]any{}
 	}
+	setPaginationMeta(ctx, pageCount, pageSize)
 	last[listField] = all
 	last["Total"] = len(all)
 	return last, nil
@@ -119,22 +116,15 @@ func generatedPaginationMode(op apiActionOp) string {
 }
 
 func generatedAllByPageNumber(ctx *Context, actionName string, path string, baseQuery map[string]string, header map[string]string, body []byte) (map[string]any, error) {
-	query := cloneStringMap(baseQuery)
-	if strings.TrimSpace(query["PageNumber"]) != "" {
-		return nil, errors.New("--all cannot be used with PageNumber")
+	query, pageSize, err := preparePageAllPageNumberQuery(baseQuery)
+	if err != nil {
+		return nil, err
 	}
-	if strings.TrimSpace(query["Cursor"]) != "" {
-		return nil, errors.New("--all cannot be used with Cursor")
-	}
-	pageSize := 20
-	if v, err := strconv.Atoi(strings.TrimSpace(query["PageSize"])); err == nil && v > 0 {
-		pageSize = v
-	}
-	query["PageSize"] = strconv.Itoa(pageSize)
 
 	all := make([]any, 0)
 	listField := ""
 	var last map[string]any
+	pageCount := 0
 	for page := 1; page <= 1000; page++ {
 		query["PageNumber"] = strconv.Itoa(page)
 		out, err := ctx.Do("GET", path, query, header, body)
@@ -146,6 +136,7 @@ func generatedAllByPageNumber(ctx *Context, actionName string, path string, base
 			return nil, errors.New("unexpected list response")
 		}
 		last = resp
+		pageCount++
 		if listField == "" {
 			listField = detectGeneratedListField(actionName, resp)
 			if listField == "" {
@@ -168,6 +159,7 @@ func generatedAllByPageNumber(ctx *Context, actionName string, path string, base
 	if last == nil {
 		last = map[string]any{}
 	}
+	setPaginationMeta(ctx, pageCount, pageSize)
 	last[listField] = all
 	if _, hasTotal := last["Total"]; hasTotal {
 		last["Total"] = len(all)
@@ -187,6 +179,7 @@ func generatedAllByCursor(ctx *Context, actionName string, path string, baseQuer
 	all := make([]any, 0)
 	listField := ""
 	var last map[string]any
+	pageCount := 0
 	for page := 0; page < 1000; page++ {
 		out, err := ctx.Do("GET", path, query, header, body)
 		if err != nil {
@@ -197,6 +190,7 @@ func generatedAllByCursor(ctx *Context, actionName string, path string, baseQuer
 			return nil, errors.New("unexpected list response")
 		}
 		last = resp
+		pageCount++
 		if listField == "" {
 			listField = detectGeneratedListField(actionName, resp)
 			if listField == "" {
@@ -217,11 +211,50 @@ func generatedAllByCursor(ctx *Context, actionName string, path string, baseQuer
 	if last == nil {
 		last = map[string]any{}
 	}
+	setPaginationMeta(ctx, pageCount, parsePositiveInt(query["PageSize"]))
 	last[listField] = all
 	if _, hasTotal := last["Total"]; hasTotal {
 		last["Total"] = len(all)
 	}
 	return last, nil
+}
+
+func preparePageAllPageNumberQuery(baseQuery map[string]string) (map[string]string, int, error) {
+	query := cloneStringMap(baseQuery)
+	if strings.TrimSpace(query["PageNumber"]) != "" {
+		return nil, 0, errors.New("--page-all cannot be used with PageNumber")
+	}
+	if strings.TrimSpace(query["Cursor"]) != "" {
+		return nil, 0, errors.New("--page-all cannot be used with Cursor")
+	}
+	pageSize := parsePositiveInt(query["PageSize"])
+	if pageSize <= 0 {
+		pageSize = pageAllDefaultPageSize
+	}
+	query["PageSize"] = strconv.Itoa(pageSize)
+	return query, pageSize, nil
+}
+
+func parsePositiveInt(raw string) int {
+	if v, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && v > 0 {
+		return v
+	}
+	return 0
+}
+
+func setPaginationMeta(ctx *Context, pageCount int, pageSize int) {
+	if ctx == nil || pageCount <= 0 {
+		return
+	}
+	meta := map[string]any{
+		"mode":      "page_all",
+		"pageCount": pageCount,
+		"merged":    true,
+	}
+	if pageSize > 0 {
+		meta["pageSize"] = pageSize
+	}
+	ctx.PaginationMeta = meta
 }
 
 func detectGeneratedListField(actionName string, resp map[string]any) string {

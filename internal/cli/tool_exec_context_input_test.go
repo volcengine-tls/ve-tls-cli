@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -231,6 +233,37 @@ func TestToolExecAllowsFlatQueryInputWithoutSectionWrapper(t *testing.T) {
 	}
 }
 
+func TestToolExecLogPutAcceptsObjectContentsInDryRun(t *testing.T) {
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
+	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
+	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	input := `{"query":{"TopicId":"tid-demo"},"body":{"LogGroups":[{"Logs":[{"Time":1710000000000,"Contents":{"level":"info","msg":"hello"}}]}]}}`
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"--dry-run", "tool", "exec", "log.put", "--input", input}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v", err)
+	}
+	if out["status"] != "success" {
+		t.Fatalf("expected success status, got %#v", out["status"])
+	}
+	data, ok := out["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected data map, got %#v", out["data"])
+	}
+	if data["valid"] != true {
+		t.Fatalf("expected dry-run plan to stay valid, got %#v", data["valid"])
+	}
+}
+
 func TestToolExecRejectsConflictingGlobalAndContextProfile(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
@@ -385,5 +418,122 @@ func TestToolExecRejectsConflictingGlobalProfileAndSecretsFile(t *testing.T) {
 	}
 	if !strings.Contains(asStringOrEmpty(errObj["message"]), "conflicting runtime selectors") {
 		t.Fatalf("unexpected error message: %#v", errObj["message"])
+	}
+}
+
+func TestToolExecMissingGlobalSecretsFileUsesFailedEnvelope(t *testing.T) {
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"--secrets-file", filepath.Join(t.TempDir(), "missing.env"),
+		"tool", "exec", "account.get",
+	}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected missing secrets-file failure stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	if out["status"] != "failed" {
+		t.Fatalf("expected failed status, got %#v", out["status"])
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if got := errObj["kind"]; got != "config" {
+		t.Fatalf("expected config kind, got %#v", got)
+	}
+}
+
+func TestToolExecGlobalSecretsFileConflictWithContextProfileFailsBeforeLoad(t *testing.T) {
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	const sideEffectKey = "VOLCLOG_SIDE_EFFECT_FROM_GLOBAL_SECRETS"
+	_ = os.Unsetenv(sideEffectKey)
+	defer func() { _ = os.Unsetenv(sideEffectKey) }()
+
+	tmp := t.TempDir()
+	secretsFile := filepath.Join(tmp, "secrets.env")
+	if err := os.WriteFile(secretsFile, []byte(sideEffectKey+"=from-secrets\n"), 0o600); err != nil {
+		t.Fatalf("write secrets file: %v", err)
+	}
+	ctxFile := filepath.Join(tmp, "ctx.json")
+	if err := osWriteJSON(ctxFile, map[string]any{"profile": "default"}); err != nil {
+		t.Fatalf("write context: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"--secrets-file", secretsFile,
+		"tool", "exec", "account.get",
+		"--context", "file://" + ctxFile,
+	}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected selector conflict stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if got, ok := os.LookupEnv(sideEffectKey); ok {
+		t.Fatalf("expected secrets file to stay unloaded on conflict, got %q", got)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if errObj["kind"] != "validation" {
+		t.Fatalf("expected validation kind, got %#v", errObj["kind"])
+	}
+}
+
+func TestToolExecBadSecretsFileDoesNotFallbackToDefaultCredentials(t *testing.T) {
+	var requests int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("x-tls-requestid", "req-account-get")
+		_, _ = w.Write([]byte(`{"Status":"Activated","ArchVersion":"2.0"}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
+	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
+	t.Setenv("VOLCENGINE_ENDPOINT", srv.URL)
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	tmp := t.TempDir()
+	secretsFile := filepath.Join(tmp, "bad.env")
+	if err := os.WriteFile(secretsFile, []byte("NOT_A_VALID_ENV_LINE\n"), 0o600); err != nil {
+		t.Fatalf("write secrets file: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"--secrets-file", secretsFile,
+		"tool", "exec", "account.get",
+	}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected bad secrets-file failure stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if requests != 0 {
+		t.Fatalf("expected bad secrets-file to fail before request, got requests=%d", requests)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if errObj["kind"] != "config" {
+		t.Fatalf("expected config kind, got %#v", errObj["kind"])
 	}
 }

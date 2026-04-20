@@ -346,6 +346,42 @@ func TestToolListJSONFormatOverridesGlobalOutputTable(t *testing.T) {
 	}
 }
 
+func TestToolListBadGroupReturnsUsageError(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"tool", "list", "definitely-missing-group"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stdout.String()) != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stderr.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid stderr json: %v stderr=%q", err, stderr.String())
+	}
+	if !strings.Contains(asStringOrEmpty(payload["errorMessage"]), "group not found: definitely-missing-group") {
+		t.Fatalf("unexpected error message: %#v", payload["errorMessage"])
+	}
+	if asStringOrEmpty(payload["kind"]) != "usage" {
+		t.Fatalf("unexpected error kind: %#v", payload["kind"])
+	}
+}
+
+func TestToolListVerbMissKeepsEmptyResult(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"tool", "list", "topic", "--verb", "definitely-not-a-verb"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	if strings.TrimSpace(stdout.String()) != "No tools matched." {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+}
+
 func TestToolDescribeTopicCreate(t *testing.T) {
 	out, err := runTool(nil, []string{"describe", "topic.create-topic"})
 	if err != nil {
@@ -1339,6 +1375,45 @@ func TestToolDescribeDocumentsContextFieldMeaning(t *testing.T) {
 	}
 }
 
+func TestToolDescribeContextRuntimeEffectsMatchCurrentSelectorAndTraceSemantics(t *testing.T) {
+	out, err := runTool(nil, []string{"describe", "topic.create"})
+	if err != nil {
+		t.Fatalf("runTool describe failed: %v", err)
+	}
+	got := out.(map[string]any)
+
+	contextSchema, ok := got["context_schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected context_schema map, got %#v", got["context_schema"])
+	}
+	ctxProps, ok := contextSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected context_schema.properties map, got %#v", contextSchema["properties"])
+	}
+
+	secretsField, ok := ctxProps["secrets_file"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected secrets_file field map, got %#v", ctxProps["secrets_file"])
+	}
+	secretsRuntimeEffect := asStringOrEmpty(secretsField["runtime_effect"])
+	for _, want := range []string{"selectors first", "supported VOLCENGINE_*"} {
+		if !strings.Contains(secretsRuntimeEffect, want) {
+			t.Fatalf("expected secrets_file runtime_effect to mention %q, got %#v", want, secretsField["runtime_effect"])
+		}
+	}
+
+	traceField, ok := ctxProps["trace"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected trace field map, got %#v", ctxProps["trace"])
+	}
+	traceRuntimeEffect := asStringOrEmpty(traceField["runtime_effect"])
+	for _, want := range []string{"trace directory", "legacy strict/default", "on/off"} {
+		if !strings.Contains(traceRuntimeEffect, want) {
+			t.Fatalf("expected trace runtime_effect to mention %q, got %#v", want, traceField["runtime_effect"])
+		}
+	}
+}
+
 func TestToolDescribeDocumentsProfileDiscoveryHint(t *testing.T) {
 	out, err := runTool(nil, []string{"describe", "topic.create"})
 	if err != nil {
@@ -1757,8 +1832,9 @@ func TestToolExecRejectsMissingRequiredFieldWithContractPath(t *testing.T) {
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "input.body.ProjectId") {
-		t.Fatalf("expected contract field path in stdout envelope, got %q", stdout.String())
+	out := stdout.String()
+	if !strings.Contains(out, "missing required field: input.body.ProjectId") {
+		t.Fatalf("expected missing ProjectId field path in stdout envelope, got %q", out)
 	}
 }
 

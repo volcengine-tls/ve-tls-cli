@@ -191,6 +191,23 @@ func loadToolCatalogEntries(group, verb, family string) []toolCatalog {
 	return out
 }
 
+func toolGroupExists(group string) bool {
+	catalog, err := loadToolCatalog()
+	if err != nil {
+		return false
+	}
+	want := normalizeToken(group)
+	if want == "" {
+		return false
+	}
+	for _, tool := range catalog.Tools {
+		if normalizeToken(tool.Group) == want {
+			return true
+		}
+	}
+	return false
+}
+
 func toolVerbMatches(tool toolCatalog, want string) bool {
 	target := normalizeToken(want)
 	if target == "" {
@@ -1061,10 +1078,10 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 		},
 		"secrets_file": {
 			"type":           "string",
-			"description":    "Path to a credentials file that provides access key/secret.",
-			"when_to_use":    "Set this when credentials are not in environment variables.",
-			"default":        "auto-discover from profile/env",
-			"runtime_effect": "Runtime reads credentials from this file before request signing.",
+			"description":    "Path to a secrets file that provides supported VOLCENGINE_* credentials and defaults.",
+			"when_to_use":    "Set this when credentials/defaults are stored in a file instead of the active profile or environment.",
+			"default":        "Do not load an extra secrets file.",
+			"runtime_effect": "Runtime resolves profile/secrets selectors first; if this secrets_file wins, it loads supported VOLCENGINE_* values from the file before the request is built.",
 		},
 		"region": {
 			"type":           "string",
@@ -1084,7 +1101,7 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 			"description":    "Trace configuration for request/response diagnostics.",
 			"when_to_use":    "Set this when you need troubleshooting artifacts or transport traces.",
 			"default":        false,
-			"runtime_effect": "Runtime enables trace output and redaction policy for this command execution.",
+			"runtime_effect": "Runtime enables trace capture, chooses the trace directory, and normalizes legacy strict/default redact inputs to the current on/off setting.",
 		},
 		"contract_digest": {
 			"type":           "string",

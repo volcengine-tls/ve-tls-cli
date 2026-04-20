@@ -43,6 +43,10 @@ traps:
     symptom: agent keeps seeing shortcut-oriented help and examples
     why: volclog-human exposes human surfaces that an agent should ignore
     fix: prefer volclog when it is installed; otherwise stay on tool/workflow/raw only
+  - trap: thin-client-does-not-judge-business-semantics
+    symptom: agent assumes the CLI rejected a query because a timestamp or time range looks semantically odd
+    why: the CLI validates contract shape and runtime constraints, not business meaning
+    fix: if no local validation/decode/filesystem error occurred, debug the query semantics, time window, and target resource before blaming the CLI
   - trap: env-creds-override-profile
     symptom: a stateless sandbox run selects profile A but appears to use another account
     why: process-wide environment credentials override local profile resolution

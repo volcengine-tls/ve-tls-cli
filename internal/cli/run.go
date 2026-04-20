@@ -95,7 +95,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	ctx.OutputFile = gf.OutputFile
 	ctx.GlobalSecretsFile = strings.TrimSpace(gf.SecretsFile)
 	ctx.TraceDir = gf.TraceDir
-	ctx.TraceRedact = gf.TraceRedact
+	ctx.TraceRedact = normalizeTraceRedactValue(gf.TraceRedact)
 	ctx.DryRun = gf.DryRun
 	ctx.SetProfileDefaults(config.ProfileDefaults{
 		Region:         projectCfg.Region,
@@ -109,7 +109,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if outputMode == "file" && strings.TrimSpace(gf.Filter) != "" && filterTargetsEnvelope(g, rest) {
-		writeCLIError(stderr, errors.New("--jmes-filter cannot be combined with file delivery"), "", 0, "usage", "remove --jmes-filter or use stdout delivery")
+		writeCLIError(stderr, errors.New("--jmes-filter cannot be combined with file delivery"), "", 0, "incompatible_flags", "remove --jmes-filter or use stdout delivery")
 		return 1
 	}
 	if rejectsOutputFileForGroup(g) && strings.TrimSpace(gf.OutputFile) != "" {
@@ -122,22 +122,29 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 	if outputMode == "file" {
 		if err := preflightOutputFilePath(gf.OutputFile, ctx.OutputDir, g, knownFileDeliveryFormat(g, rest, format)); err != nil {
-			writeCLIError(stderr, err, "", 0, "decode", "output write failed")
-			return 3
+			writeCLIError(stderr, err, "", 0, "filesystem", "provide a writable --output-dir or check the local file path and permissions")
+			return 2
 		}
 	}
 	if ctx.GlobalSecretsFile != "" {
-		if strings.TrimSpace(ctx.Profile) != "" {
-			err := runtimeSelectorConflict(profileSelector("global --profile", ctx.Profile), secretsFileSelector("global --secrets-file", ctx.GlobalSecretsFile))
+		if _, err := resolveRuntimeSelectors(runtimeSelectorSet{
+			GlobalProfile:     ctx.Profile,
+			GlobalSecretsFile: ctx.GlobalSecretsFile,
+		}); err != nil {
 			if emitsStructuredEnvelope(g, rest) {
 				return writeStructuredError(stdout, stderr, err, "", 0, g, buildAPIErrorEnvelope(ctx, g, err, outputMode))
 			}
 			writeCLIError(stderr, err, "", 0, "validation", "use exactly one runtime selector: --profile or --secrets-file")
 			return 1
 		}
-		if err := loadSecretsFile(ctx.GlobalSecretsFile); err != nil {
-			writeCLIError(stderr, err, "", 0, "config", "failed to load --secrets-file")
-			return 2
+		if !defersSecretsResolutionToCommand(g, rest) {
+			if err := loadSecretsFile(ctx.GlobalSecretsFile); err != nil {
+				if emitsStructuredEnvelope(g, rest) {
+					return writeStructuredError(stdout, stderr, err, "", 0, g, buildAPIErrorEnvelope(ctx, g, err, outputMode))
+				}
+				writeCLIError(stderr, err, "", 0, "config", "failed to load --secrets-file")
+				return 2
+			}
 		}
 	}
 
@@ -185,8 +192,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			if ctx.Filter != "" && filterTargetsEnvelope(g, rest) {
 				filtered, err2 := applyEnvelopeFilterResult(env, ctx.Filter)
 				if err2 != nil {
-					failed := buildAPIErrorEnvelope(ctx, g, err2, outputMode)
-					return writeStructuredError(stdout, stderr, err2, ctx.RequestID, ctx.StatusCode, g, failed)
+					appendEnvelopeWarning(env, map[string]any{
+						"kind":    "filter_no_value",
+						"message": err2.Error(),
+						"policy":  "soft",
+					})
+					return writeStructuredError(stdout, stderr, err, ctx.RequestID, ctx.StatusCode, g, env)
 				}
 				if err2 := output.Write(stdout, filtered, output.FormatJSON); err2 != nil {
 					writeCLIError(stderr, err2, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
@@ -216,14 +227,18 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 	if format == output.FormatTable {
 		if !supportsTableOutput(ctx) {
-			writeCLIError(stderr, errors.New("unsupported output: table"), ctx.RequestID, ctx.StatusCode, "usage", "table is only supported for project/topic/metric-topic list|get, index get, and log search")
+			hint := "table is only supported for project/topic/metric-topic list|get, index get, and log search"
+			if currentEdition() == cliEditionVolclog {
+				hint = "table is not supported on the default volclog agent path; use --output json|jsonl"
+			}
+			writeCLIError(stderr, errors.New("unsupported output: table"), ctx.RequestID, ctx.StatusCode, "usage", hint)
 			return 1
 		}
 		if outputMode == "file" {
 			p, err := writeOutputFileToDir(gf.OutputFile, ctx.OutputDir, g, out, format)
 			if err != nil {
-				writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
-				return 3
+				writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "filesystem", "provide a writable --output-dir or check the local file path and permissions")
+				return 2
 			}
 			_, _ = stdout.Write([]byte(p + "\n"))
 			return exitCode
@@ -238,8 +253,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		if outputMode == "file" {
 			p, err := writeTextFileToDir(gf.OutputFile, ctx.OutputDir, g, s)
 			if err != nil {
-				writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
-				return 3
+				writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "filesystem", "provide a writable --output-dir or check the local file path and permissions")
+				return 2
 			}
 			_, _ = stdout.Write([]byte(p + "\n"))
 			return exitCode
@@ -256,8 +271,16 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	if isAPIEnvelopeCandidate(g, out) {
 		env, err := buildAPIEnvelope(ctx, g, out, outputMode, gf.OutputFile, format)
 		if err != nil {
-			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
-			return 3
+			kind := "decode"
+			hint := "output write failed"
+			code := 3
+			if outputMode == "file" {
+				kind = "filesystem"
+				hint = "provide a writable --output-dir or check the local file path and permissions"
+				code = 2
+			}
+			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, kind, hint)
+			return code
 		}
 		if ctx.Filter != "" && applyEnvelopeFilter {
 			filtered, err := applyEnvelopeFilterResult(env, ctx.Filter)
@@ -299,8 +322,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	if outputMode == "file" {
 		p, err := writeOutputFileToDir(gf.OutputFile, ctx.OutputDir, g, out, format)
 		if err != nil {
-			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
-			return 3
+			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "filesystem", "provide a writable --output-dir or check the local file path and permissions")
+			return 2
 		}
 		_, _ = stdout.Write([]byte(p + "\n"))
 		return exitCode
@@ -413,25 +436,54 @@ func usesFixedFileNotice(group string, rest []string) bool {
 	}
 }
 
+func defersSecretsResolutionToCommand(group string, rest []string) bool {
+	switch strings.TrimSpace(group) {
+	case "tool", "workflow":
+		return len(rest) > 0 && strings.TrimSpace(rest[0]) == "exec"
+	default:
+		return false
+	}
+}
+
+func appendEnvelopeWarning(env map[string]any, warning map[string]any) {
+	if env == nil || len(warning) == 0 {
+		return
+	}
+	switch warnings := env["warnings"].(type) {
+	case []map[string]any:
+		env["warnings"] = append(warnings, warning)
+	case []any:
+		env["warnings"] = append(warnings, warning)
+	case nil:
+		env["warnings"] = []map[string]any{warning}
+	default:
+		env["warnings"] = []any{warnings, warning}
+	}
+}
+
 func usageText() string {
 	var b strings.Builder
 	b.WriteString("Usage:\n")
 	if currentEdition() == cliEditionVolclog {
-		b.WriteString("  volclog [--profile <name>] [--output json|jsonl] [--output-mode stdout|file] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
+		b.WriteString("  volclog [--profile <name>] [--output json|jsonl] [--output-mode stdout|file] [--output-dir <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact <enabled>] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
 	} else {
-		b.WriteString("  volclog [--profile <name>] [--output json|jsonl|table] [--output-mode stdout|file] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact strict|default] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
+		b.WriteString("  volclog [--profile <name>] [--output json|jsonl|table] [--output-mode stdout|file] [--output-dir <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact <enabled>] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
 	}
 	b.WriteString("主入口（Agent / 自动化优先）:\n")
 	if currentEdition() == cliEditionVolclog {
 		b.WriteString("  用 tool 发现公开 API 并查看契约；需要结构化执行时使用 tool exec。\n")
 		b.WriteString("  用 workflow 执行 CLI 提供的高层编排能力；只有已明确 method/path 时才使用 raw。\n")
-		b.WriteString("  tool/workflow 走 JSON input/context；raw 走 method/path 与 transport flags。\n\n")
+		b.WriteString("  tool/workflow 走 JSON input/context；raw 走 method/path 与 transport flags。\n")
+		b.WriteString("  大结果优先使用 --output-mode file --output-dir <writable-dir>；--jmes-filter 命中 null 仍成功，缺字段或数组越界会报 filter matched no value。\n")
+		b.WriteString("  filter matched no value / invalid --jmes-filter 属于 decode，返回 exit 3。\n\n")
 	} else {
 		b.WriteString("  用 tool 发现能力并查看契约；需要结构化执行时使用 tool exec。\n")
 		b.WriteString("  已明确 method/path 的原始 transport 调用使用 raw。\n")
 		b.WriteString("  默认全局参数写在 group 之前；但 raw 与 project/topic/metric-topic/index/log/host-group/collector 的输出类全局参数也可后置。\n")
-		b.WriteString("  大输出优先使用 --output-mode file。\n")
+		b.WriteString("  大输出优先使用 --output-mode file --output-dir <writable-dir>。\n")
 		b.WriteString("  --jmes-filter 作用于完整 envelope；筛选结果字段时写 data.Total，筛选交付语义时写 summary.deliveryMode。\n")
+		b.WriteString("  命中存在但值为 null 的字段会输出 null；缺字段或数组越界会报 filter matched no value。\n")
+		b.WriteString("  filter matched no value / invalid --jmes-filter 属于 decode，返回 exit 3。\n")
 		b.WriteString("  zsh/bash 下建议写成 --jmes-filter \"keys(@)\"；fish/PowerShell 下优先用单引号。\n\n")
 	}
 	for _, group := range cliGroups() {
@@ -497,6 +549,8 @@ func usageText() string {
 		}
 		b.WriteString("\n")
 	}
+	b.WriteString("\n补充:\n")
+	b.WriteString("  --output-dir <path> 用于 file / file_auto 的落盘目录；建议与 --output-mode file 一起提供。\n")
 	return b.String()
 }
 

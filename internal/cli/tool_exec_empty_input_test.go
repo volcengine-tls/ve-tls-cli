@@ -65,7 +65,13 @@ func TestToolExecMissingInputStillReportsContractMissingField(t *testing.T) {
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "input.body.ProjectId") {
-		t.Fatalf("expected contract field path in stdout envelope, got %q", stdout.String())
+	out := stdout.String()
+	if !strings.Contains(out, "missing required fields:") {
+		t.Fatalf("expected aggregated missing fields in stdout envelope, got %q", out)
+	}
+	for _, want := range []string{"input.body.ProjectId", "input.body.TopicName"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected contract field path %q in stdout envelope, got %q", want, out)
+		}
 	}
 }

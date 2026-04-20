@@ -71,3 +71,15 @@ recipes:
     likely_cause: output strategy was chosen too late
     exact_fix: rerun with --output-mode file and a writable --output-dir, or reduce stdout with --jmes-filter / execution.projection
     retry_command: volclog --output-mode file --output-dir <writable-dir> <same-command>
+  - error_signature: unsupported_feature
+    http_status: 0
+    error_code: CLIError
+    likely_cause: requested capability is not supported by the chosen action or workflow
+    exact_fix: remove the unsupported capability such as page.all, or switch to a surface whose contract explicitly supports it
+    retry_command: volclog tool describe <group.action>
+  - error_signature: filesystem
+    http_status: 0
+    error_code: CLIError
+    likely_cause: local output path, writable directory, or file permission is invalid
+    exact_fix: supply a writable --output-dir or fix the local path and permissions before retrying
+    retry_command: rerun with --output-dir <writable-dir>

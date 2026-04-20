@@ -34,6 +34,7 @@ type Context struct {
 	StatusCode         int
 	DryRun             bool
 	Action             string
+	PaginationMeta     map[string]any
 
 	cfg       config.Config
 	cfgPath   string
