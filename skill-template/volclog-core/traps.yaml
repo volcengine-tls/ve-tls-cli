@@ -1,0 +1,53 @@
+traps:
+  - trap: page-all-is-not-compression
+    symptom: payload gets larger after enabling page.all
+    why: page.all increases completeness and payload size
+    fix: combine page.all with file delivery via --output-mode file --output-dir instead of expecting smaller stdout
+  - trap: jmes-filter-and-projection-have-different-scope
+    symptom: data.Total or summary.deliveryMode style paths return null in execution.projection, or raw keys fail under --jmes-filter
+    why: --jmes-filter runs on the full CLI envelope, but execution.projection runs on the raw result before envelope wrapping
+    fix: use data.* or summary.* with --jmes-filter; use raw keys such as Total or Results only in execution.projection
+  - trap: jmes-filter-null-is-still-success
+    symptom: --jmes-filter 'error' prints null on a successful call
+    why: the envelope field exists and its value is null, so the filter matched successfully
+    fix: treat literal null as a valid projection result; only investigate when the CLI returns filter matched no value
+  - trap: jmes-filter-does-not-mix-with-file-delivery
+    symptom: a run combines --jmes-filter with file delivery and fails before execution
+    why: --jmes-filter is a stdout projection on the complete envelope, while file delivery writes the full result to disk
+    fix: use stdout when projecting with --jmes-filter; remove the filter if the goal is file delivery
+  - trap: deliverymode-belongs-to-runtime
+    symptom: skill logic tries to pre-decide stdout vs file_auto for log.search or export flows
+    why: surface choice belongs to the skill, but deliveryMode is a CLI runtime decision
+    fix: choose tool/workflow/raw first, then read summary.deliveryMode from the actual result instead of duplicating output routing in the skill
+  - trap: hitcount-is-not-whole-window-total
+    symptom: SearchLogs.HitCount is used as the total count for the whole time window
+    why: HitCount only reflects the rows returned in the current SearchLogs response window
+    fix: for pure search queries use log.describe-histogram-v1 and read Histogram.TotalCount before deciding how to narrow or export
+  - trap: incomplete-means-partial-scan
+    symptom: ResultStatus=incomplete is treated as final evidence
+    why: incomplete means the service returned a partial scan to keep latency short
+    fix: narrow the time range and rerun before trusting counts, empty results, or histogram buckets
+  - trap: workflow-ids-are-not-tool-ids
+    symptom: log.ingest or log.export returns unknown tool
+    why: log.ingest and log.export belong to workflow, not tool
+    fix: switch to workflow describe/exec instead of tool describe/exec
+  - trap: ingest-is-not-tool-put
+    symptom: local file/stdin import is routed to tool log.put, or direct PutLogs contract work is routed to workflow log.ingest
+    why: log.ingest is a local import workflow, while tool log.put is the public PutLogs contract surface
+    fix: use workflow log.ingest for local lines/jsonl/json-array import; use tool log.put only when the task is explicitly about the public PutLogs contract
+  - trap: shortcuts-are-human-first
+    symptom: agent starts from project/topic/log shortcut commands
+    why: agent flows should start from tool or workflow instead of shortcut groups
+    fix: rediscover with tool list or workflow list and re-enter through the contract surface
+  - trap: agent-binary-exists
+    symptom: agent keeps seeing shortcut-oriented help and examples
+    why: the full volclog binary exposes human surfaces that an agent should ignore
+    fix: prefer volclog-agent when it is installed; otherwise stay on tool/workflow/raw only
+  - trap: env-creds-override-profile
+    symptom: a stateless sandbox run selects profile A but appears to use another account
+    why: process-wide environment credentials override local profile resolution
+    fix: remove broad env injection and switch to a host-generated one-shot secrets file plus an explicit non-secret profile selector
+  - trap: profile-and-secrets-file-are-exclusive
+    symptom: a run sets profile and secrets-file together and fails fast before the request is sent
+    why: profile and secrets-file are both runtime selectors, so the CLI rejects ambiguous credential selection instead of silently overriding
+    fix: "choose exactly one selector: --profile/context.profile or --secrets-file/context.secrets_file"

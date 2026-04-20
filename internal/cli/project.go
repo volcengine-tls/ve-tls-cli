@@ -1,3 +1,5 @@
+//go:build !agent
+
 package cli
 
 import (
@@ -9,7 +11,7 @@ import (
 )
 
 func runProject(ctx *Context, args []string) (any, error) {
-	return runSubcommandGroup(args, usageProject(), nil, func(command string, commandArgs []string) (any, error) {
+	return runSubcommandGroup(args, usageProject(), nil, shortcutCommandHelpLookup("project"), func(command string, commandArgs []string) (any, error) {
 		ctx.Action = "project." + strings.TrimSpace(command)
 		if out, handled, err := maybeHandleShortcutMeta("project", command, commandArgs); handled {
 			return out, err

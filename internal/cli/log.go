@@ -8,6 +8,11 @@ import (
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
+const (
+	searchLogsDefaultLimit = 100
+	exportLogsDefaultLimit = 500
+)
+
 func isAnalysisQuery(cmd string) bool {
 	tempCmd := cmd
 	for {
@@ -32,7 +37,7 @@ func isAnalysisQuery(cmd string) bool {
 }
 
 func runLog(ctx *Context, args []string) (any, error) {
-	return runSubcommandGroup(args, usageLog(), nil, func(command string, commandArgs []string) (any, error) {
+	return runSubcommandGroup(args, usageLog(), nil, shortcutCommandHelpLookup("log"), func(command string, commandArgs []string) (any, error) {
 		ctx.Action = "log." + strings.TrimSpace(command)
 		if out, handled, err := maybeHandleShortcutMeta("log", command, commandArgs); handled {
 			return out, err
@@ -46,6 +51,8 @@ func runLog(ctx *Context, args []string) (any, error) {
 			return logContext(ctx, commandArgs)
 		case "put":
 			return logPut(ctx, commandArgs)
+		case "ingest":
+			return logIngest(ctx, commandArgs)
 		case "export":
 			return logExport(ctx, commandArgs)
 		case "export-analysis":
@@ -77,7 +84,7 @@ func logHistogram(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ctx.Do("POST", "/DescribeHistogram", nil, nil, body)
+	return ctx.Do("POST", "/DescribeHistogramV1", nil, nil, body)
 }
 
 func logContext(ctx *Context, args []string) (any, error) {
@@ -167,11 +174,11 @@ func logPut(ctx *Context, args []string) (any, error) {
 		OutputFormat:  ctx.Format,
 		OutputMode:    ctx.OutputMode,
 	}
-	return ctx.Do("POST", "/PutLogs", map[string]string{"TopicId": topicID}, header, body)
+	return doPutLogs(ctx, topicID, requestFmt, header, body)
 }
 
 func logExport(ctx *Context, args []string) (any, error) {
-	req, err := parseSearchLogsArgs(args)
+	req, err := parseExportSearchLogsArgs(args)
 	if err != nil {
 		return nil, err
 	}
@@ -286,6 +293,14 @@ func logExportAnalysis(ctx *Context, args []string) (any, error) {
 }
 
 func parseSearchLogsArgs(args []string) (map[string]any, error) {
+	return parseSearchLogsArgsWithDefaultLimit(args, searchLogsDefaultLimit)
+}
+
+func parseExportSearchLogsArgs(args []string) (map[string]any, error) {
+	return parseSearchLogsArgsWithDefaultLimit(args, exportLogsDefaultLimit)
+}
+
+func parseSearchLogsArgsWithDefaultLimit(args []string, defaultLimit int) (map[string]any, error) {
 	var (
 		topicID      string
 		query        string
@@ -307,7 +322,7 @@ func parseSearchLogsArgs(args []string) (map[string]any, error) {
 		sortSet      bool
 		offsetSet    bool
 	)
-	limit = 100
+	limit = defaultLimit
 	for len(args) > 0 {
 		switch args[0] {
 		case "--topic-id":
@@ -489,7 +504,9 @@ func parseSearchLogsArgs(args []string) (map[string]any, error) {
 		return req, nil
 	}
 
-	if limit > 0 {
+	if limitSet {
+		req["Limit"] = limit
+	} else if _, ok := req["Limit"]; !ok && limit > 0 {
 		req["Limit"] = limit
 	}
 	if strings.TrimSpace(contextStr) != "" {
@@ -705,4 +722,17 @@ func maybeSetHeader(dst map[string]string, key string, value string) {
 	if strings.TrimSpace(value) != "" {
 		dst[key] = strings.TrimSpace(value)
 	}
+}
+
+func doPutLogs(ctx *Context, topicID string, requestFmt requestFormat, header map[string]string, body []byte) (any, error) {
+	ctx.apiIOMeta = apiIOMeta{
+		Group:         "log",
+		Action:        "PutLogs",
+		Method:        "POST",
+		Path:          "/PutLogs",
+		RequestFormat: requestFmt,
+		OutputFormat:  ctx.Format,
+		OutputMode:    ctx.OutputMode,
+	}
+	return ctx.Do("POST", "/PutLogs", map[string]string{"TopicId": topicID}, header, body)
 }

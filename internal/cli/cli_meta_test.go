@@ -1,3 +1,5 @@
+//go:build !agent
+
 package cli
 
 import (
@@ -25,6 +27,19 @@ func TestUsageTextIncludesAllCliGroupsAndGlobalFlags(t *testing.T) {
 	}
 }
 
+func TestToolCommandAppearsInTopLevelUsage(t *testing.T) {
+	text := usageText()
+	if !strings.Contains(text, "  tool") {
+		t.Fatalf("tool group should appear in top-level usage: %s", text)
+	}
+	if !strings.Contains(text, "  raw") {
+		t.Fatalf("raw group should appear in top-level usage: %s", text)
+	}
+	if strings.Contains(text, "  capabilities") {
+		t.Fatalf("capabilities should not appear in top-level usage anymore: %s", text)
+	}
+}
+
 func TestUsageTextPrioritizesPrimaryGroupsForAgents(t *testing.T) {
 	text := usageText()
 	if !strings.Contains(text, "主入口（Agent / 自动化优先）:") {
@@ -33,11 +48,17 @@ func TestUsageTextPrioritizesPrimaryGroupsForAgents(t *testing.T) {
 	if !strings.Contains(text, "次级入口（仅在你已明确目标资源时使用）:") {
 		t.Fatalf("missing secondary groups section: %q", text)
 	}
-	if !strings.Contains(text, "1) 发现能力: volclog capabilities --view groups") {
-		t.Fatalf("missing agent bootstrap guidance: %q", text)
+	if !strings.Contains(text, "需要结构化执行时使用 tool exec") || !strings.Contains(text, "原始 transport 调用使用 raw") {
+		t.Fatalf("missing agent boundary guidance: %q", text)
 	}
-	if strings.Index(text, "capabilities") > strings.Index(text, "project") {
-		t.Fatalf("expected capabilities to appear before project in top-level usage: %q", text)
+	if strings.Contains(text, "推荐流程:") {
+		t.Fatalf("top-level usage should not contain recommended flow: %q", text)
+	}
+	if strings.Contains(text, "capabilities") {
+		t.Fatalf("top-level usage should hide capabilities from agent-facing entrypoints: %q", text)
+	}
+	if strings.Index(text, "tool") > strings.Index(text, "project") {
+		t.Fatalf("expected tool to appear before project in top-level usage: %q", text)
 	}
 }
 

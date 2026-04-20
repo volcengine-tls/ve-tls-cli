@@ -104,12 +104,6 @@ func runDoctor(ctx *Context, args []string) (any, int, error) {
 		endpoint = config.DefaultEndpointForRegion(region)
 		endpointSource = "derived"
 	}
-	if strings.TrimSpace(region) == "" && strings.TrimSpace(endpoint) != "" {
-		if r := config.DeriveRegionFromEndpoint(endpoint); strings.TrimSpace(r) != "" {
-			region = r
-			regionSource = "derived_endpoint"
-		}
-	}
 
 	timeoutSeconds := 0
 	timeoutSource := ""

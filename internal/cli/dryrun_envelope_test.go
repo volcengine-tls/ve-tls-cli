@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestAPIDryRunDoesNotSendRequest(t *testing.T) {
+func TestRawDryRunDoesNotSendRequest(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
@@ -16,7 +17,7 @@ func TestAPIDryRunDoesNotSendRequest(t *testing.T) {
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--dry-run", "api", "call", "--method", "GET", "--path", "/DescribeProjects"}, &stdout, &stderr)
+	code := Run([]string{"--dry-run", "raw", "--method", "GET", "--path", "/DescribeProjects"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -36,44 +37,32 @@ func TestAPIDryRunDoesNotSendRequest(t *testing.T) {
 	}
 }
 
-func TestAPIOutputModeFileReturnsEnvelope(t *testing.T) {
+func TestRawOutputModeFileReturnsEnvelope(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
 	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 
-	outFile := filepath.Join(t.TempDir(), "api-out.json")
+	outDir := t.TempDir()
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--dry-run", "--output-mode", "file", "--output-file", outFile, "api", "call", "--method", "GET", "--path", "/DescribeProjects"}, &stdout, &stderr)
+	code := Run([]string{"--dry-run", "--output-mode", "file", "--output-dir", outDir, "raw", "--method", "GET", "--path", "/DescribeProjects"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-
-	var out map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
-		t.Fatalf("invalid stdout json: %v; stdout=%q", err, stdout.String())
+	path := parseNoticePath(t, stdout.String())
+	if path == "" {
+		t.Fatalf("missing artifact path in notice: %q", stdout.String())
 	}
-	if out["status"] != "success" {
-		t.Fatalf("unexpected status: %v", out["status"])
+	if filepath.Dir(path) != outDir {
+		t.Fatalf("artifact path dir mismatch: %v", path)
 	}
-	artifacts, ok := out["artifacts"].([]any)
-	if !ok || len(artifacts) != 1 {
-		t.Fatalf("unexpected artifacts: %v", out["artifacts"])
-	}
-	artifact, ok := artifacts[0].(map[string]any)
-	if !ok {
-		t.Fatalf("invalid artifact: %v", artifacts[0])
-	}
-	if artifact["path"] != outFile {
-		t.Fatalf("artifact path mismatch: %v", artifact["path"])
-	}
-	if _, err := os.Stat(outFile); err != nil {
+	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("expected output file: %v", err)
 	}
 }
 
-func TestAPIDryRunWithTraceAddsTracePathToEnvelope(t *testing.T) {
+func TestRawDryRunWithTraceAddsTracePathToEnvelope(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
@@ -82,15 +71,20 @@ func TestAPIDryRunWithTraceAddsTracePathToEnvelope(t *testing.T) {
 
 	tmp := t.TempDir()
 	traceDir := filepath.Join(tmp, "traces")
-	outFile := filepath.Join(tmp, "api-out.json")
+	outDir := filepath.Join(tmp, "out")
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--dry-run", "--trace-dir", traceDir, "--output-mode", "file", "--output-file", outFile, "api", "call", "--method", "GET", "--path", "/DescribeProjects"}, &stdout, &stderr)
+	code := Run([]string{"--dry-run", "--trace-dir", traceDir, "--output-mode", "file", "--output-dir", outDir, "raw", "--method", "GET", "--path", "/DescribeProjects"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
+	path := parseNoticePath(t, stdout.String())
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read envelope file: %v", err)
+	}
 	var out map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
-		t.Fatalf("invalid stdout json: %v", err)
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("invalid file json: %v", err)
 	}
 	summary, ok := out["summary"].(map[string]any)
 	if !ok {
@@ -105,7 +99,21 @@ func TestAPIDryRunWithTraceAddsTracePathToEnvelope(t *testing.T) {
 	}
 }
 
-func TestAPIDryRunIncludesRequestPreviewBody(t *testing.T) {
+func parseNoticePath(t *testing.T, stdout string) string {
+	t.Helper()
+	const prefix = "文件: "
+	idx := strings.LastIndex(stdout, prefix)
+	if idx < 0 {
+		t.Fatalf("missing file notice in stdout: %q", stdout)
+	}
+	path := strings.TrimSpace(stdout[idx+len(prefix):])
+	if path == "" {
+		t.Fatalf("missing file path in stdout: %q", stdout)
+	}
+	return path
+}
+
+func TestRawDryRunIncludesRequestPreviewBody(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
@@ -115,7 +123,7 @@ func TestAPIDryRunIncludesRequestPreviewBody(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{
 		"--dry-run",
-		"api", "call",
+		"raw",
 		"--method", "POST",
 		"--path", "/CreateProject",
 		"--query", "region=cn-beijing",
@@ -149,5 +157,44 @@ func TestAPIDryRunIncludesRequestPreviewBody(t *testing.T) {
 	}
 	if query["region"] != "cn-beijing" {
 		t.Fatalf("unexpected preview query: %v", query)
+	}
+}
+
+func TestRawDryRunAcceptsInputAliasForBody(t *testing.T) {
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
+	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
+	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"--dry-run",
+		"raw",
+		"--method", "POST",
+		"--path", "/CreateProject",
+		"--input", `{"ProjectName":"demo-from-input"}`,
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v", err)
+	}
+	data, ok := out["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing data plan: %v", out)
+	}
+	preview, ok := data["request_preview"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing request_preview: %v", data)
+	}
+	body, ok := preview["body"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing preview body: %v", preview)
+	}
+	if body["ProjectName"] != "demo-from-input" {
+		t.Fatalf("unexpected preview body: %v", body)
 	}
 }

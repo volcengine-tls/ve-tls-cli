@@ -1,297 +1,271 @@
 # CLI 参数最佳实践与场景指南（volclog）
 
-本篇聚焦 `volclog` 的全局参数、配置策略、自动化最佳实践，以及各类核心业务场景的使用指南，适用于本地交互、脚本批处理与 CI/Agent 场景。
+这份文档只讲稳定的运行时语义、参数边界、输出行为、错误读取方式，以及凭证与诊断策略。
 
-如果你不确定该怎么用，建议先按“新手最短路径”走一遍：
+文档边界：
 
-1) 先用 `doctor` 检查配置是否齐全  
-2) 资源管理用 `--output json` 或 `--output table`（人类友好），日志导出用 `--output jsonl`  
-3) 输出特别大就用 `--output-mode file`（stdout 只给路径）  
-4) 出错就加 `--trace-dir` 生成 trace 工件复盘  
+- 想看产品入口、安装和 Quick Start：回到 [README.md](../README.md) 或 [README_CN.md](../README_CN.md)
+- 想看端到端实战链路：看 [cli-practical-guide.md](cli-practical-guide.md)
+- 想看 full 版 shortcut：看 [cli-human-shortcuts.md](cli-human-shortcuts.md)
 
----
+如果你只记住最少几条规则：
 
-## 1. 核心业务场景指南
-
-`volclog` 涵盖了日志服务的绝大部分功能，以下列出各核心场景下的使用建议和常用命令。
-
-### 1.1 资源管理 (Project & Topic)
-**场景**：快速创建和查询日志项目及主题。
-
-- **列出所有项目**：
-  ```bash
-  volclog project list --output table
-  ```
-- **创建新项目**：
-  ```bash
-  volclog project create --project-name "my-new-project" --description "for testing"
-  ```
-- **列出某个项目下的所有日志主题**：
-  ```bash
-  volclog topic list --project-id <your-project-id> --output table
-  ```
-- **创建日志主题**：
-  ```bash
-  volclog topic create --project-id <your-project-id> --topic-name "nginx-logs" --ttl 30
-  ```
-
-### 1.2 索引管理 (Index)
-**场景**：为日志主题开启或修改索引，支持全文索引与键值索引。
-
-- **查看当前索引配置**：
-  ```bash
-  volclog index get --topic-id <your-topic-id>
-  ```
-- **配置索引（通过 JSON 文件传递复杂结构）**：
-  *由于索引结构复杂（包含全文和键值规则），推荐使用 JSON 文件。*
-  ```bash
-  volclog index create --print-request-template=full > index_req.json
-  # 编辑 index_req.json 后执行
-  volclog index create --request file://index_req.json
-  ```
-
-### 1.3 日志检索与分析 (Log Search & Analysis)
-**场景**：根据查询条件检索原始日志，或使用 SQL 进行聚合分析。
-
-- **检索原始日志**：
-  ```bash
-  volclog log search --topic-id <your-topic-id> --query "error" --from <start-time-ms> --to <end-time-ms> --limit 100
-  ```
-- **执行 SQL 聚合分析并提取分析结果**：
-  ```bash
-  volclog log search --topic-id <your-topic-id> --query "* | select count(*) as total, status group by status" --from <start-time-ms> --to <end-time-ms> --jmes-filter "AnalysisResult.Data"
-  ```
-
-### 1.4 日志批量导出 (Log Export)
-**场景**：将海量原始日志或分析结果导出至本地进行离线处理。
-
-- **导出海量原始日志 (JSONL 格式流式落盘)**：
-  ```bash
-  volclog --output-mode file --output-file ./export.jsonl log export --topic-id <your-topic-id> --query "*" --from <start-time-ms> --to <end-time-ms>
-  ```
-- **导出 SQL 分析结果**：
-  ```bash
-  volclog --output-mode file --output-file ./analysis.jsonl log export-analysis --topic-id <your-topic-id> --query "* | select status, count(*) group by status" --from <start-time-ms> --to <end-time-ms>
-  ```
-
-### 1.5 告警管理 (Alarm)
-**场景**：配置告警策略组，实现日志监控和异常通知。
-
-- **通过 API 命令管理告警策略**：
-  *由于告警配置高度定制化，建议直接使用底层 API 命令。*
-  ```bash
-  # 探测 API 约束
-  volclog api alarm CreateAlarm --describe
-  # 预执行校验
-  volclog --dry-run api alarm CreateAlarm --request file://alarm_req.json
-  # 正式执行
-  volclog api alarm CreateAlarm --request file://alarm_req.json
-  ```
-
-### 1.6 数据加工与消费 (ETL & Consumer Group)
-**场景**：清洗富化日志数据或开启消费组分发。
-
-- **管理数据加工任务 (ETL)**：
-  ```bash
-  volclog api etl CreateRule --describe
-  ```
-- **创建并查看消费组 (Consumer Group)**：
-  ```bash
-  volclog api consumer-group CreateConsumerGroup --describe
-  ```
+1. Agent/自动化默认先走 `tool / workflow / raw`
+2. 写操作先 `--dry-run`
+3. 大结果优先 `--output-mode file --output-dir <writable-dir>`
+4. 失败时先读单层 `error`
+5. `region` 必须显式提供，不从 endpoint 反推
 
 ---
 
-## 2. CLI 独有能力与高级参数组合
+## 1. 全局参数与输入边界
 
-除了普通的 API 映射，`volclog` 还为 CLI 和自动化设计了许多高级特性，这些是平台 SDK 或控制台所不具备的。熟练掌握这些参数组合，可以大幅提升开发与运维效率。
-
-### 2.1 Agent/自动化友好的元数据探索
-
-对于不熟悉的接口，不要靠猜，利用 CLI 提供的自解释能力：
-
-- **--describe 探测 API 约束**
-  在调用任何 `api` 命令前，加上 `--describe`，CLI 会直接输出该 API 的字段要求、输入方式以及推荐模板。
-  ```bash
-  volclog api log PutLogs --describe
-  ```
-
-- **--print-request-template 生成请求骨架**
-  当 API 需要复杂的 JSON 请求体时，CLI 支持一键生成。
-  ```bash
-  # 仅生成必填字段的 JSON 骨架
-  volclog api log PutLogs --print-request-template=required > put_req.json
-  
-  # 生成包含所有可能字段的完整 JSON 结构，供参考或修改
-  volclog api log PutLogs --print-request-template=full > put_full_req.json
-  ```
-
-- **--dry-run 本地校验载荷**
-  这是最安全的参数！使用 `--dry-run` 拦截真实网络请求，仅校验参数是否完备、JSON 是否合法，并打印计算出的 Payload SHA256。
-  ```bash
-  volclog --dry-run api log PutLogs --request file://put_req.json
-  ```
-
-### 2.2 多种请求载荷输入方式 (--request)
-
-针对包含 JSON Body 的请求，CLI 提供了极度灵活的输入支持：
-
-- **通过 Inline 字符串直接输入**：
-  ```bash
-  volclog project create --request '{"ProjectName":"test", "Region": "cn-beijing"}'
-  ```
-- **通过本地文件输入 (安全可靠)**：
-  ```bash
-  volclog project create --request file://./create_req.json
-  ```
-- **通过标准输入流式传递 (适合管道拼接)**：
-  ```bash
-  cat create_req.json | volclog project create --request -
-  ```
-
-### 2.3 异常排查组合 (--trace-dir + --trace-redact)
-
-遇到非预期的 `400` 或 `500` 错误，想查看完整的请求响应包但又不想泄露敏感的 `AK/SK`：
-
-```bash
-volclog --trace-dir ./.volclog/traces --trace-redact strict api project CreateProject --request file://create_req.json
-```
-执行后，目录下会生成详细的 trace 日志。`--trace-redact strict` 确保所有的 Authorization、Token 都被 `[REDACTED]` 替换，可以安全地发给支持团队。
-
----
-
-## 3. 全局参数作用域与语法边界
-
-`volclog` 的全局参数只支持写在 group 之前：
+推荐统一写法：
 
 ```bash
 volclog [global flags...] <group> <command> [args]
 ```
 
-推荐：
+虽然 CLI 现在支持全局参数任意位置解析，但脚本、文档和 Agent 最好仍统一采用前置写法，减少歧义。
+
+全局参数负责“这次执行怎么跑”，而不是“业务语义是什么”：
+
+- 身份/环境：`--profile`、`--secrets-file`
+- 输出与落盘：`--output`、`--output-mode`、`--output-dir`、`--jmes-filter`
+- 排障：`--trace-dir`、`--trace-redact`
+- 预执行：`--dry-run`
+
+业务语义参数仍属于具体命令本身，例如：
+
+- `tool exec ... --input ...`
+- `workflow exec ... --input ...`
+- `raw --method ... --path ... --body ...`
+
+### 1.1 `tool` / `workflow` / `raw` 的输入约定
+
+- `tool exec` / `workflow exec` 使用 JSON `--input`，运行时控制放在 JSON `--context`
+- `raw` 使用 `--method`、`--path`、`--query`、`--header`、`--body`
+- 为了降低从 `tool/workflow` 迁移到 `raw` 时的坑，`raw` 也接受 `--input` 作为 `--body` 的兼容别名
+- 但 `raw --body` 与 `raw --input` 不能同时传
+
+输入介质统一支持：
+
+- inline JSON
+- `file://...`
+- `-`（stdin）
+
+### 1.2 `profile`、`secrets-file` 与 `region`
+
+硬规则：
+
+- `region` 必须显式提供
+- 不从 endpoint / 域名推导 region
+- `--profile` / `context.profile` 与 `--secrets-file` / `context.secrets_file` 是互斥的 runtime selector
+
+也就是说，下面这种组合会 fail fast：
+
 ```bash
-volclog --output json api call --method GET --path /DescribeProjects --query PageSize=1
+volclog --profile prod --secrets-file ./.env tool exec ...
 ```
 
-不推荐（不支持）：
+或者：
+
 ```bash
-volclog api --output json call --method GET --path /DescribeProjects
+volclog --profile prod workflow exec ... --context '{"secrets_file":"file://creds.env"}'
 ```
 
-### 3.1 全局参数一图理解
+无状态执行推荐顺序：
 
-全局参数控制“这次命令的执行方式”，不改变业务语义：
-- 选用哪个身份/环境：`--profile`、`--secrets-file`
-- 输出怎么打印/怎么落盘：`--output`、`--output-mode`、`--output-file`、`--jmes-filter`
-- 出问题怎么排障：`doctor`、`--trace-dir`、`--trace-redact`
-
-业务语义参数属于具体命令，例如 `project list --page-size 10`、`log search --topic-id ...`。
+1. 先确定目标环境或 profile 名称
+2. 如需临时注入凭证，再提供一次性的 `--secrets-file`
+3. 不要把大范围环境变量直接灌进整个会话
 
 ---
 
-## 4. 输出相关（--output / --output-mode / --output-file）
+## 2. 输出与交付
 
-### 4.1 --output
+### 2.1 `--output`
 
-- `--output table`：人类友好格式，仅支持部分常用 list/get 及 search。
-- `--output json`：默认，适合资源管理类命令（project/topic/index/metric-topic）。
-- `--output jsonl`：每行一条 JSON，适合日志导出/大结果集（便于流式处理）。
+- `json`：默认，适合结构化对象输出
+- `jsonl`：适合大量逐行结果
+- `table`：只属于 full 版的人类友好输出，不是 `volclog-agent` 主路径格式
 
-示例：
+### 2.2 `--output-mode` 与 `--output-dir`
+
+当结果可能很大时，优先：
+
 ```bash
-volclog project list --output json
-volclog log export --output jsonl --topic-id <tid> --query "*" --from <ms> --to <ms>
+volclog --output-mode file --output-dir ./out \
+  workflow exec log.export --input file://req.json
 ```
 
-### 4.1.1 新手怎么选 json/jsonl
-- 不确定：先用 `json`
-- 你要“导出很多行日志/指标点”：用 `jsonl`
-- 你要“给脚本/系统读取一个结构化对象”：用 `json`
+当前语义：
 
-### 4.1.2 SearchLogs：Logs 模式 vs Analysis 模式
+- `stdout`：正常标准输出
+- `file`：强制落文件
+- 未强制 file 但结果过大时，CLI 可能自动进入 `file_auto`
 
-`/SearchLogs` 响应里通常会包含两类结果：
-- `Logs`: 原始日志列表（数组）
-- `AnalysisResult`: SQL/聚合类查询的表格结果（包含 `Schema` 和 `Data`）
+此时 stdout 只给固定提示与文件路径，完整 envelope 会写入 `output_dir` 下由 CLI 自动生成的文件中。
 
-使用时先分清三点：
-- `volclog log search`：返回的是“完整响应对象”。
-- `volclog log export`：用于导出“仅检索”结果（`Logs`）。
-- `volclog log export-analysis`：用于导出 SQL/Analysis 结果，直接逐行输出 `AnalysisResult.Data`。
+关键点：
 
-### 4.2 --output-mode 与 --output-file
+- 调用方只提供目录，不自己指定文件名
+- 没有可写 `output_dir` 时，auto spill 会直接报错并提示补 `--output-dir <writable-dir>`
+- `summary.outputMode` 表示调用方意图
+- `summary.deliveryMode` 表示运行时最终交付方式
 
-当输出很大或 CI/Agent 需要控制 stdout 体积时，推荐：
-```bash
-volclog --output-mode file log export --topic-id <tid> --query "*" --from <ms> --to <ms>
-```
-此时 stdout 只输出文件路径，便于下一步读取。
+### 2.3 如何理解 `deliveryMode`
 
-固定输出路径：
-```bash
-volclog --output-mode file --output-file ./out.json project list
-```
+- `stdout`：结果留在 stdout
+- `file_forced`：调用方显式要求 file
+- `file_auto`：CLI 因结果过大自动改走 file
+
+对于 Agent/自动化：
+
+- surface 选择由你决定：`tool / workflow / raw`
+- stdout 还是 file 由 CLI 的 `summary.deliveryMode` 决定
+
+不要在 skill 或脚本里重复实现第二套“是否该导出文件”的路由逻辑。
 
 ---
 
-## 5. 过滤与提取（--jmes-filter）
+## 3. 过滤与错误读取
 
-用于脚本中提取字段（作用于原始响应结构）：
+### 3.1 `--jmes-filter`
+
+`--jmes-filter` 作用于完整 CLI envelope，而不是原始服务端结果。
+
+合法路径示例：
 
 ```bash
-volclog project list --jmes-filter "Projects[0].ProjectId"
-volclog topic list --project-id <pid> --jmes-filter "Topics[0].TopicId"
+volclog tool exec project.describe-projects --jmes-filter "data.Projects[0].ProjectId"
+volclog tool exec project.describe-projects --jmes-filter "summary.deliveryMode"
+volclog tool exec project.describe-projects --jmes-filter "error"
 ```
 
-如果你需要复杂筛选/排序，建议直接输出 JSON/JSONL 后用 `jq` 处理。
+注意：
+
+- 命中存在但值为 `null` 的字段时，stdout 直接输出 `null`，这仍然是成功结果
+- `filter matched no value` 才表示路径写错了
+- `--jmes-filter` 是 stdout-only；不能和 file delivery 同时使用
+
+### 3.2 `execution.projection`
+
+`execution.projection` 与 `--jmes-filter` 不是一回事：
+
+- `--jmes-filter`：作用于完整 envelope
+- `execution.projection`：作用于 raw result，再由 CLI 重新包 envelope
+
+因此：
+
+- `summary.deliveryMode`、`error.code` 这类 envelope 字段只能给 `--jmes-filter`
+- 原始响应里的字段才适合放进 `execution.projection`
+
+### 3.3 失败结果怎么读
+
+失败时统一读取单层 `error` 对象：
+
+1. `error.source`
+2. `error.kind`
+3. `error.code`
+4. `error.message`
+5. `error.details`
+6. `error.requestId`
+7. `error.statusCode`
+
+解释：
+
+- `error.source=cli|upstream`
+- `error.kind` 决定恢复方向
+- `error.code` 是最适合脚本和 Agent 判断的稳定错误码
+- `error.details` 只有在确实有额外结构时才出现
+
+对于上游服务端错误：
+
+- `error.code` 会直接是业务错误码，例如 `ProjectAlreadyExist`
+- 如果服务端错误文案里还嵌了一层 JSON，CLI 会尽量提炼到 `error.details`
+- 不要再把 `error.message` 当 JSON 二次解析
 
 ---
 
-## 6. 诊断与复盘（--trace-dir / --trace-redact / doctor）
+## 4. 诊断与复盘
 
-排障推荐流程：
+推荐流程：
 
 ```bash
 volclog doctor
-volclog --trace-dir ./.volclog/traces log search --topic-id <tid> --query "*" --from <ms> --to <ms>
+volclog --trace-dir ./.volclog/traces --trace-redact strict tool exec ...
 ```
 
-- `--trace-dir`：生成脱敏 trace 工件（JSONL），输出中附带 `meta.trace.path`。
-- `--trace-redact strict|default`：默认 `strict`；`default` 信息更丰富但仍会脱敏。
+其中：
+
+- `doctor`：先检查配置、鉴权、endpoint、region 与环境状态
+- `--trace-dir`：生成 trace 工件用于复盘
+- `--trace-redact strict`：优先保证敏感字段被脱敏
+
+当你面对的是“为什么这次调用没按预期发出去 / 为什么返回 400/403/500”这类问题时，先跑 `doctor`，再开 trace，而不是直接猜 body。
 
 ---
 
-## 7. 密钥注入与多账号隔离
+## 5. 常见稳定规则
 
-### 7.1 环境变量隔离 (--secrets-file)
+### 5.1 Search / Histogram / Analysis
 
-`--secrets-file` 会从 dotenv 文件加载环境变量，适合 CI/CD 和多账号隔离执行：
+- `log.search` 同时支持普通检索和 SQL/analysis `Query`
+- `log.describe-histogram-v1` 只适合纯检索 query 的时间分布预览与总量估计
+- `log.export-analysis` 沿用 `SearchLogs` 的 SQL/analysis `Query` 语法，但它的定位是“大结果分析行导出”，不是交互式预览
+
+计数语义：
+
+- `HitCount` 只是当前 `SearchLogs` 响应窗口里的数量
+- 对纯检索 query，`Histogram.TotalCount` 更适合看整窗总量
+- 对分析 query，不要用 histogram 当分析行总数；要么直接读分析结果，要么在 SQL 里写 `count(*)`
+
+### 5.2 `ResultStatus=incomplete`
+
+`ResultStatus=incomplete` 表示服务端只返回了部分扫描结果。
+
+这在以下场景都可能出现：
+
+- 普通检索
+- 检索 + 分析
+- 纯分析
+
+恢复动作：
+
+- 缩小时间范围
+- 重新执行
+- 在拿到 `complete` 之前，不要信任计数、空结果或桶分布
+
+### 5.3 `page.all`
+
+- `page.all` 只在契约明确报告 `execution.supports_all=true` 时可用
+- 它提高的是完整性，不是压缩输出
+- 开启后 payload 可能更大，不会更小
+
+---
+
+## 6. 凭证注入与多账号隔离
+
+优先级建议：
+
+1. 本地长期使用：profile
+2. 无状态一次性执行：`--secrets-file`
+3. 只在必要时再用 scoped env injection
+
+示例：
+
 ```bash
-volclog --secrets-file ./.env project list
+volclog --secrets-file ./.env tool exec project.describe-projects
 ```
 
-dotenv 示例：
-```bash
-VOLCENGINE_ACCESS_KEY_ID=xxx
-VOLCENGINE_ACCESS_KEY_SECRET=yyy
-VOLCENGINE_ENDPOINT=https://tls-cn-beijing.volces.com
-```
+如果同一套 AK/SK 需要复用到多个 region / endpoint，优先用 profile + `cred-ref` 方案，而不是复制多份明文凭证配置。
 
-### 7.2 Profile + cred-ref 模式
+---
 
-当同一 AK/SK 需要跨多个 region/endpoint 复用时：
+## 7. 一句话索引
 
-首次创建并绑定：
-```bash
-volclog configure set --profile demo-bj --cred-ref demo-root --ak <ak> --sk <sk> --endpoint https://tls-cn-beijing.volces.com
-```
-
-复用创建第二个 profile：
-```bash
-volclog configure set --profile demo-sg --cred-ref demo-root --endpoint https://tls-ap-singapore-1.volces.com
-```
-
-切换默认 profile：
-```bash
-volclog configure use demo-bj
-```
+- 想看入口和安装：回 README
+- 想看长链路实战：回 `cli-practical-guide`
+- 想看 full 版 shortcut：回 `cli-human-shortcuts`
+- 想看稳定 runtime 规则：留在这份文档

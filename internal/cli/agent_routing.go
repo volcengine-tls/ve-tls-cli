@@ -1,3 +1,5 @@
+//go:build !agent
+
 package cli
 
 import (
@@ -132,6 +134,8 @@ func shortcutCommandPriority(command string) int {
 		return 36
 	case "put":
 		return 37
+	case "ingest":
+		return 38
 	case "bind-rules":
 		return 40
 	case "unbind-rules":

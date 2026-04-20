@@ -1,14 +1,72 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BIN_NAME="${BIN_NAME:-volclog}"
 PREFIX="${PREFIX:-$HOME/.local}"
 DEST_DIR="${DEST_DIR:-$PREFIX/bin}"
-DEST="$DEST_DIR/$BIN_NAME"
 
 DOWNLOAD_URL="${VOLCLOG_DOWNLOAD_URL:-}"
 BASE_URL="${VOLCLOG_BASE_URL:-}"
 VERSION="${VOLCLOG_VERSION:-}"
+EDITION="${VOLCLOG_EDITION:-}"
+
+usage() {
+  cat <<'EOF'
+usage: install-binary.sh [--edition full|agent]
+
+Environment:
+  VOLCLOG_DOWNLOAD_URL  direct archive URL
+  VOLCLOG_BASE_URL      release base URL
+  VOLCLOG_EDITION       full (default) or agent
+  BIN_NAME              override installed binary name
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --edition)
+      if [[ $# -lt 2 ]]; then
+        echo "missing --edition value" >&2
+        exit 2
+      fi
+      EDITION="$2"
+      shift 2
+      ;;
+    --edition=*)
+      EDITION="${1#*=}"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$EDITION" ]]; then
+  if [[ "${BIN_NAME:-}" = "volclog-agent" ]]; then
+    EDITION="agent"
+  else
+    EDITION="full"
+  fi
+fi
+
+case "$EDITION" in
+  full) SRC_BIN_NAME="volclog" ;;
+  agent) SRC_BIN_NAME="volclog-agent" ;;
+  *)
+    echo "invalid VOLCLOG_EDITION: $EDITION" >&2
+    exit 2
+    ;;
+esac
+
+BIN_NAME="${BIN_NAME:-$SRC_BIN_NAME}"
+
+DEST="$DEST_DIR/$BIN_NAME"
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
@@ -26,6 +84,9 @@ if [[ -z "$DOWNLOAD_URL" ]]; then
     exit 2
   fi
   pkg="volclog_${os}_${arch}.tar.gz"
+  if [[ "$EDITION" = "agent" ]]; then
+    pkg="volclog-agent_${os}_${arch}.tar.gz"
+  fi
   DOWNLOAD_URL="${BASE_URL%/}/$pkg"
 fi
 
@@ -34,15 +95,19 @@ trap 'rm -rf "$tmp"' EXIT
 
 mkdir -p "$DEST_DIR"
 
-curl -fsSL "$DOWNLOAD_URL" -o "$tmp/pkg.tgz"
+pkg_file="$(basename "${DOWNLOAD_URL%%\?*}")"
+archive_path="$tmp/$pkg_file"
+
+curl -fsSL "$DOWNLOAD_URL" -o "$archive_path"
 
 sha_url="${DOWNLOAD_URL}.sha256"
-if curl -fsSL "$sha_url" -o "$tmp/pkg.tgz.sha256" 2>/dev/null; then
+sha_path="${archive_path}.sha256"
+if curl -fsSL "$sha_url" -o "$sha_path" 2>/dev/null; then
   if command -v sha256sum >/dev/null 2>&1; then
-    (cd "$tmp" && sha256sum -c pkg.tgz.sha256)
+    (cd "$tmp" && sha256sum -c "$(basename "$sha_path")")
   elif command -v shasum >/dev/null 2>&1; then
-    expected="$(awk '{print $1}' "$tmp/pkg.tgz.sha256")"
-    actual="$(shasum -a 256 "$tmp/pkg.tgz" | awk '{print $1}')"
+    expected="$(awk '{print $1}' "$sha_path")"
+    actual="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
     if [[ "$expected" != "$actual" ]]; then
       echo "sha256 mismatch" >&2
       exit 3
@@ -50,12 +115,12 @@ if curl -fsSL "$sha_url" -o "$tmp/pkg.tgz.sha256" 2>/dev/null; then
   fi
 fi
 
-tar -xzf "$tmp/pkg.tgz" -C "$tmp"
-if [[ ! -f "$tmp/$BIN_NAME" ]]; then
+tar -xzf "$archive_path" -C "$tmp"
+if [[ ! -f "$tmp/$SRC_BIN_NAME" ]]; then
   echo "binary not found in package" >&2
   exit 4
 fi
 
-install -m 0755 "$tmp/$BIN_NAME" "$DEST"
+install -m 0755 "$tmp/$SRC_BIN_NAME" "$DEST"
 echo "installed: $DEST"
 "$DEST" --version || true

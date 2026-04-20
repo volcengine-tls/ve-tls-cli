@@ -1,3 +1,5 @@
+//go:build !agent
+
 package cli
 
 import (
@@ -10,7 +12,7 @@ import (
 )
 
 func runMetricTopic(ctx *Context, args []string) (any, error) {
-	return runSubcommandGroup(args, usageMetricTopic(), map[string]struct{}{"prom": {}}, func(command string, commandArgs []string) (any, error) {
+	return runSubcommandGroup(args, usageMetricTopic(), nil, shortcutCommandHelpLookup("metric-topic"), func(command string, commandArgs []string) (any, error) {
 		ctx.Action = "metric-topic." + strings.TrimSpace(command)
 		if out, handled, err := maybeHandleShortcutMeta("metric-topic", command, commandArgs); handled {
 			return out, err
@@ -28,8 +30,6 @@ func runMetricTopic(ctx *Context, args []string) (any, error) {
 			return metricTopicDelete(ctx, commandArgs)
 		case "search":
 			return metricTopicSearch(ctx, commandArgs)
-		case "prom":
-			return metricTopicProm(ctx, commandArgs)
 		default:
 			return nil, errors.New("unknown metric-topic command: " + command)
 		}

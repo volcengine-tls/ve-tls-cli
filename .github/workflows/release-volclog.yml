@@ -32,12 +32,17 @@ jobs:
             goarch: arm64
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
           cache: false
       - name: Test
-        run: go test ./...
+        run: |
+          go test ./...
+          npm run test:npm --silent
       - name: Build
         env:
           CGO_ENABLED: "0"
@@ -45,38 +50,48 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p dist
-          out="dist/volclog"
-          if [ "$GOOS" = "windows" ]; then
-            out="dist/volclog.exe"
-          fi
-          go build -trimpath -ldflags "-s -w -X volclog/internal/version.Version=${{ github.ref_name }}" -o "$out" ./cmd/volclog
-      - name: Package
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: |
           set -euo pipefail
-          cd dist
-          if [ "$GOOS" = "windows" ]; then
-            pkg="volclog_${GOOS}_${GOARCH}.zip"
-            zip -q "$pkg" volclog.exe
-          else
-            pkg="volclog_${GOOS}_${GOARCH}.tar.gz"
-            tar -czf "$pkg" volclog
-          fi
-          sha256sum "$pkg" > "${pkg}.sha256"
-          cp "$pkg" "../$pkg"
-          cp "${pkg}.sha256" "../${pkg}.sha256"
+          version="${{ github.ref_name }}"
+          for edition in full agent; do
+            bin_name="volclog"
+            build_tags=()
+            if [ "$edition" = "agent" ]; then
+              bin_name="volclog-agent"
+              build_tags=(-tags=agent)
+            fi
+            out="dist/$bin_name"
+            if [ "$GOOS" = "windows" ]; then
+              out="${out}.exe"
+            fi
+            go build -trimpath "${build_tags[@]}" -ldflags "-s -w -X github.com/volcengine-tls/ve-tls-cli/internal/version.Version=${version}" -o "$out" ./cmd/volclog
+
+            pkg_dir="$(mktemp -d)"
+            cp "$out" "$pkg_dir/"
+            if [ "$GOOS" = "windows" ]; then
+              pkg="${bin_name}_${GOOS}_${GOARCH}.zip"
+              (cd "$pkg_dir" && zip -q "$pkg" "$(basename "$out")")
+            else
+              pkg="${bin_name}_${GOOS}_${GOARCH}.tar.gz"
+              (cd "$pkg_dir" && tar -czf "$pkg" "$(basename "$out")")
+            fi
+            mv "$pkg_dir/$pkg" "dist/$pkg"
+            sha256sum "dist/$pkg" > "dist/${pkg}.sha256"
+            rm -rf "$pkg_dir"
+          done
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: volclog-${{ matrix.goos }}-${{ matrix.goarch }}
           if-no-files-found: ignore
           path: |
-            volclog_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
-            volclog_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz.sha256
-            volclog_${{ matrix.goos }}_${{ matrix.goarch }}.zip
-            volclog_${{ matrix.goos }}_${{ matrix.goarch }}.zip.sha256
+            dist/volclog_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
+            dist/volclog_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz.sha256
+            dist/volclog-agent_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
+            dist/volclog-agent_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz.sha256
+            dist/volclog_${{ matrix.goos }}_${{ matrix.goarch }}.zip
+            dist/volclog_${{ matrix.goos }}_${{ matrix.goarch }}.zip.sha256
+            dist/volclog-agent_${{ matrix.goos }}_${{ matrix.goarch }}.zip
+            dist/volclog-agent_${{ matrix.goos }}_${{ matrix.goarch }}.zip.sha256
 
   release:
     needs: [build]
@@ -94,3 +109,7 @@ jobs:
             dist/volclog_*.tar.gz.sha256
             dist/volclog_*.zip
             dist/volclog_*.zip.sha256
+            dist/volclog-agent_*.tar.gz
+            dist/volclog-agent_*.tar.gz.sha256
+            dist/volclog-agent_*.zip
+            dist/volclog-agent_*.zip.sha256

@@ -1,0 +1,117 @@
+name: release-npm
+
+on:
+  push:
+    tags:
+      - "volclog-v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to publish, for example volclog-v1.0.1"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+      - name: Verify package versions match tag
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            release_tag="${{ github.event.inputs.release_tag }}"
+          else
+            release_tag="${GITHUB_REF_NAME}"
+          fi
+          expected="${release_tag#volclog-v}"
+          root_version="$(node -p "require('./package.json').version")"
+          agent_version="$(node -p "require('./npm/agent-package/package.json').version")"
+          test "$root_version" = "$expected"
+          test "$agent_version" = "$expected"
+      - name: Wait for GitHub release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            release_tag="${{ github.event.inputs.release_tag }}"
+          else
+            release_tag="${GITHUB_REF_NAME}"
+          fi
+
+          expected_assets=(
+            "volclog_linux_amd64.tar.gz"
+            "volclog_linux_arm64.tar.gz"
+            "volclog_darwin_amd64.tar.gz"
+            "volclog_darwin_arm64.tar.gz"
+            "volclog_windows_amd64.zip"
+            "volclog_windows_arm64.zip"
+            "volclog-agent_linux_amd64.tar.gz"
+            "volclog-agent_linux_arm64.tar.gz"
+            "volclog-agent_darwin_amd64.tar.gz"
+            "volclog-agent_darwin_arm64.tar.gz"
+            "volclog-agent_windows_amd64.zip"
+            "volclog-agent_windows_arm64.zip"
+          )
+
+          api_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}"
+          for attempt in $(seq 1 30); do
+            asset_names="$(
+              curl -fsSL \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                "${api_url}" \
+                | python3 -c 'import json,sys; data=json.load(sys.stdin); print("\\n".join(a["name"] for a in data.get("assets", [])))'
+            )"
+
+            missing=0
+            for asset in "${expected_assets[@]}"; do
+              if ! printf '%s\n' "${asset_names}" | grep -Fx -- "${asset}" >/dev/null; then
+                missing=1
+                break
+              fi
+            done
+
+            if [ "${missing}" -eq 0 ]; then
+              echo "release assets ready for ${release_tag}"
+              exit 0
+            fi
+
+            sleep 10
+          done
+
+          echo "timed out waiting for release assets for ${release_tag}" >&2
+          exit 1
+      - name: npm package tests
+        run: npm run test:npm --silent
+      - name: Dry-run package tarballs
+        run: |
+          npm pack --dry-run .
+          npm pack --dry-run ./npm/agent-package
+      - name: Publish @volcengine-tls/volclog
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if npm view "@volcengine-tls/volclog@${version}" version >/dev/null 2>&1; then
+            echo "@volcengine-tls/volclog@${version} already published, skipping"
+          else
+            npm publish --access public
+          fi
+      - name: Publish @volcengine-tls/volclog-agent
+        run: |
+          version="$(node -p "require('./npm/agent-package/package.json').version")"
+          if npm view "@volcengine-tls/volclog-agent@${version}" version >/dev/null 2>&1; then
+            echo "@volcengine-tls/volclog-agent@${version} already published, skipping"
+          else
+            npm publish ./npm/agent-package --access public
+          fi
