@@ -155,7 +155,7 @@ volclog tool exec project.describe-projects \
   --jmes-filter "data.Projects[].{ProjectId: ProjectId, ProjectName: ProjectName}"
 ```
 
-`--jmes-filter` runs on the complete CLI envelope, so paths such as `data.*`, `summary.*`, and `error.*` are valid. It cannot be combined with file delivery.
+`--jmes-filter` runs on the complete CLI envelope, so paths such as `data.*`, `summary.*`, and `error.*` are valid. If the selected field exists but is `null`, stdout prints the literal `null` and the command still succeeds. Missing paths, including out-of-bounds array indexes, fail with `filter matched no value`. It cannot be combined with file delivery.
 
 ### Quick Start (Human Users)
 

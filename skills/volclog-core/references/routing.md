@@ -15,6 +15,7 @@ Use this file only to choose the execution surface. Do not use it for runtime/ou
 
 - Start with `tool` for published public APIs.
 - Use `workflow` only when the intent is clearly local import/export or another CLI-owned orchestration.
+- `log.export-analysis` is not a different analysis API. Choose it only when the same SearchLogs analysis query now needs a file-oriented full-row export instead of interactive preview.
 - For `log.ingest` vs `tool log.put`:
   - local file/stdin import where CLI should normalize lines/jsonl/json-array -> `log.ingest`
   - explicit public `PutLogs` contract work or direct API control -> `tool log.put`

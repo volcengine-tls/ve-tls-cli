@@ -42,6 +42,6 @@ workflows:
     steps:
       - workflow.log.export
       - workflow.log.export-analysis
-    output_strategy: choose the export workflow here; let CLI deliveryMode decide stdout vs file_auto unless the caller explicitly forces file output with a writable output_dir
+    output_strategy: choose the export workflow here when the user needs a file of rows, not just interactive preview; let CLI deliveryMode decide stdout vs file_auto unless the caller explicitly forces file output with a writable output_dir
     fallback: tool.log.search
-    stop_condition: stdout returns the result file path and the written full envelope confirms the expected shape
+    stop_condition: stdout returns the artifact path and the written row file confirms the expected data shape

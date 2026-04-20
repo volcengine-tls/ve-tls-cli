@@ -41,9 +41,12 @@ func TestUsageTextDescribesPrimaryEntryAsAgentNative(t *testing.T) {
 		"原始 transport 调用使用 raw",
 		"默认全局参数写在 group 之前",
 		"输出类全局参数也可后置",
-		"大输出优先使用 --output-mode file",
+		"大输出优先使用 --output-mode file --output-dir <writable-dir>",
 		"作用于完整 envelope",
+		"--trace-redact <enabled>",
 		`zsh/bash 下建议写成 --jmes-filter "keys(@)"`,
+		"命中存在但值为 null 的字段会输出 null；缺字段或数组越界会报 filter matched no value",
+		"filter matched no value / invalid --jmes-filter 属于 decode，返回 exit 3",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q in usage text: %q", want, text)
@@ -55,6 +58,7 @@ func TestUsageTextDescribesPrimaryEntryAsAgentNative(t *testing.T) {
 		"推荐流程:",
 		"1) 发现能力: volclog tool list",
 		"capabilities",
+		"--trace-redact strict|default",
 	} {
 		if strings.Contains(text, notWant) {
 			t.Fatalf("unexpected verbose text %q in usage text: %q", notWant, text)
@@ -102,10 +106,23 @@ func TestToolAndWorkflowExecHelpCarryCommonExecutionGuidance(t *testing.T) {
 			"运行时/鉴权/trace/output 控制放在 --context",
 			"context.execution",
 			"大结果优先",
+			"--jmes-filter 命中 null 仍输出 null；缺字段或数组越界会报 filter matched no value",
 		} {
 			if !strings.Contains(text, want) {
 				t.Fatalf("%s usage missing %q: %q", name, want, text)
 			}
+		}
+	}
+}
+
+func TestRawHelpClarifiesDryRunAndLiteralBodySemantics(t *testing.T) {
+	out := usageRaw()
+	for _, want := range []string{
+		"raw 的 --input/--body 只是 literal request body",
+		"raw --dry-run 只做 transport/local checks；它不会像 tool/workflow 那样校验 API 必填字段",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("raw usage missing %q: %q", want, out)
 		}
 	}
 }

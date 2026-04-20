@@ -201,6 +201,7 @@ volclog tool exec project.describe-projects \
 
 - `--jmes-filter` 作用于完整 CLI envelope，所以失败结果也可以直接筛 `error.kind`、`error.code`、`error.message`。
 - 如果目标字段真实存在但值为 `null`，stdout 会直接输出 `null`，这仍然是一次成功筛选，不要把它和 `filter matched no value` 混为一谈。
+- 字段不存在、对象路径写错，或数组下标越界时，CLI 会直接报 `filter matched no value`。
 
 失败 envelope 里的 `error` 现在是单层对象，优先读取：
 
@@ -327,6 +328,8 @@ volclog collector create --describe
 
 如果你平时更关心实战，可以直接从这一章开始看。这里继续用 `volclog-human` shortcut 展示“人类在终端里怎么最快走通一条链路”；如果你是 Agent/CI，请把同一链路映射到前面的 `tool / workflow / raw` 主路径，shortcut 细节单独看 [cli-human-shortcuts.md](cli-human-shortcuts.md)。
 
+下面涉及 shortcut 或 `--output table` 的示例都显式使用 `volclog-human`；默认 `volclog` 的 agent 主路径不要把这些 human-only 能力当成可用前提。
+
 ### 工作流 1：把一个新服务接入 TLS，并完成检索验证
 
 下面按一条完整接入链路来走：
@@ -336,7 +339,7 @@ volclog collector create --describe
 #### Step 1：确认项目
 
 ```bash
-volclog --output table project list --all
+volclog-human --output table project list --all
 ```
 
 如果没有合适项目，再创建：
@@ -477,7 +480,7 @@ volclog workflow describe log.ingest
 #### Step 1：先做快速检索
 
 ```bash
-volclog --output table log search \
+volclog-human --output table log search \
   --topic-id <TopicId> \
   --query "level:error" \
   --from <StartTimeMs> \

@@ -67,6 +67,9 @@ func newAPISuccessEnvelope(ctx *Context, group string, data any, outputMode stri
 		"itemCount":    envelopeItemCount(data),
 		"totalBytes":   0,
 	}
+	if ctx != nil && ctx.PaginationMeta != nil {
+		summary["pagination"] = ctx.PaginationMeta
+	}
 	if strings.TrimSpace(ctx.TracePath) != "" {
 		summary["tracePath"] = ctx.TracePath
 	}

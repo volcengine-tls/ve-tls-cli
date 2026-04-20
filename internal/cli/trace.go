@@ -45,9 +45,7 @@ func (c *Context) initTrace() error {
 	}
 	c.traceW = f
 	c.TracePath = p
-	if strings.TrimSpace(c.TraceRedact) == "" {
-		c.TraceRedact = "strict"
-	}
+	c.TraceRedact = normalizeTraceRedactValue(c.TraceRedact)
 	return nil
 }
 
@@ -147,4 +145,15 @@ func sha256Hex(b []byte) string {
 	}
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
+}
+
+func normalizeTraceRedactValue(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "on", "true", "1", "yes", "enabled", "strict", "default":
+		return "on"
+	case "off", "false", "0", "no", "disabled":
+		return "off"
+	default:
+		return "on"
+	}
 }

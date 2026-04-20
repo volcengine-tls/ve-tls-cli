@@ -118,6 +118,7 @@ func TestClassifyError_ToolExecRequiresFileURLIsUsage(t *testing.T) {
 func TestClassifyError_MissingRequiredFieldIsValidation(t *testing.T) {
 	cases := []string{
 		"missing required field: input.query.ProjectId",
+		"missing required fields: input.body.ProjectId, input.body.TopicName",
 		"workflow input missing required fields: TopicId, Input",
 	}
 	for _, msg := range cases {
@@ -130,6 +131,111 @@ func TestClassifyError_MissingRequiredFieldIsValidation(t *testing.T) {
 		}
 		if strings.TrimSpace(p.Hint) == "" {
 			t.Fatalf("%q expected validation hint", msg)
+		}
+	}
+}
+
+func TestClassifyError_ValidationHintMatchesSurface(t *testing.T) {
+	toolPayload, _ := classifyError(errString("missing required fields: input.body.ProjectId, input.body.TopicName"), "", 0, "tool")
+	if strings.Contains(toolPayload.Hint, "workflow describe") {
+		t.Fatalf("tool validation hint should not mention workflow describe: %q", toolPayload.Hint)
+	}
+	if !strings.Contains(toolPayload.Hint, "tool describe") {
+		t.Fatalf("tool validation hint should mention tool describe: %q", toolPayload.Hint)
+	}
+
+	workflowPayload, _ := classifyError(errString("workflow input missing required fields: TopicId, Input"), "", 0, "workflow")
+	if strings.Contains(workflowPayload.Hint, "tool describe") {
+		t.Fatalf("workflow validation hint should not mention tool describe: %q", workflowPayload.Hint)
+	}
+	if !strings.Contains(workflowPayload.Hint, "workflow describe") {
+		t.Fatalf("workflow validation hint should mention workflow describe: %q", workflowPayload.Hint)
+	}
+}
+
+func TestClassifyError_PageAllUnsupportedIsUnsupportedFeature(t *testing.T) {
+	cases := []string{
+		"execution.page.all is not supported for tool: topic.create-topic",
+		"tool topic.describe-topics declares page.all support but runtime pagination metadata is unavailable",
+	}
+	for _, msg := range cases {
+		p, code := classifyError(errString(msg), "", 0, "tool")
+		if code != 1 {
+			t.Fatalf("%q unexpected code: %d", msg, code)
+		}
+		if p.Kind != "unsupported_feature" {
+			t.Fatalf("%q unexpected kind: %q", msg, p.Kind)
+		}
+		if strings.TrimSpace(p.Hint) == "" {
+			t.Fatalf("%q expected unsupported_feature hint", msg)
+		}
+	}
+}
+
+func TestClassifyError_MissingWritableOutputDirIsFilesystem(t *testing.T) {
+	p, code := classifyError(errString("missing writable output_dir"), "", 0, "raw")
+	if code != 2 {
+		t.Fatalf("unexpected code: %d", code)
+	}
+	if p.Kind != "filesystem" {
+		t.Fatalf("unexpected kind: %q", p.Kind)
+	}
+	if strings.TrimSpace(p.Hint) == "" {
+		t.Fatalf("expected filesystem hint")
+	}
+}
+
+func TestClassifyError_UnknownFallbackHasHint(t *testing.T) {
+	p, code := classifyError(errString("some brand new residual failure"), "", 0, "tool")
+	if code != 2 {
+		t.Fatalf("unexpected code: %d", code)
+	}
+	if p.Kind != "unknown" {
+		t.Fatalf("unexpected kind: %q", p.Kind)
+	}
+	if strings.TrimSpace(p.Hint) == "" {
+		t.Fatalf("expected unknown fallback hint, got empty hint")
+	}
+}
+
+func TestClassifyError_CommonResidualValidationShapes(t *testing.T) {
+	cases := []string{
+		"consume request body must be json object",
+		"jsonl line must be object",
+		"json-array input must be json array",
+		"unsupported log contents type",
+		"json: cannot unmarshal object into Go struct field",
+	}
+	for _, msg := range cases {
+		p, code := classifyError(errString(msg), "", 0, "tool")
+		if code != 1 {
+			t.Fatalf("%q unexpected code: %d", msg, code)
+		}
+		if p.Kind != "validation" {
+			t.Fatalf("%q unexpected kind: %q", msg, p.Kind)
+		}
+	}
+}
+
+func TestClassifyError_CommonResidualRuntimeKinds(t *testing.T) {
+	cases := []struct {
+		msg  string
+		kind string
+		code int
+	}{
+		{"kafka record payload requires --output-mode file", "incompatible_flags", 1},
+		{"unexpected list response", "decode", 3},
+		{"unexpected list field: Topics", "decode", 3},
+		{"cannot infer list field for --all", "decode", 3},
+		{"working directory not found", "filesystem", 2},
+	}
+	for _, tc := range cases {
+		p, code := classifyError(errString(tc.msg), "", 0, "tool")
+		if code != tc.code {
+			t.Fatalf("%q unexpected code: %d", tc.msg, code)
+		}
+		if p.Kind != tc.kind {
+			t.Fatalf("%q unexpected kind: %q", tc.msg, p.Kind)
 		}
 	}
 }

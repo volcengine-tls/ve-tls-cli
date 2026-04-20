@@ -150,12 +150,26 @@ func runToolExecAction(ctx *Context, contract toolCatalog, method, path string, 
 		if !contract.SupportsAll {
 			return nil, fmt.Errorf("execution.page.all is not supported for tool: %s", toolID)
 		}
+		if generatedPaginationModeForContract(contract, method) == "page-number" {
+			preparedQuery, pageSize, err := preparePageAllPageNumberQuery(query)
+			if err != nil {
+				return nil, err
+			}
+			query = preparedQuery
+			if ctx.DryRun {
+				out, err := ctx.Do(method, path, query, header, body)
+				if err != nil {
+					return nil, err
+				}
+				return annotateToolDryRunPageAll(out, pageSize), nil
+			}
+		}
 		if ctx.DryRun {
 			out, err := ctx.Do(method, path, query, header, body)
 			if err != nil {
 				return nil, err
 			}
-			return annotateToolDryRunPageAll(out), nil
+			return annotateToolDryRunPageAll(out, 0), nil
 		}
 		ops, ok := loadToolAPIOps(contract)
 		if !ok || len(ops) == 0 {
@@ -234,17 +248,33 @@ func extractToolProjectionMetadata(raw any) map[string]any {
 	return out
 }
 
-func annotateToolDryRunPageAll(result any) any {
+func annotateToolDryRunPageAll(result any, pageSize int) any {
 	plan, ok := result.(map[string]any)
 	if !ok {
 		return result
 	}
-	plan["page_all"] = map[string]any{
+	meta := map[string]any{
 		"requested": true,
 		"mode":      "dry_run",
 		"note":      "dry-run validates the first request shape; real execution will iterate all supported pages",
 	}
+	if pageSize > 0 {
+		meta["page_size"] = pageSize
+	}
+	plan["page_all"] = meta
 	return plan
+}
+
+func generatedPaginationModeForContract(contract toolCatalog, method string) string {
+	ops, ok := loadToolAPIOps(contract)
+	if !ok || len(ops) == 0 {
+		return ""
+	}
+	selected, ok := selectOpByMethod(ops, method)
+	if !ok {
+		return ""
+	}
+	return generatedPaginationMode(selected)
 }
 
 func loadToolAPIOps(contract toolCatalog) ([]apiActionOp, bool) {
@@ -397,6 +427,7 @@ func validateToolExecInput(contract toolCatalog, input map[string]any) error {
 	if len(inputSchema) == 0 {
 		return nil
 	}
+	missing := make([]string, 0, 4)
 	sectioned := hasToolInputSections(input)
 	for _, section := range []string{"query", "path", "header", "body"} {
 		sectionSchema, ok := inputSchema[section].(map[string]any)
@@ -413,23 +444,34 @@ func validateToolExecInput(contract toolCatalog, input map[string]any) error {
 		if sectionInput == nil {
 			sectionInput = map[string]any{}
 		}
-		if err := validateToolSchemaRequiredFields(sectionSchema, sectionInput, "input."+section); err != nil {
-			return err
-		}
+		collectToolSchemaRequiredFields(sectionSchema, sectionInput, "input."+section, &missing)
 	}
-	return nil
+	if len(missing) == 0 {
+		return nil
+	}
+	sort.Strings(missing)
+	if len(missing) == 1 {
+		return fmt.Errorf("missing required field: %s", missing[0])
+	}
+	return errors.New("missing required fields: " + strings.Join(missing, ", "))
 }
 
-func validateToolSchemaRequiredFields(schema map[string]any, input map[string]any, path string) error {
+func collectToolSchemaRequiredFields(schema map[string]any, input map[string]any, path string, missing *[]string) {
 	for _, name := range toolRequiredFields(schema["required"]) {
 		value, ok := input[name]
 		if !ok || value == nil {
-			return fmt.Errorf("missing required field: %s.%s", path, name)
+			*missing = append(*missing, path+"."+name)
 		}
 	}
 
 	props, _ := schema["properties"].(map[string]any)
-	for name, raw := range props {
+	propNames := make([]string, 0, len(props))
+	for name := range props {
+		propNames = append(propNames, name)
+	}
+	sort.Strings(propNames)
+	for _, name := range propNames {
+		raw := props[name]
 		childSchema, ok := raw.(map[string]any)
 		if !ok {
 			continue
@@ -438,11 +480,8 @@ func validateToolSchemaRequiredFields(schema map[string]any, input map[string]an
 		if !ok {
 			continue
 		}
-		if err := validateToolSchemaRequiredFields(childSchema, childInput, path+"."+name); err != nil {
-			return err
-		}
+		collectToolSchemaRequiredFields(childSchema, childInput, path+"."+name, missing)
 	}
-	return nil
 }
 
 func hasToolInputSections(input map[string]any) bool {

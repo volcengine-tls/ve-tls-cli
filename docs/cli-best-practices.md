@@ -51,6 +51,8 @@ volclog [global flags...] <group> <command> [args]
 - `raw` 使用 `--method`、`--path`、`--query`、`--header`、`--body`
 - 为了降低从 `tool/workflow` 迁移到 `raw` 时的坑，`raw` 也接受 `--input` 作为 `--body` 的兼容别名
 - 但 `raw --body` 与 `raw --input` 不能同时传
+- `raw --input/--body` 只是 literal request body；即使是 GET，也不会像 `tool exec` 那样把 JSON 自动拆到 query/path/header
+- `raw --dry-run` 只做 transport/local checks；它不会像 `tool exec` / `workflow exec` 那样校验 API 必填字段
 
 输入介质统一支持：
 
@@ -115,6 +117,8 @@ volclog --output-mode file --output-dir ./out \
 
 - 调用方只提供目录，不自己指定文件名
 - 没有可写 `output_dir` 时，auto spill 会直接报错并提示补 `--output-dir <writable-dir>`
+- `tool / workflow / raw` 的 file delivery 文件始终写完整 JSON envelope；`--output jsonl` 只影响 stdout，不会把 envelope 文件改成 jsonl
+- `log export / log export-analysis` 属于导出型 workflow；它们的文件写的是导出数据行，stdout envelope 通过 `artifacts[].path` 指向数据文件
 - `summary.outputMode` 表示调用方意图
 - `summary.deliveryMode` 表示运行时最终交付方式
 
@@ -150,8 +154,10 @@ volclog tool exec project.describe-projects --jmes-filter "error"
 注意：
 
 - 命中存在但值为 `null` 的字段时，stdout 直接输出 `null`，这仍然是成功结果
-- `filter matched no value` 才表示路径写错了
+- 字段不存在、对象路径写错，或数组下标越界时，会报 `filter matched no value`
 - `--jmes-filter` 是 stdout-only；不能和 file delivery 同时使用
+- 如果原始 envelope 已经失败，`--jmes-filter` 命中失败 envelope 时仍保持原始非零退出；filter miss 只会追加 warning，不会覆盖原始 `error.kind`
+- `filter matched no value` 与 `invalid --jmes-filter` 属于 `decode`，返回 exit 3
 
 ### 3.2 `execution.projection`
 
@@ -184,11 +190,44 @@ volclog tool exec project.describe-projects --jmes-filter "error"
 - `error.code` 是最适合脚本和 Agent 判断的稳定错误码
 - `error.details` 只有在确实有额外结构时才出现
 
+常见 `error.kind`：
+
+- `validation`：输入字段缺失、冲突 selector、或 stdout/file 约束未满足
+- `unsupported_feature`：命令或契约本身不支持该能力，例如对不支持的 action 开启 `page.all`
+- `incompatible_flags`：同一次调用里组合了互斥的输出/过滤参数
+- `filesystem`：本地输出目录、文件路径或权限有问题
+- `server` / `auth`：上游服务返回的业务或鉴权失败
+
 对于上游服务端错误：
 
 - `error.code` 会直接是业务错误码，例如 `ProjectAlreadyExist`
 - 如果服务端错误文案里还嵌了一层 JSON，CLI 会尽量提炼到 `error.details`
 - 不要再把 `error.message` 当 JSON 二次解析
+
+### 3.4 Thin Client 边界
+
+CLI 只做两类校验：
+
+- 契约/结构校验：字段是否存在、JSON 形状是否匹配、flag 是否互斥
+- 运行时校验：凭证、输出目录、trace、delivery mode 这类本地执行条件
+
+CLI 不替服务端做业务语义判断。
+
+例如：
+
+- 负数时间戳
+- 查询本身是否“有意义”
+- 空结果是不是业务上异常
+
+这些值只要符合契约形状，就会被透传到服务端。
+
+因此当你看到：
+
+- 没有本地 validation 错误
+- 也没有本地 decode/config/filesystem 错误
+- 但结果仍然为空或不符合预期
+
+先检查业务时间范围、查询语义、Topic/Project 是否正确，不要先假设 CLI 做了业务层拦截。
 
 ---
 
@@ -198,14 +237,14 @@ volclog tool exec project.describe-projects --jmes-filter "error"
 
 ```bash
 volclog doctor
-volclog --trace-dir ./.volclog/traces --trace-redact strict tool exec ...
+volclog --trace-dir ./.volclog/traces --trace-redact on tool exec ...
 ```
 
 其中：
 
 - `doctor`：先检查配置、鉴权、endpoint、region 与环境状态
 - `--trace-dir`：生成 trace 工件用于复盘
-- `--trace-redact strict`：优先保证敏感字段被脱敏
+- `--trace-redact`：启用 trace 脱敏；历史 strict/default 写法当前等价，不再代表不同模式
 
 当你面对的是“为什么这次调用没按预期发出去 / 为什么返回 400/403/500”这类问题时，先跑 `doctor`，再开 trace，而不是直接猜 body。
 

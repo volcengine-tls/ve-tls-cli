@@ -47,6 +47,9 @@ func runToolList(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(group) != "" && !toolGroupExists(group) {
+		return nil, errors.New("group not found: " + strings.TrimSpace(group))
+	}
 	if ctx != nil && format == "json" {
 		ctx.FormatOverride = output.FormatJSON
 	}

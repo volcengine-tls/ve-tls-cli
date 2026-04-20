@@ -159,6 +159,7 @@ volclog tool exec project.describe-projects \
 
 - `--jmes-filter` 作用于完整 CLI envelope，所以 `data.*`、`summary.*`、`error.*` 都是合法路径。
 - 如果目标字段真实存在但值为 `null`，stdout 会直接输出字面量 `null`，命令仍算成功。
+- 字段不存在、对象路径写错，或数组下标越界时，会报 `filter matched no value`。
 - `--jmes-filter` 不能和 file delivery 同时使用。
 
 ### 快速开始（人类用户）

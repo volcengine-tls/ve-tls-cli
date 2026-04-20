@@ -247,6 +247,52 @@ func TestBuildToolCatalogContextSchemaCarriesWave2Guidance(t *testing.T) {
 	}
 }
 
+func TestBuildToolCatalogContextRuntimeEffectsMatchCurrentSelectorAndTraceSemantics(t *testing.T) {
+	doc := swaggerDoc{
+		Paths: map[string]swaggerPathItem{
+			"/DescribeTopics": {
+				Get: &swaggerOp{
+					Summary: "DescribeTopics",
+					Tags:    []string{"Topic"},
+				},
+			},
+		},
+	}
+	got := buildToolCatalog(doc, "stage1", map[string]string{"Topic": "topic"}, map[string]string{}, map[string]apiDocEntry{
+		"DescribeTopics": {GroupTitle: "Topic"},
+	}, toolCatalogOverrides{})
+	if len(got.Tools) != 1 {
+		t.Fatalf("tools=%d", len(got.Tools))
+	}
+
+	ctxProps, ok := got.Tools[0].ContextSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("context schema malformed: %+v", got.Tools[0].ContextSchema)
+	}
+
+	secretsField, ok := ctxProps["secrets_file"].(map[string]any)
+	if !ok {
+		t.Fatalf("context field secrets_file malformed: %+v", ctxProps["secrets_file"])
+	}
+	secretsRuntimeEffect, _ := secretsField["runtime_effect"].(string)
+	for _, want := range []string{"selectors first", "supported VOLCENGINE_*"} {
+		if !strings.Contains(secretsRuntimeEffect, want) {
+			t.Fatalf("secrets_file runtime_effect missing %q: %q", want, secretsRuntimeEffect)
+		}
+	}
+
+	traceField, ok := ctxProps["trace"].(map[string]any)
+	if !ok {
+		t.Fatalf("context field trace malformed: %+v", ctxProps["trace"])
+	}
+	traceRuntimeEffect, _ := traceField["runtime_effect"].(string)
+	for _, want := range []string{"trace directory", "legacy strict/default", "on/off"} {
+		if !strings.Contains(traceRuntimeEffect, want) {
+			t.Fatalf("trace runtime_effect missing %q: %q", want, traceRuntimeEffect)
+		}
+	}
+}
+
 func TestBuildToolCatalogSkipsUndocumentedOperationsWhenDocIndexPresent(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{

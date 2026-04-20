@@ -23,6 +23,8 @@ Key rules:
   - normal stdout -> `deliveryMode=stdout`
 - For large responses, prefer `--output-mode file --output-dir <writable-dir>`.
 - If auto spill fails because no writable directory was provided, rerun with `--output-dir <writable-dir>` instead of inventing a filename.
+- `tool / workflow / raw` write a full JSON envelope when file delivery is used, even if stdout format preference was `jsonl`.
+- `log.export` and `log.export-analysis` are the exception: their files contain exported data rows, while stdout keeps the envelope and points to the file through `artifacts`.
 
 ## Envelope Filtering
 
@@ -33,6 +35,8 @@ Key rules:
 - Use `execution.projection` only for raw service-result fields.
 - If `--jmes-filter` targets an existing envelope field whose value is `null`, stdout returns literal `null` and the command still succeeds.
 - `filter matched no value` means the path was wrong, not that a null field was returned.
+- `filter matched no value` and `invalid --jmes-filter` are `decode` failures and return exit 3.
+- If the original envelope already failed, keep the original non-zero exit and `error.kind`; a filter miss only adds a warning instead of replacing the failure.
 
 ## Search, Histogram, And Analysis
 
@@ -41,7 +45,11 @@ Use this section to interpret result semantics after the surface has already bee
 - `log.search` itself supports plain search and SQL/analysis queries in `Query`.
 - Use `log.search` for interactive analysis, small previews, and quick iteration.
 - `log.describe-histogram-v1` is for time-distribution preview and total-hit estimation only for pure search queries.
-- `log.export-analysis` uses the same SearchLogs SQL/analysis `Query` syntax as `log.search`; the difference is that it is positioned for full analysis-row export instead of interactive preview.
+- `log.export-analysis` uses the same SearchLogs SQL/analysis `Query` syntax as `log.search`; it does not add a new server-side analysis API or another pagination model.
+- Choose `log.export-analysis` when the user needs the full analysis row set written as an export file for offline reading, downstream processing, or token-safe handoff.
+- Stay on `log.search` when the user is still validating SQL, iterating on the query, or only needs a small interactive preview.
+- `raw --input` is only a compatibility alias for `--body`; it does not do `tool exec` style smart mapping for GET requests.
+- `raw --dry-run` only validates the transport/local plan. It does not validate API-required fields the way `tool exec` or `workflow exec` can.
 - `HitCount` is only the count returned in the current `SearchLogs` response window.
 - `Histogram.TotalCount` is the better whole-window total only for pure search when histogram is the correct surface.
 - `ResultStatus=incomplete` means the service returned only a partial scan. This can happen for SearchLogs in both search and analysis mode, so narrow the time range and rerun before trusting counts, rows, empty results, or bucket distribution.
@@ -65,6 +73,11 @@ Interpretation rules:
 
 - For upstream service failures, `error.code` is already the business error code such as `ProjectAlreadyExist`.
 - If the service embeds extra JSON details, the CLI lifts them into `error.details`; do not parse `error.message` again unless `details` is absent.
+- Use `error.kind` to choose the smallest recovery action:
+  - `validation`: fix input or selector shape first
+  - `unsupported_feature`: remove the unsupported capability, or switch surface
+  - `incompatible_flags`: remove one of the conflicting flags and rerun
+  - `filesystem`: fix `--output-dir`, path, or local permissions before retrying
 
 ## Profile And Credential Selection
 
@@ -86,6 +99,24 @@ Hard rule:
 
 - Environment credentials override profile resolution. If a stateless run must target a specific local profile, use host-generated secrets files instead of sandbox-wide env injection.
 - `--profile`/`context.profile` and `--secrets-file`/`context.secrets_file` are mutually exclusive runtime selectors; conflicting selectors fail fast instead of silently overriding each other.
+
+## Thin Client Boundary
+
+The CLI validates contract shape and runtime preconditions. It does not validate business semantics for you.
+
+What the CLI does validate:
+
+- required fields and JSON shape
+- conflicting runtime selectors or output flags
+- local output path / writable directory constraints
+
+What the CLI does not try to judge:
+
+- whether a timestamp is business-valid
+- whether a query is semantically reasonable
+- whether an empty result is surprising for the workload
+
+If the command reached the service without a local validation/decode/filesystem error, debug the business query and time window before assuming the CLI blocked something.
 
 ## Recovery Signals
 
