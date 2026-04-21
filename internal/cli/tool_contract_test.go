@@ -346,25 +346,60 @@ func TestToolListJSONFormatOverridesGlobalOutputTable(t *testing.T) {
 	}
 }
 
-func TestToolListBadGroupReturnsUsageError(t *testing.T) {
+func TestToolListBadGroupReturnsUsageEnvelope(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"tool", "list", "definitely-missing-group"}, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	if strings.TrimSpace(stdout.String()) != "" {
-		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
 
-	var payload map[string]any
-	if err := json.Unmarshal(stderr.Bytes(), &payload); err != nil {
-		t.Fatalf("invalid stderr json: %v stderr=%q", err, stderr.String())
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
 	}
-	if !strings.Contains(asStringOrEmpty(payload["errorMessage"]), "group not found: definitely-missing-group") {
-		t.Fatalf("unexpected error message: %#v", payload["errorMessage"])
+	if out["status"] != "failed" {
+		t.Fatalf("expected failed status, got %#v", out["status"])
 	}
-	if asStringOrEmpty(payload["kind"]) != "usage" {
-		t.Fatalf("unexpected error kind: %#v", payload["kind"])
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "group not found: definitely-missing-group") {
+		t.Fatalf("unexpected error message: %#v", errObj["message"])
+	}
+	if asStringOrEmpty(errObj["kind"]) != "usage" {
+		t.Fatalf("unexpected error kind: %#v", errObj["kind"])
+	}
+}
+
+func TestToolDescribeUnknownIdentityReturnsUsageEnvelope(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"tool", "describe", "definitely-missing-group.not-real"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	if out["status"] != "failed" {
+		t.Fatalf("expected failed status, got %#v", out["status"])
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if errObj["kind"] != "usage" {
+		t.Fatalf("expected usage kind, got %#v", errObj["kind"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "unknown tool: definitely-missing-group.not-real") {
+		t.Fatalf("unexpected error message: %#v", errObj["message"])
 	}
 }
 
@@ -1792,8 +1827,28 @@ func TestToolDescribeRejectsGlobalDryRunPrefix(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("expected non-zero exit when dry-run is used with tool describe")
 	}
-	if !strings.Contains(stderr.String(), "invalid --dry-run scope") {
-		t.Fatalf("expected invalid --dry-run scope error, got stderr=%q stdout=%q", stderr.String(), stdout.String())
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	if out["status"] != "failed" {
+		t.Fatalf("expected failed status, got %#v", out["status"])
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if errObj["kind"] != "usage" {
+		t.Fatalf("expected usage kind, got %#v", errObj["kind"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "--dry-run currently supports") {
+		t.Fatalf("unexpected error message: %#v", errObj["message"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["hint"]), "invalid --dry-run scope") {
+		t.Fatalf("unexpected error hint: %#v", errObj["hint"])
 	}
 }
 

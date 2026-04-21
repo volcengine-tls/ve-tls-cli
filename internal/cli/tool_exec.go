@@ -357,11 +357,16 @@ func normalizeToolExecInput(contract toolCatalog, input map[string]any) (map[str
 
 	normalized := map[string]any{}
 	ambiguous := make([]string, 0, 1)
+	reserved := make([]string, 0, 1)
 	unknown := make([]string, 0, 1)
 	for key, value := range input {
 		matches := matchingToolInputSections(sectionProps, key)
 		switch len(matches) {
 		case 0:
+			if isReservedToolExecInputKey(key) {
+				reserved = append(reserved, key)
+				continue
+			}
 			if hasBody && (len(presentSections) == 1 || bodyAllowsLooseFields) {
 				assignToolInputSection(normalized, "body", key, value)
 				continue
@@ -377,11 +382,24 @@ func normalizeToolExecInput(contract toolCatalog, input map[string]any) (map[str
 		sort.Strings(ambiguous)
 		return nil, fmt.Errorf("flat input has ambiguous fields: %s; use nested input sections {query,path,header,body}", strings.Join(ambiguous, ", "))
 	}
+	if len(reserved) > 0 {
+		sort.Strings(reserved)
+		return nil, fmt.Errorf("flat input contains reserved context/runtime fields: %s; move them to --context", strings.Join(reserved, ", "))
+	}
 	if len(unknown) > 0 {
 		sort.Strings(unknown)
 		return nil, fmt.Errorf("flat input contains unknown fields: %s", strings.Join(unknown, ", "))
 	}
 	return normalized, nil
+}
+
+func isReservedToolExecInputKey(key string) bool {
+	switch strings.TrimSpace(key) {
+	case "context", "profile", "secrets_file", "region", "endpoint", "trace", "execution", "contract_digest", "contract_cache_hint":
+		return true
+	default:
+		return false
+	}
 }
 
 func toolSchemaAllowsLooseFields(schema map[string]any) bool {

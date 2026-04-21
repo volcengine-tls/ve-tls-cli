@@ -16,8 +16,7 @@ Read these signals in this order after routing is already clear:
 Key rules:
 
 - Keep surface choice and delivery choice separate. Skill decides `tool / workflow / raw`; CLI decides stdout vs file delivery.
-- If both binaries are available, prefer `volclog` for agent or CI sessions.
-- `volclog-human` keeps the human shortcut layer; do not let that change the runtime reading order described here.
+- Do not let shortcut-oriented help or examples change the runtime reading order described here.
 - Let CLI `deliveryMode` decide stdout vs `file_auto`.
 - For `log.search`, let CLI `deliveryMode` decide stdout vs `file_auto` after the surface is already chosen.
 - Treat `outputMode` as caller intent and `deliveryMode` as runtime result:
@@ -169,7 +168,6 @@ When the command already failed, follow the smallest next action:
 - `workflow-ids-are-not-tool-ids`: `log.ingest`, `log.export`, and `log.export-analysis` belong to `workflow`, not `tool`.
 - `ingest-is-not-tool-put`: use `workflow log.ingest` for local file or stdin import, and `tool log.put` only for the public PutLogs contract.
 - `shortcuts-are-human-first`: human shortcut groups are for humans; agent flows should stay on `tool / workflow / raw`.
-- `default-binary-is-agent-first`: prefer `volclog` when available; `volclog-human` keeps shortcut-oriented help that agents should ignore.
 - `thin-client-does-not-judge-business-semantics`: if there was no local validation, decode, or filesystem error, debug the query semantics and time window before blaming the CLI.
 - `env-creds-override-profile`: process-wide environment credentials override local profile resolution.
 - `profile-and-secrets-file-are-exclusive`: choose exactly one runtime selector family, not both `profile` and `secrets_file`.

@@ -56,7 +56,6 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"Run `volclog configure list` only when local profile discovery is actually relevant.",
 		"run `volclog tool list <group>` or `volclog workflow list <group>` before guessing",
 		"Do not pipe `volclog` output into `jq` or `grep` just to rediscover schema or field paths.",
-		"prefer `volclog` for agent or CI sessions",
 		"contract_cache_hint.safe_scope",
 		"contract_cache_hint.refresh_when",
 		"Prefer `--dry-run` before any write or destructive change, but only on `raw`, `tool exec`, or `workflow exec`.",
@@ -114,15 +113,15 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"interactive SQL exploration",
 		"Status",
 		"Stop when",
-			"validation query",
-			"Pick one SOP, follow it until its stop condition, then stop.",
-			"poll `index.describe` with a reasonable timeout",
-			"first follow `SKILL.md` Error Recovery Quick Map",
-		} {
-			if !strings.Contains(strings.ToLower(sops), strings.ToLower(want)) {
-				t.Fatalf("sops.md missing %q", want)
-			}
+		"validation query",
+		"Pick one SOP, follow it until its stop condition, then stop.",
+		"poll `index.describe` with a reasonable timeout",
+		"first follow `SKILL.md` Error Recovery Quick Map",
+	} {
+		if !strings.Contains(strings.ToLower(sops), strings.ToLower(want)) {
+			t.Fatalf("sops.md missing %q", want)
 		}
+	}
 
 	bestPractices := read("skills/volclog-core/references/best-practices.md")
 	for _, want := range []string{
@@ -152,39 +151,37 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"`error.kind`",
 		"`error.code`",
 		"`error.details`",
-		"`volclog-human`",
 		"`HitCount`",
-			"`Histogram.TotalCount`",
-			"`ResultStatus=incomplete` means the service returned only a partial scan",
-			"`--secrets-file`",
-			"`context.secrets_file`",
-			"VOLCENGINE_ACCESS_KEY_ID",
-			"Dry-Run Scope",
-			"`error.hint`",
-			"`unknown tool`",
-			"`missing --input`",
-			"`jmes filter returned literal null`",
-			"`error.kind=server` or `5xx`",
-			"`TopicAlreadyExist`",
-			"`ProjectAlreadyExist`",
-			"`search returned empty after write`",
-			"`huge stdout payload`",
-			"`page-all-is-not-compression`",
-			"`jmes-filter-and-projection-have-different-scope`",
-			"`jmes-filter-null-is-still-success`",
-			"`jmes-filter-does-not-mix-with-file-delivery`",
-			"`deliverymode-belongs-to-runtime`",
-			"`workflow-ids-are-not-tool-ids`",
-			"`ingest-is-not-tool-put`",
-			"`shortcuts-are-human-first`",
-			"`default-binary-is-agent-first`",
-			"`thin-client-does-not-judge-business-semantics`",
-			"`env-creds-override-profile`",
-			"`profile-and-secrets-file-are-exclusive`",
-			"Do not use this file to reopen surface selection once routing is already clear.",
-			"Doctor Boundary",
-			"does not override the main skill's default first response",
-		} {
+		"`Histogram.TotalCount`",
+		"`ResultStatus=incomplete` means the service returned only a partial scan",
+		"`--secrets-file`",
+		"`context.secrets_file`",
+		"VOLCENGINE_ACCESS_KEY_ID",
+		"Dry-Run Scope",
+		"`error.hint`",
+		"`unknown tool`",
+		"`missing --input`",
+		"`jmes filter returned literal null`",
+		"`error.kind=server` or `5xx`",
+		"`TopicAlreadyExist`",
+		"`ProjectAlreadyExist`",
+		"`search returned empty after write`",
+		"`huge stdout payload`",
+		"`page-all-is-not-compression`",
+		"`jmes-filter-and-projection-have-different-scope`",
+		"`jmes-filter-null-is-still-success`",
+		"`jmes-filter-does-not-mix-with-file-delivery`",
+		"`deliverymode-belongs-to-runtime`",
+		"`workflow-ids-are-not-tool-ids`",
+		"`ingest-is-not-tool-put`",
+		"`shortcuts-are-human-first`",
+		"`thin-client-does-not-judge-business-semantics`",
+		"`env-creds-override-profile`",
+		"`profile-and-secrets-file-are-exclusive`",
+		"Do not use this file to reopen surface selection once routing is already clear.",
+		"Doctor Boundary",
+		"does not override the main skill's default first response",
+	} {
 		if !strings.Contains(bestPractices, want) {
 			t.Fatalf("best-practices.md missing %q", want)
 		}
@@ -232,7 +229,6 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 	}
 	foundCachePrinciple := false
 	foundStatelessSecretPrinciple := false
-	foundAgentEditionPrinciple := false
 	for _, principle := range m.Principles {
 		if principle == "respect_contract_cache_hint" {
 			foundCachePrinciple = true
@@ -240,18 +236,12 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 		if principle == "host_managed_secret_injection_for_stateless_agents" {
 			foundStatelessSecretPrinciple = true
 		}
-		if principle == "prefer_volclog_default_when_available" {
-			foundAgentEditionPrinciple = true
-		}
 	}
 	if !foundCachePrinciple {
 		t.Fatalf("manifest missing respect_contract_cache_hint principle: %+v", m)
 	}
 	if !foundStatelessSecretPrinciple {
 		t.Fatalf("manifest missing host_managed_secret_injection_for_stateless_agents principle: %+v", m)
-	}
-	if !foundAgentEditionPrinciple {
-		t.Fatalf("manifest missing prefer_volclog_default_when_available principle: %+v", m)
 	}
 	for _, want := range []string{"routing", "workflows", "recovery", "traps"} {
 		if _, ok := m.Sources[want]; !ok {

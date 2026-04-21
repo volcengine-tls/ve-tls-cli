@@ -5,7 +5,6 @@ purpose: structured source for the published agent-only skill
 principles:
   - do_not_repeat_tool_describe
   - agent_only
-  - prefer_volclog_default_when_available
   - public_api_first
   - workflow_for_cli_orchestration
   - respect_contract_cache_hint

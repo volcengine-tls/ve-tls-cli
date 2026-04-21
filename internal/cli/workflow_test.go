@@ -114,6 +114,38 @@ func TestWorkflowDescribeReturnsWorkflowContract(t *testing.T) {
 	}
 }
 
+func TestWorkflowDescribeUnknownIdentityReturnsUsageEnvelope(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"workflow", "describe", "log.not-real"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	if out["status"] != "failed" {
+		t.Fatalf("expected failed status, got %#v", out["status"])
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if errObj["kind"] != "usage" {
+		t.Fatalf("expected usage kind, got %#v", errObj["kind"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "unknown workflow: log.not-real") {
+		t.Fatalf("unexpected error message: %#v", errObj["message"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["hint"]), "volclog workflow list") {
+		t.Fatalf("unexpected error hint: %#v", errObj["hint"])
+	}
+}
+
 func TestWorkflowDescribeLogExportAnalysisExplainsLargeAnalysisExportUseCase(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"--output", "json", "workflow", "describe", "log.export-analysis"}, &stdout, &stderr)
@@ -307,8 +339,8 @@ func TestWorkflowExecRejectsConflictingProfileAndContextSecretsFile(t *testing.T
 	if !ok {
 		t.Fatalf("expected error object, got %#v", out["error"])
 	}
-	if errObj["kind"] != "validation" {
-		t.Fatalf("expected validation kind, got %#v", errObj)
+	if errObj["kind"] != "incompatible_flags" {
+		t.Fatalf("expected incompatible_flags kind, got %#v", errObj)
 	}
 	if !strings.Contains(asStringOrEmpty(errObj["message"]), "conflicting runtime selectors") {
 		t.Fatalf("unexpected error message: %#v", errObj["message"])
@@ -392,8 +424,8 @@ func TestWorkflowExecRejectsConflictingGlobalAndContextProfile(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected error object, got %#v", out["error"])
 	}
-	if errObj["kind"] != "validation" {
-		t.Fatalf("expected validation kind, got %#v", errObj)
+	if errObj["kind"] != "incompatible_flags" {
+		t.Fatalf("expected incompatible_flags kind, got %#v", errObj)
 	}
 	if errObj["source"] != "cli" {
 		t.Fatalf("expected cli source, got %#v", errObj["source"])

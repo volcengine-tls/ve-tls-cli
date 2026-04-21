@@ -188,11 +188,18 @@ func TestOutputRuntimePreflightRejectsMissingWritableDirForKnownFileDelivery(t *
 	if requests != 0 {
 		t.Fatalf("expected preflight to fail before request, got requests=%d", requests)
 	}
-	var errOut map[string]any
-	if err := json.Unmarshal(stderr.Bytes(), &errOut); err != nil {
-		t.Fatalf("invalid stderr json: %v stderr=%q", err, stderr.String())
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
-	if got := errOut["kind"]; got != "filesystem" {
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if got := errObj["kind"]; got != "filesystem" {
 		t.Fatalf("expected filesystem kind, got %#v", got)
 	}
 }
@@ -209,6 +216,44 @@ func TestToolWorkflowRawRejectOutputFile(t *testing.T) {
 		if code == 0 {
 			t.Fatalf("expected output-file rejection for args=%v stdout=%q stderr=%q", args, stdout.String(), stderr.String())
 		}
+	}
+}
+
+func TestToolExecPreflightOutputDirFailureUsesEnvelope(t *testing.T) {
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	tmp := t.TempDir()
+	blocker := filepath.Join(tmp, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write blocker: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"--output-mode", "file",
+		"--output-dir", filepath.Join(blocker, "child"),
+		"tool", "exec", "project.describe-projects",
+		"--input", `{}`,
+	}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected filesystem exit=2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	if out["status"] != "failed" {
+		t.Fatalf("expected failed status, got %#v", out["status"])
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if errObj["kind"] != "filesystem" {
+		t.Fatalf("expected filesystem kind, got %#v", errObj["kind"])
 	}
 }
 
@@ -321,6 +366,84 @@ func TestWorkflowExecValidationFailureUsesEnvelopeAndSupportsEnvelopeFilter(t *t
 	}
 	if kind != "validation" {
 		t.Fatalf("expected validation kind, got %q", kind)
+	}
+}
+
+func TestToolExecTopLevelJMESFilterSyntaxErrorUsesEnvelope(t *testing.T) {
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
+	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
+	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"--dry-run",
+		"--jmes-filter", "???",
+		"tool", "exec", "project.describe-projects",
+		"--input", `{}`,
+	}, &stdout, &stderr)
+	if code != 3 {
+		t.Fatalf("expected decode exit=3, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	if out["status"] != "failed" {
+		t.Fatalf("expected failed status, got %#v", out["status"])
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if got := errObj["kind"]; got != "decode" {
+		t.Fatalf("expected decode kind, got %#v", got)
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "invalid jmes-filter expression") {
+		t.Fatalf("unexpected error message: %#v", errObj["message"])
+	}
+}
+
+func TestWorkflowExecTopLevelJMESFilterMissUsesEnvelope(t *testing.T) {
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
+	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
+	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"--dry-run",
+		"--jmes-filter", "missing.path",
+		"workflow", "exec", "log.export",
+		"--input", `{"TopicId":"tid","Query":"*","StartTime":1,"EndTime":2,"MaxPages":1}`,
+	}, &stdout, &stderr)
+	if code != 3 {
+		t.Fatalf("expected decode exit=3, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	if out["status"] != "failed" {
+		t.Fatalf("expected failed status, got %#v", out["status"])
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if got := errObj["kind"]; got != "decode" {
+		t.Fatalf("expected decode kind, got %#v", got)
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "matched no value") {
+		t.Fatalf("unexpected error message: %#v", errObj["message"])
 	}
 }
 
@@ -447,15 +570,22 @@ func TestOutputRuntimeFilterRejectsForcedFile(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("expected forced file + filter rejection stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
-	var errOut map[string]any
-	if err := json.Unmarshal(stderr.Bytes(), &errOut); err != nil {
-		t.Fatalf("invalid stderr json: %v stderr=%q", err, stderr.String())
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
-	if got := errOut["kind"]; got != "incompatible_flags" {
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if got := errObj["kind"]; got != "incompatible_flags" {
 		t.Fatalf("expected incompatible_flags kind, got %#v", got)
 	}
-	if msg, _ := errOut["errorMessage"].(string); !strings.Contains(msg, "--jmes-filter") {
-		t.Fatalf("expected filter/file error, got %#v", errOut)
+	if msg, _ := errObj["message"].(string); !strings.Contains(msg, "--jmes-filter") {
+		t.Fatalf("expected filter/file error, got %#v", errObj)
 	}
 }
 

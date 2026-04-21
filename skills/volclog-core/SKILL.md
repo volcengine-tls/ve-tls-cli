@@ -11,8 +11,6 @@ Use this skill only for agent-only incremental knowledge.
 
 Treat this file as the dominant generic operating model for `volclog`, not as an environment-specific bootstrap note and not as an API reference. This file is the behavior summary; references are the authoritative detail. If `volclog tool describe ...` or `volclog workflow describe ...` already answers the question, stop and follow that contract instead of adding duplicate guidance here.
 
-If both binaries are available, prefer `volclog` for agent or CI sessions. If only `volclog-human` is installed, stay on `tool / workflow / raw` and ignore human shortcut groups.
-
 ## Operating Stance
 
 - Treat `tool describe` or `workflow describe` as the contract truth source. Read `tool describe` or `workflow describe` first.

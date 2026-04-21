@@ -47,6 +47,37 @@ func TestClassifyError_UsageUnknownActionOrGroup(t *testing.T) {
 	}
 }
 
+func TestClassifyError_UsageUnknownToolAndWorkflowIdentity(t *testing.T) {
+	cases := []struct {
+		msg          string
+		group        string
+		wantHintPart string
+	}{
+		{
+			msg:          "unknown tool: log.not-real",
+			group:        "tool",
+			wantHintPart: "volclog tool list",
+		},
+		{
+			msg:          "unknown workflow: log.not-real",
+			group:        "workflow",
+			wantHintPart: "volclog workflow list",
+		},
+	}
+	for _, tc := range cases {
+		p, code := classifyError(errString(tc.msg), "", 0, tc.group)
+		if code != 1 {
+			t.Fatalf("%q unexpected code: %d", tc.msg, code)
+		}
+		if p.Kind != "usage" {
+			t.Fatalf("%q unexpected kind: %q", tc.msg, p.Kind)
+		}
+		if !strings.Contains(p.Hint, tc.wantHintPart) {
+			t.Fatalf("%q unexpected hint: %q", tc.msg, p.Hint)
+		}
+	}
+}
+
 func TestClassifyError_UsageMissingFlagHasDescribeHint(t *testing.T) {
 	p, code := classifyError(errString("missing --topic-id"), "", 0, "")
 	if code != 1 {
@@ -236,6 +267,25 @@ func TestClassifyError_CommonResidualRuntimeKinds(t *testing.T) {
 		}
 		if p.Kind != tc.kind {
 			t.Fatalf("%q unexpected kind: %q", tc.msg, p.Kind)
+		}
+	}
+}
+
+func TestClassifyError_ConflictingSelectorsAreIncompatibleFlags(t *testing.T) {
+	cases := []string{
+		"conflicting profile selectors: global --profile=a conflicts with context.profile=b",
+		"conflicting runtime selectors: global --profile=a conflicts with context.secrets_file=/tmp/secrets.env",
+	}
+	for _, msg := range cases {
+		p, code := classifyError(errString(msg), "", 0, "tool")
+		if code != 1 {
+			t.Fatalf("%q unexpected code: %d", msg, code)
+		}
+		if p.Kind != "incompatible_flags" {
+			t.Fatalf("%q unexpected kind: %q", msg, p.Kind)
+		}
+		if !strings.Contains(p.Hint, "use exactly one runtime selector") {
+			t.Fatalf("%q unexpected hint: %q", msg, p.Hint)
 		}
 	}
 }

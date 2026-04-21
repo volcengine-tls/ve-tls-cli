@@ -95,20 +95,38 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		return errPayload{Kind: "usage"}, ue.ExitCode
 	}
 	if strings.HasPrefix(msg, "missing --") ||
+		strings.HasPrefix(msg, "missing tool identity:") ||
+		strings.HasPrefix(msg, "missing workflow identity:") ||
+		strings.HasPrefix(msg, "invalid tool identity:") ||
+		strings.HasPrefix(msg, "invalid workflow identity:") ||
+		strings.HasPrefix(msg, "unknown tool subcommand:") ||
+		strings.HasPrefix(msg, "unknown workflow subcommand:") ||
 		strings.HasPrefix(msg, "unknown flag:") ||
+		strings.HasPrefix(msg, "invalid --format:") ||
+		strings.HasPrefix(msg, "invalid --view:") ||
 		strings.HasPrefix(msg, "unknown api group:") ||
 		strings.Contains(msg, "must use file://") ||
 		strings.Contains(msg, "inline JSON object") ||
 		strings.Contains(msg, "json must be object") ||
 		strings.HasPrefix(msg, "action not found:") ||
 		strings.HasPrefix(msg, "group not found:") ||
+		strings.HasPrefix(msg, "unknown tool:") ||
+		strings.HasPrefix(msg, "unknown workflow:") ||
+		strings.HasPrefix(msg, "unexpected extra argument:") ||
+		strings.HasPrefix(msg, "unexpected extra arguments for tool describe") ||
+		strings.HasPrefix(msg, "--dry-run currently supports ") ||
+		strings.HasPrefix(msg, "unsupported output-mode:") ||
 		(strings.Contains(msg, "unknown ") && strings.Contains(msg, " command:")) {
-		hint := "start with 'volclog tool list' or inspect 'volclog tool describe <group.action>'"
+		hint := surfaceDiscoveryHint(group)
 		if strings.HasPrefix(msg, "missing --") || strings.HasPrefix(msg, "unknown flag:") {
-			hint = "inspect constraints with 'volclog tool describe <group.action>' or run --help"
+			hint = surfaceContractHint(group)
 			if flag := strings.TrimSpace(strings.TrimPrefix(msg, "unknown flag:")); isGlobalFlagName(flag) {
 				hint = globalFlagPositionHint(flag, group)
 			}
+		} else if strings.HasPrefix(msg, "invalid --format:") || strings.HasPrefix(msg, "invalid --view:") || strings.HasPrefix(msg, "unexpected extra argument:") || strings.HasPrefix(msg, "unexpected extra arguments for tool describe") {
+			hint = "run --help to inspect accepted flags and argument shape"
+		} else if strings.HasPrefix(msg, "--dry-run currently supports ") {
+			hint = "invalid --dry-run scope"
 		} else if strings.Contains(msg, "must use file://") || strings.Contains(msg, "inline JSON object") || strings.Contains(msg, "json must be object") {
 			hint = "use file://ctx.json, -, or inline JSON object with 'volclog tool exec <group.action>'; tool exec also accepts flat JSON when fields map cleanly to query/path/header/body"
 		}
@@ -123,8 +141,7 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		strings.HasPrefix(msg, "missing required fields:") ||
 		strings.HasPrefix(msg, "workflow input missing required fields:") ||
 		strings.HasPrefix(msg, "flat input contains unknown fields:") ||
-		strings.HasPrefix(msg, "conflicting profile selectors:") ||
-		strings.HasPrefix(msg, "conflicting runtime selectors:") ||
+		strings.HasPrefix(msg, "flat input contains reserved context/runtime fields:") ||
 		strings.Contains(msg, "must be json object") ||
 		strings.Contains(msg, "jsonl line must be object") ||
 		strings.Contains(msg, "json-array input must be json array") ||
@@ -132,8 +149,8 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		strings.HasPrefix(msg, "json: cannot unmarshal ") ||
 		strings.HasPrefix(msg, "result too large for stdout;") {
 		hint := validationHint(group, msg)
-		if strings.HasPrefix(msg, "conflicting profile selectors:") || strings.HasPrefix(msg, "conflicting runtime selectors:") {
-			hint = "use exactly one runtime selector: --profile, --secrets-file, context.profile, or context.secrets_file"
+		if strings.HasPrefix(msg, "flat input contains reserved context/runtime fields:") {
+			hint = "move runtime selector, trace, execution, and contract fields into --context / context.* instead of --input"
 		} else if strings.HasPrefix(msg, "result too large for stdout;") {
 			hint = "rerun with --output-dir <writable-dir> to allow file_auto, or reduce stdout with --jmes-filter / execution.projection"
 		}
@@ -155,6 +172,8 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 	}
 	if strings.Contains(msg, "cannot be combined with file delivery") ||
 		strings.HasPrefix(msg, "--output-file is not supported for ") ||
+		strings.HasPrefix(msg, "conflicting profile selectors:") ||
+		strings.HasPrefix(msg, "conflicting runtime selectors:") ||
 		strings.Contains(msg, "requires --output-mode file") ||
 		strings.Contains(msg, "cannot be used with PageNumber") ||
 		strings.Contains(msg, "cannot be used with Cursor") ||
@@ -163,6 +182,8 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		hint := "remove one of the conflicting output flags and retry"
 		if strings.Contains(msg, "PageNumber") || strings.Contains(msg, "Cursor") || strings.Contains(msg, "--page-number") || strings.Contains(msg, "--cursor") {
 			hint = "remove PageNumber/Cursor when execution.page.all or --page-all is enabled"
+		} else if strings.HasPrefix(msg, "conflicting profile selectors:") || strings.HasPrefix(msg, "conflicting runtime selectors:") {
+			hint = "use exactly one runtime selector: --profile, --secrets-file, context.profile, or context.secrets_file"
 		}
 		return errPayload{
 			RequestID:  requestID,
@@ -178,7 +199,7 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 			StatusCode: statusCode,
 			Kind:       "config",
 			Hint:       "check --secrets-file path/content and ensure it sets supported VOLCENGINE_* variables",
-		}, 2
+		}, 1
 	}
 	var pathErr *os.PathError
 	if msg == "missing writable output_dir" || errors.As(err, &pathErr) {
@@ -230,6 +251,28 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		Kind:       "unknown",
 		Hint:       "inspect error.message and rerun with --dry-run or --trace-dir when you need more detail",
 	}, 2
+}
+
+func surfaceDiscoveryHint(group string) string {
+	switch strings.TrimSpace(group) {
+	case "workflow":
+		return "start with 'volclog workflow list' or inspect 'volclog workflow describe <group.command>'"
+	case "tool":
+		return "start with 'volclog tool list' or inspect 'volclog tool describe <group.action>'"
+	default:
+		return "start with 'volclog tool list' or 'volclog workflow list', then inspect the matching describe contract"
+	}
+}
+
+func surfaceContractHint(group string) string {
+	switch strings.TrimSpace(group) {
+	case "workflow":
+		return "inspect constraints with 'volclog workflow describe <group.command>' or run --help"
+	case "tool":
+		return "inspect constraints with 'volclog tool describe <group.action>' or run --help"
+	default:
+		return "inspect constraints with 'volclog tool describe <group.action>' or 'volclog workflow describe <group.command>', or run --help"
+	}
 }
 
 func validationHint(group string, msg string) string {
