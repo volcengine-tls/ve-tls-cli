@@ -35,6 +35,12 @@ recipes:
     likely_cause: profile has no permission or the wrong tenant/profile is selected
     exact_fix: confirm the selected profile matches the target tenant and region, then verify resource permissions before retrying
     retry_command: volclog configure list
+  - error_signature: "`error.kind=server` or `5xx`"
+    http_status: 500
+    error_code: ""
+    likely_cause: upstream service failed or returned a transient internal error outside the local CLI/runtime validation path
+    exact_fix: read error.code, error.requestId, and error.statusCode first; retry with backoff only when it looks transient, otherwise escalate to the service owner with those identifiers
+    retry_command: rerun the same command with backoff
   - error_signature: IndexNotExists
     http_status: 404
     error_code: IndexNotExists

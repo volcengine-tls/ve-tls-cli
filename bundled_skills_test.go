@@ -31,11 +31,44 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 	skill := read("skills/volclog-core/SKILL.md")
 	for _, want := range []string{
 		"agent-only incremental knowledge",
+		"Treat the execution environment as unknown until the available runtime selectors are confirmed.",
+		"dominant generic operating model for `volclog`",
+		"Treat profile configuration as a runtime-selector problem, not a region-discovery ritual.",
+		"Think in runtime selectors: active profile, explicit `--profile <name>`, one-shot `--secrets-file`, `context.secrets_file`, or process-scoped environment credentials.",
+		"Do not guess command names, tool ids, workflow ids, JSON fields, or output shape.",
+		"Canonical Agent Loop",
+		"Discover -> Describe -> Exec -> Read Result",
+		"Operating Stance",
+		"Key Rules",
+		"Error Recovery Quick Map",
+		"Large Result Handling",
+		"Treat `tool describe` or `workflow describe` as the contract truth source.",
+		"Keep surface choice and delivery choice separate.",
+		"Prefer structured JSON input such as `--input '{...}'`",
+		"Go back to `describe` and fix shape or selector problems first.",
+		"Reference Escalation",
+		"Do not read every reference file by default.",
+		"`volclog doctor` checks host/runtime configuration",
 		"Read `tool describe` or `workflow describe` first",
 		"Do not use human shortcut commands as the primary agent flow.",
 		"Do not repeat schema details that already exist in `tool describe` or `workflow describe`.",
+		"Do not assume the active or default profile is the right selector for the task.",
+		"Run `volclog configure list` only when local profile discovery is actually relevant.",
+		"run `volclog tool list <group>` or `volclog workflow list <group>` before guessing",
+		"Do not pipe `volclog` output into `jq` or `grep` just to rediscover schema or field paths.",
 		"prefer `volclog` for agent or CI sessions",
-		"contract_cache_hint",
+		"contract_cache_hint.safe_scope",
+		"contract_cache_hint.refresh_when",
+		"Prefer `--dry-run` before any write or destructive change, but only on `raw`, `tool exec`, or `workflow exec`.",
+		"Treat `--dry-run` as contract or plan validation, not proof that the business query is correct.",
+		"`status` (`\"success\"` or `\"failed\"`)",
+		"the flat `error` object (when `status` is `\"failed\"`)",
+		"business fields under `data` (when `status` is `\"success\"`)",
+		"`error.kind=decode`",
+		"`error.kind=server`",
+		"`error.kind=unknown`",
+		"`403 Forbidden`",
+		"Read [references/best-practices.md](references/best-practices.md) for exact `outputMode`, `deliveryMode`, file delivery, and `--jmes-filter` semantics",
 		"volclog workflow describe <group.command>",
 		"references/routing.md",
 		"references/sops.md",
@@ -62,6 +95,8 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"--verb list",
 		"re-run `volclog tool list <group> --verb <user-intent-verb>`",
 		"Human shortcut groups are for humans.",
+		"Stop once one row clearly matches the current intent.",
+		"For non-`log` groups and plain CRUD intent, default to `volclog tool list <group> --verb <verb>` before browsing anything else.",
 	} {
 		if !strings.Contains(routing, want) {
 			t.Fatalf("routing.md missing %q", want)
@@ -77,15 +112,17 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"HitCount",
 		"Histogram.TotalCount",
 		"interactive SQL exploration",
-		"10-30 seconds",
 		"Status",
 		"Stop when",
-		"validation query",
-	} {
-		if !strings.Contains(strings.ToLower(sops), strings.ToLower(want)) {
-			t.Fatalf("sops.md missing %q", want)
+			"validation query",
+			"Pick one SOP, follow it until its stop condition, then stop.",
+			"poll `index.describe` with a reasonable timeout",
+			"first follow `SKILL.md` Error Recovery Quick Map",
+		} {
+			if !strings.Contains(strings.ToLower(sops), strings.ToLower(want)) {
+				t.Fatalf("sops.md missing %q", want)
+			}
 		}
-	}
 
 	bestPractices := read("skills/volclog-core/references/best-practices.md")
 	for _, want := range []string{
@@ -117,12 +154,37 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"`error.details`",
 		"`volclog-human`",
 		"`HitCount`",
-		"`Histogram.TotalCount`",
-		"`ResultStatus=incomplete` means the service returned only a partial scan",
-		"`--secrets-file`",
-		"`context.secrets_file`",
-		"VOLCENGINE_ACCESS_KEY_ID",
-	} {
+			"`Histogram.TotalCount`",
+			"`ResultStatus=incomplete` means the service returned only a partial scan",
+			"`--secrets-file`",
+			"`context.secrets_file`",
+			"VOLCENGINE_ACCESS_KEY_ID",
+			"Dry-Run Scope",
+			"`error.hint`",
+			"`unknown tool`",
+			"`missing --input`",
+			"`jmes filter returned literal null`",
+			"`error.kind=server` or `5xx`",
+			"`TopicAlreadyExist`",
+			"`ProjectAlreadyExist`",
+			"`search returned empty after write`",
+			"`huge stdout payload`",
+			"`page-all-is-not-compression`",
+			"`jmes-filter-and-projection-have-different-scope`",
+			"`jmes-filter-null-is-still-success`",
+			"`jmes-filter-does-not-mix-with-file-delivery`",
+			"`deliverymode-belongs-to-runtime`",
+			"`workflow-ids-are-not-tool-ids`",
+			"`ingest-is-not-tool-put`",
+			"`shortcuts-are-human-first`",
+			"`default-binary-is-agent-first`",
+			"`thin-client-does-not-judge-business-semantics`",
+			"`env-creds-override-profile`",
+			"`profile-and-secrets-file-are-exclusive`",
+			"Do not use this file to reopen surface selection once routing is already clear.",
+			"Doctor Boundary",
+			"does not override the main skill's default first response",
+		} {
 		if !strings.Contains(bestPractices, want) {
 			t.Fatalf("best-practices.md missing %q", want)
 		}
@@ -253,6 +315,16 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 			t.Fatalf("recovery recipe missing retry_command: %+v", entry)
 		}
 	}
+	foundServerRecovery := false
+	for _, entry := range recovery.Recipes {
+		if signal, _ := entry["error_signature"].(string); signal == "`error.kind=server` or `5xx`" {
+			foundServerRecovery = true
+			break
+		}
+	}
+	if !foundServerRecovery {
+		t.Fatalf("recovery template missing server/5xx recipe: %+v", recovery)
+	}
 
 	var traps trapsFile
 	load("skill-template/volclog-core/traps.yaml", &traps)
@@ -276,5 +348,29 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 	}
 	if !foundEnvOverrideTrap {
 		t.Fatalf("traps template missing env-creds-override-profile: %+v", traps)
+	}
+
+	bestPracticesBytes, err := os.ReadFile(filepath.Join(".", "skills/volclog-core/references/best-practices.md"))
+	if err != nil {
+		t.Fatalf("read best-practices.md: %v", err)
+	}
+	bestPractices := string(bestPracticesBytes)
+	for _, entry := range recovery.Recipes {
+		signal, _ := entry["error_signature"].(string)
+		if signal == "" {
+			continue
+		}
+		if !strings.Contains(bestPractices, signal) {
+			t.Fatalf("best-practices.md missing recovery signal %q from template", signal)
+		}
+	}
+	for _, entry := range traps.Traps {
+		trap, _ := entry["trap"].(string)
+		if trap == "" {
+			continue
+		}
+		if !strings.Contains(bestPractices, trap) {
+			t.Fatalf("best-practices.md missing trap %q from template", trap)
+		}
 	}
 }
