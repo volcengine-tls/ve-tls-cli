@@ -104,12 +104,18 @@ func resolveToolByIdentity(group, action string) (toolCatalog, error) {
 		}
 	}
 	if len(exact) == 1 {
+		if err := ensureToolAccessibleInCurrentEdition(exact[0]); err != nil {
+			return toolCatalog{}, err
+		}
 		return exact[0], nil
 	}
 	if len(exact) > 1 {
 		return toolCatalog{}, ambiguousToolIdentityError(group, action, exact)
 	}
 	if len(verbAliases) == 1 {
+		if err := ensureToolAccessibleInCurrentEdition(verbAliases[0]); err != nil {
+			return toolCatalog{}, err
+		}
 		return verbAliases[0], nil
 	}
 	if len(verbAliases) > 1 {
@@ -171,6 +177,9 @@ func loadToolCatalogEntries(group, verb, family string) []toolCatalog {
 	f := normalizeToken(family)
 	out := make([]toolCatalog, 0, len(catalog.Tools))
 	for _, tool := range catalog.Tools {
+		if !toolVisibleInCurrentEdition(tool) {
+			continue
+		}
 		if g != "" && normalizeToken(tool.Group) != g {
 			continue
 		}
@@ -201,11 +210,26 @@ func toolGroupExists(group string) bool {
 		return false
 	}
 	for _, tool := range catalog.Tools {
+		if !toolVisibleInCurrentEdition(tool) {
+			continue
+		}
 		if normalizeToken(tool.Group) == want {
 			return true
 		}
 	}
 	return false
+}
+
+func toolVisibleInCurrentEdition(tool toolCatalog) bool {
+	if currentEdition() != cliEditionVolclog {
+		return true
+	}
+	switch strings.TrimSpace(tool.Visibility) {
+	case "", "public":
+		return true
+	default:
+		return false
+	}
 }
 
 func toolVerbMatches(tool toolCatalog, want string) bool {

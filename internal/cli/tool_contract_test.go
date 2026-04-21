@@ -57,7 +57,7 @@ func TestToolRootRejectsLegacyGroupFlag(t *testing.T) {
 }
 
 func TestToolRootIdentityAliasDescribe(t *testing.T) {
-	out, err := runTool(nil, []string{"topic.create"})
+	out, err := runTool(nil, []string{"topic.describe-topics"})
 	if err != nil {
 		t.Fatalf("runTool root describe alias failed: %v", err)
 	}
@@ -66,8 +66,8 @@ func TestToolRootIdentityAliasDescribe(t *testing.T) {
 		t.Fatalf("expected describe output as map, got %T", out)
 	}
 	identity := got["identity"].(map[string]any)
-	if normalizeToken(asStringOrEmpty(identity["id"])) != "topic.create" {
-		t.Fatalf("expected topic.create to resolve to topic.create, got %#v", identity["id"])
+	if normalizeToken(asStringOrEmpty(identity["id"])) != "topic.describe-topics" {
+		t.Fatalf("expected topic.describe-topics to resolve to topic.describe-topics, got %#v", identity["id"])
 	}
 }
 
@@ -166,10 +166,13 @@ func TestToolListByGroupReturnsRunnableIdentities(t *testing.T) {
 		t.Fatalf("runTool list <group> failed: %v", err)
 	}
 	text := strings.TrimSpace(asOutputString(t, out))
-	for _, want := range []string{"topic.create", "topic.describe-topics"} {
+	for _, want := range []string{"topic.describe-topic", "topic.describe-topics"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("expected runnable tool identity %q in list output: %q", want, text)
 		}
+	}
+	if strings.Contains(text, "\n  - topic.create") {
+		t.Fatalf("default volclog should hide mutating topic actions from tool list: %q", text)
 	}
 	if strings.Contains(text, "\n  - topic.create-topic") {
 		t.Fatalf("group list should emit canonical id instead of legacy long id: %q", text)
@@ -382,8 +385,8 @@ func TestToolListVerbMissKeepsEmptyResult(t *testing.T) {
 	}
 }
 
-func TestToolDescribeTopicCreate(t *testing.T) {
-	out, err := runTool(nil, []string{"describe", "topic.create-topic"})
+func TestToolDescribeLogSearch(t *testing.T) {
+	out, err := runTool(nil, []string{"describe", "log.search"})
 	if err != nil {
 		t.Fatalf("runTool describe failed: %v", err)
 	}
@@ -395,13 +398,13 @@ func TestToolDescribeTopicCreate(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing identity in describe output: %#v", got)
 	}
-	if normalizeToken(asStringOrEmpty(identity["id"])) != "topic.create" {
-		t.Fatalf("expected canonical identity.id topic.create, got %#v", identity["id"])
+	if normalizeToken(asStringOrEmpty(identity["id"])) != "log.search" {
+		t.Fatalf("expected canonical identity.id log.search, got %#v", identity["id"])
 	}
-	if normalizeToken(asStringOrEmpty(identity["group"])) != "topic" {
+	if normalizeToken(asStringOrEmpty(identity["group"])) != "log" {
 		t.Fatalf("unexpected identity.group: %#v", identity["group"])
 	}
-	if asStringOrEmpty(identity["action"]) != "CreateTopic" {
+	if asStringOrEmpty(identity["action"]) != "SearchLogs" {
 		t.Fatalf("unexpected identity.action: %#v", identity["action"])
 	}
 
@@ -422,8 +425,8 @@ func TestToolDescribeTopicCreate(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing body properties: %#v", body)
 	}
-	if _, ok := props["TopicName"]; !ok {
-		t.Fatalf("expected flat body property TopicName, got %#v", props)
+	if _, ok := props["TopicId"]; !ok {
+		t.Fatalf("expected flat body property TopicId, got %#v", props)
 	}
 	if _, ok := props["data"]; ok {
 		t.Fatalf("unexpected swagger body wrapper in tool contract: %#v", props["data"])
@@ -432,7 +435,7 @@ func TestToolDescribeTopicCreate(t *testing.T) {
 
 func TestToolDescribeCLIDefaultUsesCompactView(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "describe", "topic.create"}, &stdout, &stderr)
+	code := Run([]string{"tool", "describe", "project.describe-projects"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -461,7 +464,7 @@ func TestToolDescribeCLIDefaultUsesCompactView(t *testing.T) {
 
 func TestToolDescribeExplicitJSONKeepsFullContractView(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--output", "json", "tool", "describe", "topic.create"}, &stdout, &stderr)
+	code := Run([]string{"--output", "json", "tool", "describe", "project.describe-projects"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -494,7 +497,7 @@ func TestToolDescribeExplicitJSONKeepsFullContractView(t *testing.T) {
 
 func TestToolDescribeMetadataParityAcrossViews(t *testing.T) {
 	var compactStdout, compactStderr bytes.Buffer
-	if code := Run([]string{"tool", "describe", "topic.delete"}, &compactStdout, &compactStderr); code != 0 {
+	if code := Run([]string{"tool", "describe", "project.describe-projects"}, &compactStdout, &compactStderr); code != 0 {
 		t.Fatalf("compact exit=%d stdout=%q stderr=%q", code, compactStdout.String(), compactStderr.String())
 	}
 	if strings.TrimSpace(compactStderr.String()) != "" {
@@ -507,7 +510,7 @@ func TestToolDescribeMetadataParityAcrossViews(t *testing.T) {
 	}
 
 	var fullStdout, fullStderr bytes.Buffer
-	if code := Run([]string{"--output", "json", "tool", "describe", "topic.delete"}, &fullStdout, &fullStderr); code != 0 {
+	if code := Run([]string{"--output", "json", "tool", "describe", "project.describe-projects"}, &fullStdout, &fullStderr); code != 0 {
 		t.Fatalf("full exit=%d stdout=%q stderr=%q", code, fullStdout.String(), fullStderr.String())
 	}
 	if strings.TrimSpace(fullStderr.String()) != "" {
@@ -526,27 +529,49 @@ func TestToolDescribeMetadataParityAcrossViews(t *testing.T) {
 	}
 }
 
-func TestToolDescribeResolvesUniqueVerbAlias(t *testing.T) {
-	out, err := runTool(nil, []string{"describe", "topic.create"})
+func TestToolDescribeResolvesVisibleCanonicalIdentity(t *testing.T) {
+	out, err := runTool(nil, []string{"describe", "account.get"})
 	if err != nil {
-		t.Fatalf("runTool describe unique verb alias failed: %v", err)
+		t.Fatalf("runTool describe visible canonical identity failed: %v", err)
 	}
 	got := out.(map[string]any)
 	identity := got["identity"].(map[string]any)
-	if normalizeToken(asStringOrEmpty(identity["id"])) != "topic.create" {
-		t.Fatalf("expected topic.create to resolve to topic.create, got %#v", identity["id"])
+	if normalizeToken(asStringOrEmpty(identity["id"])) != "account.get" {
+		t.Fatalf("expected account.get to resolve to account.get, got %#v", identity["id"])
+	}
+}
+
+func TestToolDescribeRejectsHiddenMutatingActionInDefaultVolclog(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"tool", "describe", "topic.create"}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected hidden mutating action to be rejected stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stdout.String()) != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(stderr.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stderr json: %v stderr=%q", err, stderr.String())
+	}
+	if !strings.Contains(asStringOrEmpty(out["errorMessage"]), "readonly edition") {
+		t.Fatalf("unexpected error message: %#v", out["errorMessage"])
+	}
+	if !strings.Contains(asStringOrEmpty(out["hint"]), "volclog-human") {
+		t.Fatalf("expected volclog-human hint, got %#v", out["hint"])
 	}
 }
 
 func TestToolDescribeResolvesActionAlias(t *testing.T) {
-	out, err := runTool(nil, []string{"describe", "topic.CreateTopic"})
+	out, err := runTool(nil, []string{"describe", "project.DescribeProjects"})
 	if err != nil {
 		t.Fatalf("runTool describe action alias failed: %v", err)
 	}
 	got := out.(map[string]any)
 	identity := got["identity"].(map[string]any)
-	if normalizeToken(asStringOrEmpty(identity["id"])) != "topic.create" {
-		t.Fatalf("expected topic.CreateTopic to resolve to topic.create, got %#v", identity["id"])
+	if normalizeToken(asStringOrEmpty(identity["id"])) != "project.describe-projects" {
+		t.Fatalf("expected project.DescribeProjects to resolve to project.describe-projects, got %#v", identity["id"])
 	}
 }
 
@@ -564,7 +589,7 @@ func TestToolDescribeRejectsAmbiguousVerbAlias(t *testing.T) {
 }
 
 func TestToolDescribeCarriesSoftDigestPolicy(t *testing.T) {
-	out, err := runTool(nil, []string{"describe", "topic.create-topic"})
+	out, err := runTool(nil, []string{"describe", "project.describe-projects"})
 	if err != nil {
 		t.Fatalf("runTool describe failed: %v", err)
 	}
@@ -595,7 +620,7 @@ func TestToolDescribeCarriesSoftDigestPolicy(t *testing.T) {
 }
 
 func TestToolDescribeOmitsExamplesAndKeepsRequiredFields(t *testing.T) {
-	out, err := runTool(nil, []string{"describe", "topic.create"})
+	out, err := runTool(nil, []string{"describe", "log.search"})
 	if err != nil {
 		t.Fatalf("runTool describe failed: %v", err)
 	}
@@ -619,13 +644,13 @@ func TestToolDescribeOmitsExamplesAndKeepsRequiredFields(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected input_schema.body.properties map, got %#v", body["properties"])
 	}
-	if topicName, ok := props["TopicName"].(map[string]any); !ok {
-		t.Fatalf("expected TopicName schema map, got %#v", props["TopicName"])
-	} else if _, ok := topicName["example"]; ok {
-		t.Fatalf("expected TopicName schema to omit example: %#v", topicName)
+	if topicID, ok := props["TopicId"].(map[string]any); !ok {
+		t.Fatalf("expected TopicId schema map, got %#v", props["TopicId"])
+	} else if _, ok := topicID["example"]; ok {
+		t.Fatalf("expected TopicId schema to omit example: %#v", topicID)
 	}
 	required := toolRequiredFields(body["required"])
-	for _, key := range []string{"ProjectId", "ShardCount", "TopicName", "Ttl"} {
+	for _, key := range []string{"TopicId", "Query", "StartTime", "EndTime"} {
 		found := false
 		for _, item := range required {
 			if item == key {
@@ -639,8 +664,8 @@ func TestToolDescribeOmitsExamplesAndKeepsRequiredFields(t *testing.T) {
 	}
 }
 
-func TestToolDescribeFiltersManagedHeadersFromPublicInputSchema(t *testing.T) {
-	out, err := runTool(nil, []string{"describe", "log.put-logs"})
+func TestToolDescribeLogSearchOmitsHeaderSectionWhenNoPublicHeaders(t *testing.T) {
+	out, err := runTool(nil, []string{"describe", "log.search"})
 	if err != nil {
 		t.Fatalf("runTool describe failed: %v", err)
 	}
@@ -649,26 +674,13 @@ func TestToolDescribeFiltersManagedHeadersFromPublicInputSchema(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected input_schema map, got %#v", got["input_schema"])
 	}
-	header, ok := inputSchema["header"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected input_schema.header map, got %#v", inputSchema["header"])
-	}
-	props, ok := header["properties"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected input_schema.header.properties map, got %#v", header["properties"])
-	}
-	for _, key := range []string{"Content-Length", "Content-Type", "Content-MD5", "x-tls-bodyrawsize", "x-tls-compresstype"} {
-		if props[key] != nil {
-			t.Fatalf("expected managed header %q to be filtered: %#v", key, props)
-		}
-	}
-	if props["x-tls-hashkey"] == nil {
-		t.Fatalf("expected business header x-tls-hashkey to remain: %#v", props)
+	if header := inputSchema["header"]; header != nil {
+		t.Fatalf("expected log.search to omit header schema when no public headers exist, got %#v", header)
 	}
 }
 
-func TestToolDescribePutLogsBodyContractAlignsWithSpecialIOInput(t *testing.T) {
-	out, err := runTool(nil, []string{"describe", "log.put-logs"})
+func TestToolDescribeLogSearchBodyContractKeepsSearchInputShape(t *testing.T) {
+	out, err := runTool(nil, []string{"describe", "log.search"})
 	if err != nil {
 		t.Fatalf("runTool describe failed: %v", err)
 	}
@@ -685,134 +697,134 @@ func TestToolDescribePutLogsBodyContractAlignsWithSpecialIOInput(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected input_schema.body.properties map, got %#v", body["properties"])
 	}
-	if props["LogGroupList"] != nil {
-		t.Fatalf("expected legacy LogGroupList to be removed from public contract: %#v", props["LogGroupList"])
+	if props["TopicId"] == nil || props["Query"] == nil {
+		t.Fatalf("expected search body to keep TopicId/Query, got %#v", props)
 	}
-	logGroups, ok := props["LogGroups"].(map[string]any)
+	regionTopics, ok := props["RegionTopics"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected LogGroups schema map, got %#v", props["LogGroups"])
+		t.Fatalf("expected RegionTopics schema map, got %#v", props["RegionTopics"])
 	}
-	if asStringOrEmpty(logGroups["type"]) != "array" {
-		t.Fatalf("expected LogGroups type=array, got %#v", logGroups)
+	if asStringOrEmpty(regionTopics["type"]) != "array" {
+		t.Fatalf("expected RegionTopics type=array, got %#v", regionTopics)
 	}
-	item, ok := logGroups["items"].(map[string]any)
+	item, ok := regionTopics["items"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected LogGroups.items object schema, got %#v", logGroups["items"])
+		t.Fatalf("expected RegionTopics.items object schema, got %#v", regionTopics["items"])
 	}
 	itemProps, ok := item["properties"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected LogGroups item properties, got %#v", item)
+		t.Fatalf("expected RegionTopics item properties, got %#v", item)
 	}
-	if itemProps["Logs"] == nil {
-		t.Fatalf("expected LogGroups item to contain Logs field: %#v", itemProps)
-	}
-	logsSchema, ok := itemProps["Logs"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected Logs schema map, got %#v", itemProps["Logs"])
-	}
-	logsItems, ok := logsSchema["items"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected Logs.items schema, got %#v", logsSchema["items"])
-	}
-	logEntryProps, ok := logsItems["properties"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected log entry properties, got %#v", logsItems)
-	}
-	timeField, ok := logEntryProps["Time"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected Time schema map, got %#v", logEntryProps["Time"])
-	}
-	if !strings.Contains(strings.ToLower(asStringOrEmpty(timeField["description"])), "unix") || !strings.Contains(asStringOrEmpty(timeField["description"]), "毫秒") {
-		t.Fatalf("expected Time description to preserve unix milliseconds semantics, got %#v", timeField["description"])
-	}
-	timeNsField, ok := logEntryProps["TimeNs"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected TimeNs schema map, got %#v", logEntryProps["TimeNs"])
-	}
-	if !strings.Contains(strings.ToLower(asStringOrEmpty(timeNsField["description"])), "nanosecond") {
-		t.Fatalf("expected TimeNs description to explain nanosecond fraction semantics, got %#v", timeNsField["description"])
-	}
-	contentsSchema, ok := logEntryProps["Contents"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected Contents schema map, got %#v", logEntryProps["Contents"])
-	}
-	if contentsSchema["oneOf"] == nil {
-		t.Fatalf("expected Contents to support both object and key/value array forms: %#v", contentsSchema)
+	if itemProps["Region"] == nil || itemProps["Topic"] == nil {
+		t.Fatalf("expected RegionTopics item to contain Region/Topic fields: %#v", itemProps)
 	}
 	required := toolRequiredFields(body["required"])
-	foundLogGroups := false
+	foundTopicID := false
 	for _, item := range required {
-		if item == "LogGroups" {
-			foundLogGroups = true
+		if item == "TopicId" {
+			foundTopicID = true
 			break
 		}
 	}
-	if !foundLogGroups {
-		t.Fatalf("expected LogGroups required in body schema: %#v", body["required"])
+	if !foundTopicID {
+		t.Fatalf("expected TopicId required in body schema: %#v", body["required"])
 	}
 }
 
-func TestToolDescribeTraceWeakTypedFieldsAreObjectSchemas(t *testing.T) {
-	for _, id := range []string{"trace.create", "trace.modify"} {
-		out, err := runTool(nil, []string{"describe", id})
-		if err != nil {
-			t.Fatalf("runTool describe %s failed: %v", id, err)
-		}
-		got := out.(map[string]any)
-		inputSchema, ok := got["input_schema"].(map[string]any)
-		if !ok {
-			t.Fatalf("%s expected input_schema map, got %#v", id, got["input_schema"])
-		}
-		body, ok := inputSchema["body"].(map[string]any)
-		if !ok {
-			t.Fatalf("%s expected input_schema.body map, got %#v", id, inputSchema["body"])
-		}
-		props, ok := body["properties"].(map[string]any)
-		if !ok {
-			t.Fatalf("%s expected body properties map, got %#v", id, body["properties"])
-		}
-		backend, ok := props["BackendConfig"].(map[string]any)
-		if !ok {
-			t.Fatalf("%s expected BackendConfig schema map, got %#v", id, props["BackendConfig"])
-		}
-		if asStringOrEmpty(backend["type"]) != "object" {
-			t.Fatalf("%s expected BackendConfig type=object, got %#v", id, backend)
-		}
-		if backend["additionalProperties"] != true {
-			if props, ok := backend["properties"].(map[string]any); !ok || len(props) == 0 {
-				t.Fatalf("%s expected BackendConfig to be either free-form or structured object, got %#v", id, backend)
-			}
-		}
-	}
-
-	out, err := runTool(nil, []string{"describe", "trace.search"})
+func TestToolDescribeVisibleNestedFieldsStayStructured(t *testing.T) {
+	out, err := runTool(nil, []string{"describe", "log.create"})
 	if err != nil {
-		t.Fatalf("runTool describe trace.search failed: %v", err)
+		t.Fatalf("runTool describe log.create failed: %v", err)
 	}
 	got := out.(map[string]any)
 	inputSchema, ok := got["input_schema"].(map[string]any)
 	if !ok {
-		t.Fatalf("trace.search expected input_schema map, got %#v", got["input_schema"])
+		t.Fatalf("log.create expected input_schema map, got %#v", got["input_schema"])
 	}
 	body, ok := inputSchema["body"].(map[string]any)
 	if !ok {
-		t.Fatalf("trace.search expected input_schema.body map, got %#v", inputSchema["body"])
+		t.Fatalf("log.create expected input_schema.body map, got %#v", inputSchema["body"])
 	}
 	props, ok := body["properties"].(map[string]any)
 	if !ok {
-		t.Fatalf("trace.search expected body properties map, got %#v", body["properties"])
+		t.Fatalf("log.create expected body properties map, got %#v", body["properties"])
 	}
-	query, ok := props["Query"].(map[string]any)
+	logContextInfos, ok := props["LogContextInfos"].(map[string]any)
 	if !ok {
-		t.Fatalf("trace.search expected Query schema map, got %#v", props["Query"])
+		t.Fatalf("log.create expected LogContextInfos schema map, got %#v", props["LogContextInfos"])
 	}
-	if asStringOrEmpty(query["type"]) != "object" {
-		t.Fatalf("trace.search expected Query type=object, got %#v", query)
+	if asStringOrEmpty(logContextInfos["type"]) != "object" {
+		t.Fatalf("log.create expected LogContextInfos type=object, got %#v", logContextInfos)
 	}
-	if query["additionalProperties"] != true {
-		if props, ok := query["properties"].(map[string]any); !ok || len(props) == 0 {
-			t.Fatalf("trace.search expected Query to be either free-form or structured object, got %#v", query)
-		}
+	logContextChildren, ok := logContextInfos["properties"].(map[string]any)
+	if !ok || logContextChildren["Source"] == nil {
+		t.Fatalf("log.create expected LogContextInfos child fields, got %#v", logContextInfos)
+	}
+
+	out, err = runTool(nil, []string{"describe", "log.search"})
+	if err != nil {
+		t.Fatalf("runTool describe log.search failed: %v", err)
+	}
+	got = out.(map[string]any)
+	inputSchema, ok = got["input_schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("log.search expected input_schema map, got %#v", got["input_schema"])
+	}
+	body, ok = inputSchema["body"].(map[string]any)
+	if !ok {
+		t.Fatalf("log.search expected input_schema.body map, got %#v", inputSchema["body"])
+	}
+	props, ok = body["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("log.search expected body properties map, got %#v", body["properties"])
+	}
+	regionTopics, ok := props["RegionTopics"].(map[string]any)
+	if !ok {
+		t.Fatalf("log.search expected RegionTopics schema map, got %#v", props["RegionTopics"])
+	}
+	if asStringOrEmpty(regionTopics["type"]) != "array" {
+		t.Fatalf("log.search expected RegionTopics type=array, got %#v", regionTopics)
+	}
+	item, ok := regionTopics["items"].(map[string]any)
+	if !ok {
+		t.Fatalf("log.search expected RegionTopics.items object, got %#v", regionTopics["items"])
+	}
+	itemProps, ok := item["properties"].(map[string]any)
+	if !ok || itemProps["Region"] == nil || itemProps["Topic"] == nil {
+		t.Fatalf("log.search expected RegionTopics item fields, got %#v", item)
+	}
+
+	out, err = runTool(nil, []string{"describe", "trace.describe-trace"})
+	if err != nil {
+		t.Fatalf("runTool describe trace.describe-trace failed: %v", err)
+	}
+	got = out.(map[string]any)
+	inputSchema, ok = got["input_schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("trace.describe-trace expected input_schema map, got %#v", got["input_schema"])
+	}
+	body, ok = inputSchema["body"].(map[string]any)
+	if !ok {
+		t.Fatalf("trace.describe-trace expected input_schema.body map, got %#v", inputSchema["body"])
+	}
+	props, ok = body["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("trace.describe-trace expected body properties map, got %#v", body["properties"])
+	}
+	unionIDs, ok := props["UnionTraceInstanceIds"].(map[string]any)
+	if !ok {
+		t.Fatalf("trace.describe-trace expected UnionTraceInstanceIds schema map, got %#v", props["UnionTraceInstanceIds"])
+	}
+	if asStringOrEmpty(unionIDs["type"]) != "array" {
+		t.Fatalf("trace.describe-trace expected UnionTraceInstanceIds type=array, got %#v", unionIDs)
+	}
+	unionItem, ok := unionIDs["items"].(map[string]any)
+	if !ok {
+		t.Fatalf("trace.describe-trace expected UnionTraceInstanceIds.items object, got %#v", unionIDs["items"])
+	}
+	unionItemProps, ok := unionItem["properties"].(map[string]any)
+	if !ok || unionItemProps["TraceInstanceId"] == nil {
+		t.Fatalf("trace.describe-trace expected UnionTraceInstanceIds item fields, got %#v", unionItem)
 	}
 }
 
@@ -1129,7 +1141,7 @@ func TestToolDescribeLogHistogramExplainsWhenToUseWithSearch(t *testing.T) {
 
 func TestToolDescribeCompactAvoidsDuplicatingExecutionProperties(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "describe", "topic.create"}, &stdout, &stderr)
+	code := Run([]string{"tool", "describe", "project.describe-projects"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -1168,9 +1180,9 @@ func TestToolDescribeCompactKeepsUsefulOptionalInputFields(t *testing.T) {
 		section string
 		fields  []string
 	}{
-		{id: "index.create", section: "body", fields: []string{"TopicId", "FullText", "KeyValue", "MaxTextLen"}},
+		{id: "log.search", section: "body", fields: []string{"TopicId", "Query", "Limit", "RegionTopics"}},
 		{id: "topic.describe-topics", section: "query", fields: []string{"ProjectId", "TopicName", "PageSize"}},
-		{id: "host-group.create", section: "body", fields: []string{"HostGroupName", "HostGroupType", "HostIpList"}},
+		{id: "project.describe-projects", section: "query", fields: []string{"ProjectId", "ProjectName", "PageSize"}},
 	} {
 		var stdout, stderr bytes.Buffer
 		code := Run([]string{"tool", "describe", tc.id}, &stdout, &stderr)
@@ -1209,7 +1221,7 @@ func TestToolDescribeCompactKeepsUsefulOptionalInputFields(t *testing.T) {
 
 func TestToolDescribeCompactPreservesNestedConstraintDocs(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "describe", "index.create"}, &stdout, &stderr)
+	code := Run([]string{"tool", "describe", "log.search"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -1233,30 +1245,27 @@ func TestToolDescribeCompactPreservesNestedConstraintDocs(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected body properties map, got %#v", body["properties"])
 	}
-	fullText, ok := props["FullText"].(map[string]any)
+	regionTopics, ok := props["RegionTopics"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected FullText schema map, got %#v", props["FullText"])
+		t.Fatalf("expected RegionTopics schema map, got %#v", props["RegionTopics"])
 	}
-	if !strings.Contains(asStringOrEmpty(fullText["description"]), "全文索引") {
-		t.Fatalf("expected FullText description in compact schema, got %#v", fullText)
+	if !strings.Contains(asStringOrEmpty(regionTopics["description"]), "Topic") {
+		t.Fatalf("expected RegionTopics description in compact schema, got %#v", regionTopics)
 	}
-	fullTextProps, ok := fullText["properties"].(map[string]any)
+	items, ok := regionTopics["items"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected FullText properties map, got %#v", fullText["properties"])
+		t.Fatalf("expected RegionTopics.items schema, got %#v", regionTopics["items"])
 	}
-	delimiter, ok := fullTextProps["Delimiter"].(map[string]any)
+	itemProps, ok := items["properties"].(map[string]any)
+	if !ok || itemProps["Region"] == nil || itemProps["Topic"] == nil {
+		t.Fatalf("expected RegionTopics item properties, got %#v", items)
+	}
+	limit, ok := props["Limit"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected FullText.Delimiter schema, got %#v", fullTextProps["Delimiter"])
+		t.Fatalf("expected Limit schema map, got %#v", props["Limit"])
 	}
-	if !strings.Contains(asStringOrEmpty(delimiter["description"]), "分词符") {
-		t.Fatalf("expected Delimiter description in compact schema, got %#v", delimiter)
-	}
-	maxTextLen, ok := props["MaxTextLen"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected MaxTextLen schema map, got %#v", props["MaxTextLen"])
-	}
-	if maxTextLen["default"] == nil || maxTextLen["minimum"] == nil || maxTextLen["maximum"] == nil {
-		t.Fatalf("expected MaxTextLen default/minimum/maximum in compact schema, got %#v", maxTextLen)
+	if limit["minimum"] == nil || limit["maximum"] == nil {
+		t.Fatalf("expected Limit minimum/maximum in compact schema, got %#v", limit)
 	}
 }
 
@@ -1266,8 +1275,8 @@ func TestToolDescribeCompactKeepsSmallNestedObjectsUsable(t *testing.T) {
 		field    string
 		childKey string
 	}{
-		{id: "shipper.create", field: "ContentInfo", childKey: "Format"},
-		{id: "alarm.create-alarm-content-template", field: "DingTalk", childKey: "Title"},
+		{id: "log.create", field: "LogContextInfos", childKey: "Source"},
+		{id: "log.search", field: "RegionTopics", childKey: "Region"},
 	} {
 		var stdout, stderr bytes.Buffer
 		code := Run([]string{"tool", "describe", tc.id}, &stdout, &stderr)
@@ -1286,6 +1295,11 @@ func TestToolDescribeCompactKeepsSmallNestedObjectsUsable(t *testing.T) {
 			t.Fatalf("%s expected %s schema map, got %#v", tc.id, tc.field, props[tc.field])
 		}
 		childProps, ok := field["properties"].(map[string]any)
+		if !ok {
+			if items, itemsOK := field["items"].(map[string]any); itemsOK {
+				childProps, ok = items["properties"].(map[string]any)
+			}
+		}
 		if !ok || childProps[tc.childKey] == nil {
 			t.Fatalf("%s expected compact %s to keep child %q, got %#v", tc.id, tc.field, tc.childKey, field)
 		}
@@ -1298,8 +1312,8 @@ func TestToolDescribeCompactKeepsUsefulOptionalChildrenForSmallNestedObjects(t *
 		fieldPath []string
 		childKey  string
 	}{
-		{id: "shipper.create", fieldPath: []string{"ContentInfo", "JsonInfo"}, childKey: "Keys"},
-		{id: "index.create", fieldPath: []string{"KeyValue", "Value"}, childKey: "Delimiter"},
+		{id: "log.search", fieldPath: []string{"RegionTopics"}, childKey: "Region"},
+		{id: "trace.describe-trace", fieldPath: []string{"UnionTraceInstanceIds"}, childKey: "TraceInstanceId"},
 	} {
 		var stdout, stderr bytes.Buffer
 		code := Run([]string{"tool", "describe", tc.id}, &stdout, &stderr)
@@ -1337,6 +1351,11 @@ func TestToolDescribeCompactKeepsUsefulOptionalChildrenForSmallNestedObjects(t *
 			current = props
 		}
 		childProps, ok := field["properties"].(map[string]any)
+		if !ok {
+			if items, itemsOK := field["items"].(map[string]any); itemsOK {
+				childProps, ok = items["properties"].(map[string]any)
+			}
+		}
 		if !ok || childProps[tc.childKey] == nil {
 			t.Fatalf("%s expected %v to keep child %q, got %#v", tc.id, tc.fieldPath, tc.childKey, field)
 		}
@@ -1344,7 +1363,7 @@ func TestToolDescribeCompactKeepsUsefulOptionalChildrenForSmallNestedObjects(t *
 }
 
 func TestToolDescribeDocumentsContextFieldMeaning(t *testing.T) {
-	out, err := runTool(nil, []string{"describe", "topic.create"})
+	out, err := runTool(nil, []string{"describe", "project.describe-projects"})
 	if err != nil {
 		t.Fatalf("runTool describe failed: %v", err)
 	}
@@ -1376,7 +1395,7 @@ func TestToolDescribeDocumentsContextFieldMeaning(t *testing.T) {
 }
 
 func TestToolDescribeContextRuntimeEffectsMatchCurrentSelectorAndTraceSemantics(t *testing.T) {
-	out, err := runTool(nil, []string{"describe", "topic.create"})
+	out, err := runTool(nil, []string{"describe", "project.describe-projects"})
 	if err != nil {
 		t.Fatalf("runTool describe failed: %v", err)
 	}
@@ -1415,7 +1434,7 @@ func TestToolDescribeContextRuntimeEffectsMatchCurrentSelectorAndTraceSemantics(
 }
 
 func TestToolDescribeDocumentsProfileDiscoveryHint(t *testing.T) {
-	out, err := runTool(nil, []string{"describe", "topic.create"})
+	out, err := runTool(nil, []string{"describe", "project.describe-projects"})
 	if err != nil {
 		t.Fatalf("runTool describe failed: %v", err)
 	}
@@ -1483,7 +1502,7 @@ func TestToolDescribeKeepsPostDescribeVerbAsDescribe(t *testing.T) {
 }
 
 func TestToolDescribeDropsUnusedLegacyContextFields(t *testing.T) {
-	out, err := runTool(nil, []string{"describe", "topic.create"})
+	out, err := runTool(nil, []string{"describe", "project.describe-projects"})
 	if err != nil {
 		t.Fatalf("runTool describe failed: %v", err)
 	}
@@ -1529,7 +1548,7 @@ func TestToolDescribeDocumentsPageAllAlias(t *testing.T) {
 }
 
 func TestToolDescribeOmitsPageAllForUnsupportedAction(t *testing.T) {
-	out, err := runTool(nil, []string{"describe", "project.create"})
+	out, err := runTool(nil, []string{"describe", "account.get"})
 	if err != nil {
 		t.Fatalf("runTool describe failed: %v", err)
 	}
@@ -1616,7 +1635,7 @@ func asOutputString(t *testing.T, v any) string {
 }
 
 func TestToolDescribeDigestValueMatchesContract(t *testing.T) {
-	const topicIdentity = "topic.create"
+	const topicIdentity = "log.search"
 	out, err := runTool(nil, []string{"describe", topicIdentity})
 	if err != nil {
 		t.Fatalf("runTool describe failed: %v", err)
@@ -1645,7 +1664,7 @@ func TestToolDescribeDigestValueMatchesContract(t *testing.T) {
 func TestToolExecRequiresFileContextAndInput(t *testing.T) {
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "exec", "topic.create-topic", "--context", "ctx.json", "--input", "file://req.json"}, &stdout, &stderr)
+	code := Run([]string{"tool", "exec", "project.describe-projects", "--context", "ctx.json", "--input", "file://req.json"}, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -1676,18 +1695,13 @@ func TestToolExecUsesDryRunFromExecution(t *testing.T) {
 		t.Fatalf("write context: %v", err)
 	}
 	if err := osWriteJSON(reqFile, map[string]any{
-		"body": map[string]any{
-			"ProjectId":  "pid",
-			"ShardCount": 2,
-			"TopicName":  "demo",
-			"Ttl":        30,
-		},
+		"query": map[string]any{},
 	}); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "exec", "topic.create-topic", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
+	code := Run([]string{"tool", "exec", "project.describe-projects", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -1720,18 +1734,13 @@ func TestToolExecAcceptsGlobalDryRunPrefix(t *testing.T) {
 		t.Fatalf("write context: %v", err)
 	}
 	if err := osWriteJSON(reqFile, map[string]any{
-		"body": map[string]any{
-			"ProjectId":  "pid",
-			"ShardCount": 2,
-			"TopicName":  "demo",
-			"Ttl":        30,
-		},
+		"query": map[string]any{},
 	}); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--dry-run", "tool", "exec", "topic.create-topic", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
+	code := Run([]string{"--dry-run", "tool", "exec", "project.describe-projects", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -1761,18 +1770,13 @@ func TestToolExecAcceptsGlobalDryRunTrailing(t *testing.T) {
 		t.Fatalf("write context: %v", err)
 	}
 	if err := osWriteJSON(reqFile, map[string]any{
-		"body": map[string]any{
-			"ProjectId":  "pid",
-			"ShardCount": 2,
-			"TopicName":  "demo",
-			"Ttl":        30,
-		},
+		"query": map[string]any{},
 	}); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "exec", "topic.create-topic", "--context", "file://" + ctxFile, "--input", "file://" + reqFile, "--dry-run"}, &stdout, &stderr)
+	code := Run([]string{"tool", "exec", "project.describe-projects", "--context", "file://" + ctxFile, "--input", "file://" + reqFile, "--dry-run"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -1788,7 +1792,7 @@ func TestToolExecAcceptsGlobalDryRunTrailing(t *testing.T) {
 
 func TestToolDescribeRejectsGlobalDryRunPrefix(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--dry-run", "tool", "describe", "topic.create"}, &stdout, &stderr)
+	code := Run([]string{"--dry-run", "tool", "describe", "project.describe-projects"}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatalf("expected non-zero exit when dry-run is used with tool describe")
 	}
@@ -1816,16 +1820,16 @@ func TestToolExecRejectsMissingRequiredFieldWithContractPath(t *testing.T) {
 	}
 	if err := osWriteJSON(reqFile, map[string]any{
 		"body": map[string]any{
-			"ShardCount": 2,
-			"TopicName":  "demo",
-			"Ttl":        30,
+			"Query":     "*",
+			"StartTime": 1710374400000,
+			"EndTime":   1710378000000,
 		},
 	}); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "exec", "topic.create", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
+	code := Run([]string{"tool", "exec", "log.search", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatalf("expected missing required field failure stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
@@ -1833,12 +1837,12 @@ func TestToolExecRejectsMissingRequiredFieldWithContractPath(t *testing.T) {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "missing required field: input.body.ProjectId") {
-		t.Fatalf("expected missing ProjectId field path in stdout envelope, got %q", out)
+	if !strings.Contains(out, "missing required field: input.body.TopicId") {
+		t.Fatalf("expected missing TopicId field path in stdout envelope, got %q", out)
 	}
 }
 
-func TestToolExecResolvesUniqueVerbAlias(t *testing.T) {
+func TestToolExecResolvesVisibleCanonicalIdentity(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
@@ -1857,18 +1861,13 @@ func TestToolExecResolvesUniqueVerbAlias(t *testing.T) {
 		t.Fatalf("write context: %v", err)
 	}
 	if err := osWriteJSON(reqFile, map[string]any{
-		"body": map[string]any{
-			"ProjectId":  "pid",
-			"ShardCount": 2,
-			"TopicName":  "demo",
-			"Ttl":        30,
-		},
+		"query": map[string]any{},
 	}); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "exec", "topic.create", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
+	code := Run([]string{"tool", "exec", "account.get", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -1901,18 +1900,13 @@ func TestToolExecUsesProjectionFromExecutionOnRawResult(t *testing.T) {
 		t.Fatalf("write context: %v", err)
 	}
 	if err := osWriteJSON(reqFile, map[string]any{
-		"body": map[string]any{
-			"ProjectId":  "pid",
-			"ShardCount": 2,
-			"TopicName":  "demo",
-			"Ttl":        30,
-		},
+		"query": map[string]any{},
 	}); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "exec", "topic.create-topic", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
+	code := Run([]string{"tool", "exec", "project.describe-projects", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -1948,18 +1942,13 @@ func TestToolExecProjectionAcceptsArrayInput(t *testing.T) {
 		t.Fatalf("write context: %v", err)
 	}
 	if err := osWriteJSON(reqFile, map[string]any{
-		"body": map[string]any{
-			"ProjectId":  "pid",
-			"ShardCount": 2,
-			"TopicName":  "demo",
-			"Ttl":        30,
-		},
+		"query": map[string]any{},
 	}); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "exec", "topic.create-topic", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
+	code := Run([]string{"tool", "exec", "project.describe-projects", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -2031,6 +2020,32 @@ func TestToolExecProjectionKeepsPaginationMetadataForArrayResults(t *testing.T) 
 	}
 }
 
+func TestToolExecRejectsHiddenMutatingActionInDefaultVolclog(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"tool", "exec", "topic.create"}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected hidden tool exec to be rejected stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "readonly edition") {
+		t.Fatalf("unexpected error message: %#v", errObj["message"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["hint"]), "volclog-human") {
+		t.Fatalf("expected volclog-human hint, got %#v", errObj["hint"])
+	}
+}
+
 func TestToolExecDigestMismatchWarnsOnly(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
@@ -2051,18 +2066,13 @@ func TestToolExecDigestMismatchWarnsOnly(t *testing.T) {
 		t.Fatalf("write context: %v", err)
 	}
 	if err := osWriteJSON(reqFile, map[string]any{
-		"body": map[string]any{
-			"ProjectId":  "pid",
-			"ShardCount": 2,
-			"TopicName":  "demo",
-			"Ttl":        30,
-		},
+		"query": map[string]any{},
 	}); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "exec", "topic.create-topic", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
+	code := Run([]string{"tool", "exec", "project.describe-projects", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -2102,18 +2112,13 @@ func TestToolExecAppliesTopLevelJMESFilterToEnvelope(t *testing.T) {
 		t.Fatalf("write context: %v", err)
 	}
 	if err := osWriteJSON(reqFile, map[string]any{
-		"body": map[string]any{
-			"ProjectId":  "pid",
-			"ShardCount": 2,
-			"TopicName":  "demo",
-			"Ttl":        30,
-		},
+		"query": map[string]any{},
 	}); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--jmes-filter", "summary.deliveryMode", "tool", "exec", "topic.create-topic", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
+	code := Run([]string{"--jmes-filter", "summary.deliveryMode", "tool", "exec", "project.describe-projects", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -2149,17 +2154,17 @@ func TestToolExecRejectsUnsupportedPageAll(t *testing.T) {
 	}
 	if err := osWriteJSON(reqFile, map[string]any{
 		"body": map[string]any{
-			"ProjectId":  "pid",
-			"ShardCount": 2,
-			"TopicName":  "demo",
-			"Ttl":        30,
+			"TopicId":   "tid",
+			"Query":     "*",
+			"StartTime": 1710374400000,
+			"EndTime":   1710378000000,
 		},
 	}); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "exec", "topic.create-topic", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
+	code := Run([]string{"tool", "exec", "log.search", "--context", "file://" + ctxFile, "--input", "file://" + reqFile}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatalf("expected unsupported page.all failure stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
@@ -2250,7 +2255,7 @@ func TestToolExecAllowsTrailingJMESFilter(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "exec", "project.create-project", "--context", "file://" + ctxFile, "--input", "file://" + reqFile, "--jmes-filter", "summary.deliveryMode"}, &stdout, &stderr)
+	code := Run([]string{"tool", "exec", "project.describe-projects", "--context", "file://" + ctxFile, "--input", "file://" + reqFile, "--jmes-filter", "summary.deliveryMode"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}

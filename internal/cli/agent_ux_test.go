@@ -361,7 +361,7 @@ func TestRawAllowsTrailingDryRunGlobalFlag(t *testing.T) {
 func TestToolDescribeRejectsTrailingOutputFileGlobals(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"tool", "describe", "project.create", "--output-mode", "file", "--output-file", filepath.Join(t.TempDir(), "describe.json")}, &stdout, &stderr)
+	code := Run([]string{"tool", "describe", "project.describe-projects", "--output-mode", "file", "--output-file", filepath.Join(t.TempDir(), "describe.json")}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatalf("expected output-file to be rejected stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}

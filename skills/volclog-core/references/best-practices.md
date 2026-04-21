@@ -14,6 +14,7 @@ Key rules:
 
 - Keep surface choice and delivery choice separate. Skill decides `tool / workflow / raw`; CLI decides stdout vs file delivery.
 - If both binaries are available, prefer `volclog` for agent or CI sessions.
+- Default `volclog` only exposes readonly agent actions. Switch to `volclog-human` before create/modify/delete/import or local ingest.
 - `volclog-human` keeps the human shortcut layer; do not let that change the runtime reading order described here.
 - Let CLI `deliveryMode` decide stdout vs `file_auto`.
 - For `log.search`, let CLI `deliveryMode` decide stdout vs `file_auto` after the surface is already chosen.
@@ -50,6 +51,7 @@ Use this section to interpret result semantics after the surface has already bee
 - Stay on `log.search` when the user is still validating SQL, iterating on the query, or only needs a small interactive preview.
 - `raw --input` is only a compatibility alias for `--body`; it does not do `tool exec` style smart mapping for GET requests.
 - `raw --dry-run` only validates the transport/local plan. It does not validate API-required fields the way `tool exec` or `workflow exec` can.
+- In default `volclog`, mutating/non-readonly `raw` method/path pairs are rejected before transport execution. Treat that as a surface-selection issue and switch to `volclog-human`.
 - `HitCount` is only the count returned in the current `SearchLogs` response window.
 - `Histogram.TotalCount` is the better whole-window total only for pure search when histogram is the correct surface.
 - `ResultStatus=incomplete` means the service returned only a partial scan. This can happen for SearchLogs in both search and analysis mode, so narrow the time range and rerun before trusting counts, rows, empty results, or bucket distribution.
@@ -132,4 +134,5 @@ When the command already failed, follow the smallest next action:
 
 - `page.all` increases completeness and payload size; it is not a compression flag, and it only applies when the contract reports `execution.supports_all=true`.
 - `workflow` ids such as `log.ingest`, `log.export`, and `log.export-analysis` are workflow identities, not tool ids.
+- `readonly edition` errors mean the default `volclog` binary blocked a mutating/import path by design; switch to `volclog-human` instead of retrying the same command.
 - Human shortcut groups are for humans. Agent flows should stay on `tool / workflow / raw`.

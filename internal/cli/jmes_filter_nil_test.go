@@ -76,19 +76,14 @@ func TestToolExecProjectionNilResultReturnsEnvelopeError(t *testing.T) {
 		t.Fatalf("write context: %v", err)
 	}
 	if err := osWriteJSON(reqFile, map[string]any{
-		"body": map[string]any{
-			"ProjectId":  "pid",
-			"ShardCount": 2,
-			"TopicName":  "demo",
-			"Ttl":        30,
-		},
+		"query": map[string]any{},
 	}); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{
-		"tool", "exec", "topic.create-topic",
+		"tool", "exec", "project.describe-projects",
 		"--context", "file://" + ctxFile,
 		"--input", "file://" + reqFile,
 	}, &stdout, &stderr)

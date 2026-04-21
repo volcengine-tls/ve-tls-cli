@@ -98,11 +98,15 @@ Notes:
 }
 
 func usageRaw() string {
+	overview := "  原始 transport 调用入口；需要显式提供 method/path。\n"
+	if currentEdition() == cliEditionVolclog {
+		overview += "  默认 volclog 面向只读 agent surface；优先使用只读 method/path，变更类调用请切到 volclog-human。\n"
+	}
 	return u(`Usage:
   tlsctl raw --method <GET|POST|PUT|DELETE> --path <path> [--query k=v] [--header k=v] [--body <json|file://...|->|--input <json|file://...|->] [--request-format <json|jsonl>]
 
 概览:
-  原始 transport 调用入口；需要显式提供 method/path。
+` + overview + `
   --jmes-filter 作用于完整 CLI envelope。
 
 关键参数:
@@ -126,8 +130,8 @@ func usageRaw() string {
 
 Examples:
   tlsctl raw --method GET --path /DescribeProjects
-  tlsctl raw --method POST --path /CreateProject --body file://./req.json
-  tlsctl raw --method POST --path /CreateProject --input file://./req.json
+  tlsctl raw --method POST --path /SearchLogs --body file://./req.json
+  tlsctl raw --method POST --path /SearchLogs --input file://./req.json
   tlsctl raw --method GET --path /DescribeProjects --jmes-filter "data.Total"
 `)
 }
@@ -180,13 +184,17 @@ Commands:
 }
 
 func usageWorkflowList() string {
+	currentBatch := "log.ingest / log.export / log.export-analysis"
+	if currentEdition() == cliEditionVolclog {
+		currentBatch = "log.export / log.export-analysis"
+	}
 	return u(`Usage:
   tlsctl workflow list
   tlsctl workflow list [<group>] [--format <text|json>]
 
 说明:
   - workflow 面只暴露 CLI workflow，不混入 public tool
-  - 当前首批 workflow: log.ingest / log.export / log.export-analysis
+  - 当前首批 workflow: ` + currentBatch + `
   - tool 仍只暴露官网公开 API
 
 Next:
@@ -227,6 +235,12 @@ Notes:
 }
 
 func usageToolList() string {
+	visibilityNotes := ""
+	commonVerbs := "  create / get / list / describe / modify / delete / search"
+	if currentEdition() == cliEditionVolclog {
+		visibilityNotes = "  - 默认 volclog 只展示只读 action；变更类发现请切到 volclog-human\n"
+		commonVerbs = "  get / list / describe / search / consume / statistics"
+	}
 	return u(`Usage:
   tlsctl tool list
   tlsctl tool list [<group>] [--verb <verb>] [--format <text|json>]
@@ -236,13 +250,14 @@ func usageToolList() string {
   - 指定 <group> 后返回该 group 下可执行的 action identity
   - 仅列出官网文档已发布接口
   - 只做发现与筛选，不执行请求
+` + visibilityNotes + `
 
 支持的发现方式:
   - 按 group 看有哪些 action: tlsctl tool list <group>
   - 按 verb 缩小范围: tlsctl tool list <group> --verb <verb>
 
 常见 verb:
-  create / get / list / describe / modify / delete / search
+` + commonVerbs + `
 
 Next:
   tlsctl tool describe <group.action>

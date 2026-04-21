@@ -11,7 +11,7 @@ Use this skill only for agent-only incremental knowledge.
 
 If `volclog tool describe ...` or `volclog workflow describe ...` already answers the question, stop and follow that contract instead of adding duplicate guidance here.
 
-If both binaries are available, prefer `volclog` for agent or CI sessions. If only `volclog-human` is installed, stay on `tool / workflow / raw` and ignore human shortcut groups.
+If both binaries are available, prefer `volclog` for agent or CI sessions. In other words, default `volclog` only exposes readonly agent actions. If the task needs create/modify/delete/import or other write paths, switch to `volclog-human` before rediscovering the contract. If only `volclog-human` is installed, stay on `tool / workflow / raw` and ignore human shortcut groups.
 
 ## Read Order
 
@@ -25,6 +25,7 @@ If both binaries are available, prefer `volclog` for agent or CI sessions. If on
 
 - Do not use human shortcut commands as the primary agent flow.
 - Do not repeat schema details that already exist in `tool describe` or `workflow describe`.
+- Default `volclog` only exposes readonly `tool / workflow / raw` surfaces. Do not attempt mutating/import paths on it.
 - Use `tool` for published public APIs, `workflow` for CLI-owned orchestration, and `raw` only when method/path is already known.
 - Prefer `--dry-run` before any write or destructive change.
 - Never persist AK/SK or token values in prompts, memory, request artifacts, or skill content.
@@ -39,12 +40,14 @@ If both binaries are available, prefer `volclog` for agent or CI sessions. If on
 | Need multi-step execution order | read `references/sops.md` |
 | Need runtime/error/recovery semantics | read `references/best-practices.md` |
 | Use an exact method/path | `volclog raw --method ... --path ...` |
+| Need create/import/mutate state | switch to `volclog-human`, then read that contract first |
 | Authenticate a stateless run | host-selected local profile -> one-shot `--secrets-file` or `context.secrets_file` |
 
 ## First Response Loop
 
-1. Pick the surface: `tool / workflow / raw`.
-2. Read the contract.
-3. Confirm `profile`, explicit region, and credential injection strategy. Do not infer region from endpoint/domain.
-4. Run with `--dry-run` when the operation mutates state.
-5. Let CLI runtime signals such as `summary.deliveryMode` and the flat `error` object drive the next step.
+1. Classify the intent as readonly vs mutating/import. If it mutates or imports, switch to `volclog-human` first.
+2. Pick the surface: `tool / workflow / raw`.
+3. Read the contract.
+4. Confirm `profile`, explicit region, and credential injection strategy. Do not infer region from endpoint/domain.
+5. Run with `--dry-run` when the operation mutates state.
+6. Let CLI runtime signals such as `summary.deliveryMode` and the flat `error` object drive the next step.

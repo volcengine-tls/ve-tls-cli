@@ -100,12 +100,14 @@ For stateless runs, prefer one-shot `--secrets-file` over broad environment inje
 
 #### 3. Discover Contracts Before Execution
 
+Default `volclog` only exposes readonly agent actions. If the task needs create/modify/delete/import, switch to `volclog-human`.
+
 Use `tool` and `workflow` to discover the contract before guessing input:
 
 ```bash
 volclog tool list
 volclog tool list project
-volclog tool describe project.create
+volclog tool describe project.describe-projects
 
 volclog workflow list
 volclog workflow describe log.export
@@ -114,7 +116,7 @@ volclog workflow describe log.export
 Use `raw` only when the exact `method/path` is already known:
 
 ```bash
-volclog raw --method POST --path /CreateProject --body file://req.json
+volclog raw --method POST --path /SearchLogs --body file://req.json
 ```
 
 `raw` also accepts `--input` as a compatibility alias for `--body`, but `--body` and `--input` must not be passed together.
@@ -133,12 +135,11 @@ EOF
 
 cat >req.json <<'EOF'
 {
-  "ProjectName": "demo",
-  "Region": "cn-beijing"
+  "ProjectName": "demo"
 }
 EOF
 
-volclog tool exec project.create --context file://ctx.json --input file://req.json
+volclog tool exec project.describe-projects --context file://ctx.json --input file://req.json
 ```
 
 For large results, prefer file delivery:

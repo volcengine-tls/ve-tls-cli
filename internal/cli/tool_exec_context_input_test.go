@@ -148,9 +148,9 @@ func TestToolExecAcceptsInlineJSONInput(t *testing.T) {
 		t.Fatalf("write context: %v", err)
 	}
 
-	inline := `{"ProjectId":"pid-demo","TopicName":"demo","Ttl":30,"ShardCount":1}`
+	inline := `{"TopicId":"tid-demo","Query":"*","StartTime":1710374400000,"EndTime":1710378000000}`
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "exec", "topic.create", "--context", "file://" + ctxFile, "--input", inline}, &stdout, &stderr)
+	code := Run([]string{"tool", "exec", "log.search", "--context", "file://" + ctxFile, "--input", inline}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -171,7 +171,7 @@ func TestToolExecAcceptsInlineJSONInput(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected preview body, got %#v", preview["body"])
 	}
-	if body["TopicName"] != "demo" || body["ProjectId"] != "pid-demo" {
+	if body["TopicId"] != "tid-demo" || body["Query"] != "*" {
 		t.Fatalf("unexpected preview body: %#v", body)
 	}
 }
@@ -233,17 +233,17 @@ func TestToolExecAllowsFlatQueryInputWithoutSectionWrapper(t *testing.T) {
 	}
 }
 
-func TestToolExecLogPutAcceptsObjectContentsInDryRun(t *testing.T) {
+func TestToolExecLogSearchAcceptsObjectBodyInDryRun(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
 	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 
-	input := `{"query":{"TopicId":"tid-demo"},"body":{"LogGroups":[{"Logs":[{"Time":1710000000000,"Contents":{"level":"info","msg":"hello"}}]}]}}`
+	input := `{"body":{"TopicId":"tid-demo","Query":"*","StartTime":1710000000000,"EndTime":1710003600000,"RegionTopics":[{"Region":"cn-beijing","Topic":"tid-demo"}]}}`
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--dry-run", "tool", "exec", "log.put", "--input", input}, &stdout, &stderr)
+	code := Run([]string{"--dry-run", "tool", "exec", "log.search", "--input", input}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}

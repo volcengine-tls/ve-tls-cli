@@ -82,6 +82,9 @@ func runRaw(ctx *Context, args []string) (any, error) {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
+	if err := ensureRawCallAllowedInCurrentEdition(method, path); err != nil {
+		return nil, err
+	}
 
 	body, err := util.ReadMaybeFile(bodyArg)
 	if err != nil {

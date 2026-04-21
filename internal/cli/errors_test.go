@@ -155,7 +155,7 @@ func TestClassifyError_ValidationHintMatchesSurface(t *testing.T) {
 
 func TestClassifyError_PageAllUnsupportedIsUnsupportedFeature(t *testing.T) {
 	cases := []string{
-		"execution.page.all is not supported for tool: topic.create-topic",
+		"execution.page.all is not supported for tool: log.search",
 		"tool topic.describe-topics declares page.all support but runtime pagination metadata is unavailable",
 	}
 	for _, msg := range cases {

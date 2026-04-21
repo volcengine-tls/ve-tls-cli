@@ -9,11 +9,12 @@ intents:
       - Prefer tool for published public APIs.
   - intent: execute-public-write
     keywords: [create, get, modify, delete, update]
-    preferred_surface: tool
-    first_command: volclog tool describe <group.action>
-    fallback: volclog tool exec <group.action> --dry-run
-    retry_with_verb: volclog tool list <group> --verb create
+    preferred_surface: volclog-human
+    first_command: volclog-human tool describe <group.action>
+    fallback: volclog-human tool exec <group.action> --dry-run
+    retry_with_verb: volclog-human tool list <group> --verb create
     notes:
+      - Default volclog is readonly. Switch to volclog-human before write paths.
       - Follow with tool exec and dry-run first.
   - intent: inspect-host-groups
     keywords: [host-group, machine group, agent list, inspect hosts]
@@ -31,12 +32,13 @@ intents:
     retry_with_verb: volclog tool list alarm --verb list
   - intent: ingest-logs
     keywords: [ingest, import logs, upload file, upload jsonl, json-array, stdin logs]
-    preferred_surface: workflow
+    preferred_surface: volclog-human
     preferred_id: log.ingest
-    first_command: volclog workflow describe log.ingest
-    fallback: volclog tool describe log.put
-    retry_with_verb: volclog tool list log --verb put
+    first_command: volclog-human workflow describe log.ingest
+    fallback: volclog-human tool describe log.put
+    retry_with_verb: volclog-human tool list log --verb put
     notes:
+      - Default volclog is readonly. Switch to volclog-human before local import or PutLogs work.
       - Prefer workflow log.ingest when the source is local file or stdin and CLI should normalize lines/jsonl/json-array before PutLogs.
       - Switch to tool log.put only when the task is explicitly about the public PutLogs contract itself.
   - intent: preview-search-volume

@@ -76,17 +76,17 @@ func TestToolExecPageAllFlagRejectsUnsupportedAction(t *testing.T) {
 	}
 	if err := osWriteJSON(reqFile, map[string]any{
 		"body": map[string]any{
-			"ProjectId":  "pid",
-			"ShardCount": 2,
-			"TopicName":  "demo",
-			"Ttl":        30,
+			"TopicId":   "tid",
+			"Query":     "*",
+			"StartTime": 1710374400000,
+			"EndTime":   1710378000000,
 		},
 	}); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"tool", "exec", "topic.create-topic", "--context", "file://" + ctxFile, "--input", "file://" + reqFile, "--page-all"}, &stdout, &stderr)
+	code := Run([]string{"tool", "exec", "log.search", "--context", "file://" + ctxFile, "--input", "file://" + reqFile, "--page-all"}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatalf("expected unsupported page.all failure stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}

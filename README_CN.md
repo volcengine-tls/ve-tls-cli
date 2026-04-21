@@ -100,12 +100,14 @@ volclog doctor
 
 #### 3. 先发现契约，再执行
 
+默认 `volclog` 只暴露只读 agent action；如果任务需要 create/modify/delete/import，请改用 `volclog-human`。
+
 先用 `tool` 和 `workflow` 读契约，不要先猜输入：
 
 ```bash
 volclog tool list
 volclog tool list project
-volclog tool describe project.create
+volclog tool describe project.describe-projects
 
 volclog workflow list
 volclog workflow describe log.export
@@ -114,7 +116,7 @@ volclog workflow describe log.export
 只有在你已经明确 `method/path` 时，才直接进入 `raw`：
 
 ```bash
-volclog raw --method POST --path /CreateProject --body file://req.json
+volclog raw --method POST --path /SearchLogs --body file://req.json
 ```
 
 `raw` 同时接受 `--input` 作为 `--body` 的兼容别名；但 `--body` 和 `--input` 不能同时传。
@@ -133,12 +135,11 @@ EOF
 
 cat >req.json <<'EOF'
 {
-  "ProjectName": "demo",
-  "Region": "cn-beijing"
+  "ProjectName": "demo"
 }
 EOF
 
-volclog tool exec project.create --context file://ctx.json --input file://req.json
+volclog tool exec project.describe-projects --context file://ctx.json --input file://req.json
 ```
 
 面对大结果时，优先使用 file delivery：

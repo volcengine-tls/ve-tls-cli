@@ -35,6 +35,8 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"Do not use human shortcut commands as the primary agent flow.",
 		"Do not repeat schema details that already exist in `tool describe` or `workflow describe`.",
 		"prefer `volclog` for agent or CI sessions",
+		"default `volclog` only exposes readonly agent actions",
+		"switch to `volclog-human`",
 		"contract_cache_hint",
 		"volclog workflow describe <group.command>",
 		"references/routing.md",
@@ -50,8 +52,8 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 	for _, want := range []string{
 		"Intent",
 		"Prefer",
-		"log.ingest",
-		"tool log.put",
+		"readonly",
+		"volclog-human",
 		"log.describe-histogram-v1",
 		"log.export-analysis",
 		"interactive analysis",
@@ -67,10 +69,18 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 			t.Fatalf("routing.md missing %q", want)
 		}
 	}
+	for _, notWant := range []string{
+		"| `workflow log.ingest` | `volclog workflow describe log.ingest` |",
+		"| local file/stdin import where CLI should normalize lines/jsonl/json-array -> `log.ingest`",
+		"| explicit public `PutLogs` contract work or direct API control -> `tool log.put`",
+	} {
+		if strings.Contains(routing, notWant) {
+			t.Fatalf("routing.md should not keep default readonly route %q", notWant)
+		}
+	}
 
 	sops := read("skills/volclog-core/references/sops.md")
 	for _, want := range []string{
-		"log.ingest",
 		"log.export",
 		"log.export-analysis",
 		"log.describe-histogram-v1",
@@ -81,9 +91,18 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"Status",
 		"Stop when",
 		"validation query",
+		"volclog-human",
 	} {
 		if !strings.Contains(strings.ToLower(sops), strings.ToLower(want)) {
 			t.Fatalf("sops.md missing %q", want)
+		}
+	}
+	for _, notWant := range []string{
+		"1. `project.create`",
+		"1. `workflow log.ingest`",
+	} {
+		if strings.Contains(sops, notWant) {
+			t.Fatalf("sops.md should not keep default readonly flow %q", notWant)
 		}
 	}
 
@@ -214,6 +233,7 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 	if len(routing.Intents) == 0 {
 		t.Fatal("routing template missing intents")
 	}
+	foundReadonlyWriteEscalation := false
 	for _, entry := range routing.Intents {
 		if _, ok := entry["keywords"]; !ok {
 			t.Fatalf("routing intent missing keywords: %+v", entry)
@@ -221,6 +241,19 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 		if _, ok := entry["retry_with_verb"]; !ok {
 			t.Fatalf("routing intent missing retry_with_verb: %+v", entry)
 		}
+		first, _ := entry["first_command"].(string)
+		notes, _ := entry["notes"].([]any)
+		if strings.Contains(first, "volclog-human") {
+			foundReadonlyWriteEscalation = true
+		}
+		for _, note := range notes {
+			if strings.Contains(strings.ToLower(asString(note)), "readonly") && strings.Contains(asString(note), "volclog-human") {
+				foundReadonlyWriteEscalation = true
+			}
+		}
+	}
+	if !foundReadonlyWriteEscalation {
+		t.Fatalf("routing template should contain readonly->volclog-human escalation: %+v", routing)
 	}
 
 	var workflows workflowsFile
@@ -228,6 +261,7 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 	if len(workflows.Workflows) == 0 {
 		t.Fatal("workflows template missing workflows")
 	}
+	foundNoMutatingDefaultWorkflow := true
 	for _, entry := range workflows.Workflows {
 		if _, ok := entry["output_strategy"]; !ok {
 			t.Fatalf("workflow missing output_strategy: %+v", entry)
@@ -235,6 +269,15 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 		if _, ok := entry["fallback"]; !ok {
 			t.Fatalf("workflow missing fallback: %+v", entry)
 		}
+		steps, _ := entry["steps"].([]any)
+		for _, step := range steps {
+			if asString(step) == "workflow.log.ingest" || asString(step) == "project.create" || asString(step) == "topic.create" || asString(step) == "index.create" {
+				foundNoMutatingDefaultWorkflow = false
+			}
+		}
+	}
+	if !foundNoMutatingDefaultWorkflow {
+		t.Fatalf("workflows template should not keep mutating/default-write steps: %+v", workflows)
 	}
 
 	var recovery recoveryFile
@@ -277,4 +320,9 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 	if !foundEnvOverrideTrap {
 		t.Fatalf("traps template missing env-creds-override-profile: %+v", traps)
 	}
+}
+
+func asString(v any) string {
+	s, _ := v.(string)
+	return strings.TrimSpace(s)
 }

@@ -28,7 +28,7 @@ func TestWorkflowListSupportsJSONFormat(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected group object, got %#v", groups[0])
 	}
-	if item["group"] != "log" || item["count"] != float64(3) {
+	if item["group"] != "log" || item["count"] != float64(2) {
 		t.Fatalf("unexpected workflow group summary: %#v", item)
 	}
 }
@@ -57,13 +57,18 @@ func TestWorkflowListByGroupReturnsRunnableIdentities(t *testing.T) {
 		id, _ := m["id"].(string)
 		got = append(got, id)
 	}
-	want := []string{"log.export", "log.export-analysis", "log.ingest"}
+	want := []string{"log.export", "log.export-analysis"}
 	if len(got) != len(want) {
 		t.Fatalf("unexpected workflow count: got=%v want=%v", got, want)
 	}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("unexpected workflows: got=%v want=%v", got, want)
+		}
+	}
+	for _, id := range got {
+		if id == "log.ingest" {
+			t.Fatalf("default volclog should hide mutating workflows from list: %v", got)
 		}
 	}
 }
@@ -111,6 +116,28 @@ func TestWorkflowDescribeReturnsWorkflowContract(t *testing.T) {
 	}
 	if _, ok := topicID["cli_flag"]; ok {
 		t.Fatalf("workflow describe should not expose exec-time cli_flag hints, got %#v", topicID)
+	}
+}
+
+func TestWorkflowDescribeRejectsHiddenMutatingWorkflowInDefaultVolclog(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"workflow", "describe", "log.ingest"}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected hidden workflow to be rejected stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stdout.String()) != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(stderr.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stderr json: %v stderr=%q", err, stderr.String())
+	}
+	if !strings.Contains(asStringOrEmpty(out["errorMessage"]), "readonly edition") {
+		t.Fatalf("unexpected error message: %#v", out["errorMessage"])
+	}
+	if !strings.Contains(asStringOrEmpty(out["hint"]), "volclog-human") {
+		t.Fatalf("expected volclog-human hint, got %#v", out["hint"])
 	}
 }
 
@@ -218,46 +245,29 @@ func TestWorkflowExecLogExportAcceptsDryRunAndJSONInput(t *testing.T) {
 	}
 }
 
-func TestWorkflowExecLogIngestRoutesToExistingRuntime(t *testing.T) {
-	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
-	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
-	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
-	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
-	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
-
-	tmp := t.TempDir()
-	inputPath := filepath.Join(tmp, "input.jsonl")
-	if err := osWriteJSON(inputPath, []map[string]any{
-		{"message": "hello", "time": 1710374400000},
-	}); err != nil {
-		t.Fatalf("write ingest input: %v", err)
-	}
-	reqFile := filepath.Join(tmp, "req.json")
-	if err := osWriteJSON(reqFile, map[string]any{
-		"TopicId":     "tid",
-		"Input":       "file://" + inputPath,
-		"InputFormat": "json-array",
-		"TimeField":   "time",
-	}); err != nil {
-		t.Fatalf("write request: %v", err)
-	}
-
+func TestWorkflowExecRejectsHiddenMutatingWorkflowInDefaultVolclog(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--dry-run", "workflow", "exec", "log.ingest", "--input", "file://" + reqFile}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	code := Run([]string{"workflow", "exec", "log.ingest"}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected hidden workflow exec to be rejected stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
 
 	var out map[string]any
 	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
-		t.Fatalf("invalid stdout json: %v", err)
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
 	}
-	if out["action"] != "workflow.log.ingest" {
-		t.Fatalf("unexpected action: %#v", out["action"])
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
 	}
-	summary, ok := out["summary"].(map[string]any)
-	if !ok || summary["dryRun"] != true {
-		t.Fatalf("expected dryRun summary, got %#v", out["summary"])
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "readonly edition") {
+		t.Fatalf("unexpected error message: %#v", errObj["message"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["hint"]), "volclog-human") {
+		t.Fatalf("expected volclog-human hint, got %#v", errObj["hint"])
 	}
 }
 

@@ -139,7 +139,8 @@ func TestToolListHelpExplainsDiscoveryOperations(t *testing.T) {
 		"按 group 看有哪些 action",
 		"按 verb 缩小范围",
 		"常见 verb:",
-		"create / get / list / describe / modify / delete / search",
+		"默认 volclog 只展示只读 action",
+		"get / list / describe / search / consume / statistics",
 		"--format <text|json>",
 		"Next:",
 		"volclog tool describe <group.action>",
@@ -165,9 +166,9 @@ func TestWorkflowListHelpExplainsCLIWorkflowBoundary(t *testing.T) {
 	out := stdout.String()
 	for _, want := range []string{
 		"CLI workflow",
-		"log.ingest",
 		"log.export",
 		"log.export-analysis",
+		"当前首批 workflow: log.export / log.export-analysis",
 		"tool 仍只暴露官网公开 API",
 		"volclog workflow describe <group.command>",
 		"volclog workflow exec <group.command> --input file://req.json",
@@ -175,6 +176,9 @@ func TestWorkflowListHelpExplainsCLIWorkflowBoundary(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in stdout: %q", want, out)
 		}
+	}
+	if strings.Contains(out, "log.ingest") {
+		t.Fatalf("default volclog workflow help should hide log.ingest: %q", out)
 	}
 }
 

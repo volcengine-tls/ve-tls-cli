@@ -1413,6 +1413,43 @@ func TestBuildToolCatalogDoesNotFallbackAllLogPostActionsToCreate(t *testing.T) 
 	}
 }
 
+func TestBuildToolCatalogAssignsReadonlyVisibility(t *testing.T) {
+	doc := swaggerDoc{
+		Paths: map[string]swaggerPathItem{
+			"/CreateProject": {
+				Post: &swaggerOp{Summary: "CreateProject", Tags: []string{"Project"}},
+			},
+			"/SearchLogs": {
+				Post: &swaggerOp{Summary: "SearchLogs", Tags: []string{"Log"}},
+			},
+			"/CreateDownloadTask": {
+				Post: &swaggerOp{Summary: "CreateDownloadTask", Tags: []string{"Log"}},
+			},
+		},
+	}
+
+	got := buildToolCatalog(doc, "stage1", map[string]string{
+		"Project": "project",
+		"Log":     "log",
+	}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(got.Tools) != 3 {
+		t.Fatalf("tools=%d", len(got.Tools))
+	}
+
+	visibilityByAction := map[string]string{}
+	for _, tool := range got.Tools {
+		visibilityByAction[tool.Action] = tool.Visibility
+	}
+	if visibilityByAction["CreateProject"] != "hidden" {
+		t.Fatalf("CreateProject visibility=%q", visibilityByAction["CreateProject"])
+	}
+	for _, action := range []string{"SearchLogs", "CreateDownloadTask"} {
+		if visibilityByAction[action] != "public" {
+			t.Fatalf("%s visibility=%q", action, visibilityByAction[action])
+		}
+	}
+}
+
 func asTestString(v any) string {
 	s, _ := v.(string)
 	return strings.TrimSpace(s)

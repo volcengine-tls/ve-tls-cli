@@ -71,6 +71,15 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 			Hint:       hint,
 		}, 1
 	}
+	var readonlyErr *readonlyEditionError
+	if errors.As(err, &readonlyErr) {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "usage",
+			Hint:       "default volclog only exposes readonly agent actions; use 'volclog-human' (-tags=human) for mutating or non-readonly calls",
+		}, 1
+	}
 	if he, ok := isHTTPError(err); ok {
 		kind := "server"
 		hint := ""

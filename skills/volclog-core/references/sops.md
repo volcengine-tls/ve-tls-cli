@@ -2,34 +2,35 @@
 
 Use this file only for cross-group execution order, stop conditions, and hand-off points between surfaces.
 
-## Create A Searchable Log Pipeline
+## Escalate Mutating Or Import Tasks
 
-1. `project.create`
-2. `topic.create`
-3. `index.create`
+1. switch to `volclog-human`
+2. rediscover the write/import contract there
+3. return to readonly validation in `volclog` only when the task becomes read-only again
+
+Stop when:
+- the write/import contract is clear in `volclog-human`, or
+- the task is reclassified as readonly and can stay in `volclog`
+
+Notes:
+- Typical `volclog-human` write paths are `workflow log.ingest`, `project.create`, `topic.create`, and `index.create`.
+- After any write path, prefer moving back to readonly validation in `volclog`.
+
+## Validate Existing Searchable Log Pipeline
+
+1. `configure.list`
+2. `topic.describe-topic`
+3. `index.describe`
 4. `log.search`
 
 Stop when:
-- one read path returns the expected searchable shape, or
-- `project` / `topic` / `index` already exists and the pipeline can move to validation
+- the wrong profile, topic, or time range is identified, or
+- one narrow validation query returns the expected rows
 
 Notes:
-- After `index.create`, wait for index readiness before trusting search results.
 - Prefer `index.describe` and read `Status` or equivalent readiness fields when available.
 - If readiness is not explicit, wait `10-30 seconds`, then retry one narrow validation query.
-
-## Ingest And Validate
-
-1. `workflow log.ingest`
-2. `log.search`
-
-Stop when:
-- the write path succeeds, and
-- one narrow validation query returns rows
-
-Notes:
 - Keep validation queries small and recent.
-- If the write succeeded but search is empty, switch to the troubleshooting SOP below instead of widening the query immediately.
 
 ## Troubleshoot Empty Search
 
@@ -45,6 +46,19 @@ Stop when:
 Notes:
 - Reconfirm the target profile before changing business input.
 - If index readiness is unclear, check `Status` first, then retry with a narrow window.
+
+## Validate Data After A Write Path Already Finished Elsewhere
+
+1. `log.search`
+2. `workflow log.export`
+
+Stop when:
+- one narrow validation query returns rows, or
+- the task clearly needs a wider readonly export instead of another preview
+
+Notes:
+- If the task still needs import or another write, switch back to `volclog-human` instead of probing default `volclog`.
+- Keep the first validation query narrow before escalating to export.
 
 ## Preview Search Volume Before Reading Rows
 

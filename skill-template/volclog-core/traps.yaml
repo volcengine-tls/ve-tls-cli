@@ -33,8 +33,12 @@ traps:
     fix: switch to workflow describe/exec instead of tool describe/exec
   - trap: ingest-is-not-tool-put
     symptom: local file/stdin import is routed to tool log.put, or direct PutLogs contract work is routed to workflow log.ingest
-    why: log.ingest is a local import workflow, while tool log.put is the public PutLogs contract surface
-    fix: use workflow log.ingest for local lines/jsonl/json-array import; use tool log.put only when the task is explicitly about the public PutLogs contract
+    why: log.ingest is a local import workflow, while tool log.put is the public PutLogs contract surface, and both belong on volclog-human when the task writes state
+    fix: switch to volclog-human first; use workflow log.ingest for local lines/jsonl/json-array import and tool log.put only when the task is explicitly about the public PutLogs contract
+  - trap: readonly-default-binary-blocks-write-paths
+    symptom: default volclog returns readonly edition errors for create/import/raw write paths
+    why: default volclog intentionally exposes readonly agent actions only
+    fix: switch to volclog-human, rediscover the mutating contract there, then return to readonly validation if needed
   - trap: shortcuts-are-human-first
     symptom: agent starts from project/topic/log shortcut commands
     why: agent flows should start from tool or workflow instead of shortcut groups

@@ -1,22 +1,22 @@
 workflows:
-  - name: create-searchable-log-pipeline
-    when_to_use: create project/topic/index and then validate search
+  - name: validate-existing-searchable-log-pipeline
+    when_to_use: inspect an existing project/topic/index path and confirm search works without mutating state
     steps:
-      - project.create
-      - topic.create
-      - index.create
+      - configure.list
+      - topic.describe-topic
+      - index.describe
       - log.search
     output_strategy: keep identifiers and narrow validation signals in stdout; let CLI choose file delivery later if needed
-    fallback: workflow.log.export
-    stop_condition: one read path returns the expected shape
-  - name: ingest-and-validate
-    when_to_use: load local lines/jsonl/json-array into a topic and confirm the data is searchable
+    fallback: raw.SearchLogs
+    stop_condition: wrong target identified or search returns the expected shape
+  - name: validate-after-write-path
+    when_to_use: a write/import path already finished elsewhere and the next step is readonly validation
     steps:
-      - workflow.log.ingest
       - log.search
+      - workflow.log.export
     output_strategy: keep ingest stdout small; validation stays narrow until a later export is truly needed
     fallback: workflow.log.export
-    stop_condition: one write path succeeds and one read path returns rows
+    stop_condition: one readonly validation query returns rows
   - name: troubleshoot-empty-search
     when_to_use: writes succeeded but search returns empty
     steps:

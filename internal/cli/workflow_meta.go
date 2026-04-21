@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/volcengine-tls/ve-tls-cli/internal/readonly"
 )
 
 type workflowCatalog struct {
@@ -27,14 +29,14 @@ type workflowCatalog struct {
 }
 
 func workflowCatalogEntries(group string) []workflowCatalog {
-	entries := workflowCatalogSource()
-	if strings.TrimSpace(group) == "" {
-		return entries
-	}
 	target := normalizeToken(group)
-	out := make([]workflowCatalog, 0, len(entries))
-	for _, item := range entries {
-		if normalizeToken(item.Group) != target {
+	source := workflowCatalogSource()
+	out := make([]workflowCatalog, 0, len(source))
+	for _, item := range source {
+		if !workflowVisibleInCurrentEdition(item) {
+			continue
+		}
+		if target != "" && normalizeToken(item.Group) != target {
 			continue
 		}
 		out = append(out, item)
@@ -52,9 +54,19 @@ func resolveWorkflowByIdentity(group, command string) (workflowCatalog, error) {
 		if normalizeToken(item.Command) != c && normalizeToken(item.ID) != normalizeToken(group+"."+command) {
 			continue
 		}
+		if err := ensureWorkflowAccessibleInCurrentEdition(item); err != nil {
+			return workflowCatalog{}, err
+		}
 		return item, nil
 	}
 	return workflowCatalog{}, fmt.Errorf("unknown workflow: %s.%s", strings.TrimSpace(group), strings.TrimSpace(command))
+}
+
+func workflowVisibleInCurrentEdition(item workflowCatalog) bool {
+	if currentEdition() != cliEditionVolclog {
+		return true
+	}
+	return readonly.IsTLSReadOnlyAction(item.APIAction)
 }
 
 func workflowCatalogSource() []workflowCatalog {

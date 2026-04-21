@@ -125,9 +125,9 @@ func TestRawDryRunIncludesRequestPreviewBody(t *testing.T) {
 		"--dry-run",
 		"raw",
 		"--method", "POST",
-		"--path", "/CreateProject",
+		"--path", "/SearchLogs",
 		"--query", "region=cn-beijing",
-		"--body", `{"ProjectName":"demo","Description":"preview"}`,
+		"--body", `{"TopicId":"tid-demo","Query":"*","StartTime":1710374400000,"EndTime":1710378000000}`,
 	}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
@@ -148,7 +148,7 @@ func TestRawDryRunIncludesRequestPreviewBody(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing preview body: %v", preview)
 	}
-	if body["ProjectName"] != "demo" {
+	if body["TopicId"] != "tid-demo" {
 		t.Fatalf("unexpected preview body: %v", body)
 	}
 	query, ok := preview["query"].(map[string]any)
@@ -172,8 +172,8 @@ func TestRawDryRunAcceptsInputAliasForBody(t *testing.T) {
 		"--dry-run",
 		"raw",
 		"--method", "POST",
-		"--path", "/CreateProject",
-		"--input", `{"ProjectName":"demo-from-input"}`,
+		"--path", "/SearchLogs",
+		"--input", `{"TopicId":"demo-from-input","Query":"*","StartTime":1710374400000,"EndTime":1710378000000}`,
 	}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
@@ -194,7 +194,7 @@ func TestRawDryRunAcceptsInputAliasForBody(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing preview body: %v", preview)
 	}
-	if body["ProjectName"] != "demo-from-input" {
+	if body["TopicId"] != "demo-from-input" {
 		t.Fatalf("unexpected preview body: %v", body)
 	}
 }

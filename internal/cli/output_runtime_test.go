@@ -199,7 +199,7 @@ func TestOutputRuntimePreflightRejectsMissingWritableDirForKnownFileDelivery(t *
 
 func TestToolWorkflowRawRejectOutputFile(t *testing.T) {
 	cases := [][]string{
-		{"tool", "describe", "project.create", "--output-file", filepath.Join(t.TempDir(), "tool.json")},
+		{"tool", "describe", "project.describe-projects", "--output-file", filepath.Join(t.TempDir(), "tool.json")},
 		{"workflow", "describe", "log.export", "--output-file", filepath.Join(t.TempDir(), "workflow.json")},
 		{"raw", "--method", "GET", "--path", "/DescribeProjects", "--output-file", filepath.Join(t.TempDir(), "raw.json")},
 	}

@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/volcengine-tls/ve-tls-cli/internal/readonly"
 )
 
 type swaggerDoc struct {
@@ -365,7 +367,7 @@ func buildToolCatalog(doc swaggerDoc, version string, groupKeys map[string]strin
 				Family:           family,
 				Method:           m.name,
 				Path:             p,
-				Visibility:       "public",
+				Visibility:       inferToolVisibility(action),
 				Summary:          strings.TrimSpace(m.op.Summary),
 				InputSchema:      inputSchema,
 				ContextSchema:    defaultToolContextSchema(),
@@ -403,6 +405,13 @@ func buildToolCatalog(doc swaggerDoc, version string, groupKeys map[string]strin
 		Version: version,
 		Tools:   tools,
 	}
+}
+
+func inferToolVisibility(action string) string {
+	if readonly.IsTLSReadOnlyAction(action) {
+		return "public"
+	}
+	return "hidden"
 }
 
 func assignCanonicalToolIDs(tools []toolEntry) {

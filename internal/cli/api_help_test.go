@@ -63,6 +63,26 @@ func TestRawHelpStaysTransportOnly(t *testing.T) {
 	}
 }
 
+func TestRawUsageInDefaultVolclogUsesReadonlyGuidance(t *testing.T) {
+	text := usageRaw()
+	for _, want := range []string{
+		"默认 volclog 面向只读 agent surface",
+		"/SearchLogs",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q in raw usage: %q", want, text)
+		}
+	}
+	for _, notWant := range []string{
+		"/CreateProject",
+		"/CreateTopic",
+	} {
+		if strings.Contains(text, notWant) {
+			t.Fatalf("raw usage should avoid mutating examples %q: %q", notWant, text)
+		}
+	}
+}
+
 func TestLegacyCapabilitiesAndAPIAreRemoved(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -139,5 +159,28 @@ func TestRawCommandRemainsAvailable(t *testing.T) {
 	}
 	if out != 0 {
 		t.Fatalf("expected filtered envelope field 0, got %#v", out)
+	}
+}
+
+func TestRawRejectsMutatingPathInDefaultVolclog(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"raw", "--method", "POST", "--path", "/CreateTopic", "--body", `{"TopicName":"demo"}`}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected mutating raw path to be rejected stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "readonly edition") {
+		t.Fatalf("unexpected error message: %#v", errObj["message"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["hint"]), "volclog-human") {
+		t.Fatalf("expected volclog-human hint, got %#v", errObj["hint"])
 	}
 }
