@@ -249,18 +249,8 @@ Further reading:
 
 ---
 
-## Security & Contributing
-
+## Security and privacy
+This project takes security seriously. 
+For vulnerability reporting and supported versions, see [SECURITY.md](SECURITY.md)
 - **Security** — Avoid hardcoding plaintext AK/SK in command arguments. Prefer local profiles, one-shot `--secrets-file`, or scoped environment injection.
 - **Region / endpoint discipline** — Always set `region` explicitly. The CLI does not infer it from endpoint or hostname.
-- **Contributing** — When changing the public tool catalog, regenerate it with:
-
-  ```bash
-  go run ./internal/openapigen --spec repos/docs/swagger.json
-  ```
-
-  Then run:
-
-  ```bash
-  go test ./...
-  ```
