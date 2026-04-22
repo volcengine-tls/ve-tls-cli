@@ -105,25 +105,20 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	defer ctx.Close()
 
 	if outputMode != "stdout" && outputMode != "file" {
-		writeCLIError(stderr, errors.New("unsupported output-mode: "+gf.OutputMode), "", 0, "usage", "invalid --output-mode")
-		return 1
+		return writeRunError(ctx, stdout, stderr, g, rest, errors.New("unsupported output-mode: "+gf.OutputMode), "usage", "invalid --output-mode", outputMode, 1)
 	}
 	if outputMode == "file" && strings.TrimSpace(gf.Filter) != "" && filterTargetsEnvelope(g, rest) {
-		writeCLIError(stderr, errors.New("--jmes-filter cannot be combined with file delivery"), "", 0, "incompatible_flags", "remove --jmes-filter or use stdout delivery")
-		return 1
+		return writeRunError(ctx, stdout, stderr, g, rest, errors.New("--jmes-filter cannot be combined with file delivery"), "incompatible_flags", "remove --jmes-filter or use stdout delivery", outputMode, 1)
 	}
 	if rejectsOutputFileForGroup(g) && strings.TrimSpace(gf.OutputFile) != "" {
-		writeCLIError(stderr, errors.New("--output-file is not supported for "+strings.TrimSpace(g)), "", 0, "usage", "use output_dir-based delivery instead")
-		return 1
+		return writeRunError(ctx, stdout, stderr, g, rest, errors.New("--output-file is not supported for "+strings.TrimSpace(g)), "usage", "use output_dir-based delivery instead", outputMode, 1)
 	}
 	if err := ctx.validateDryRunScope(g, rest); err != nil {
-		writeCLIError(stderr, err, "", 0, "usage", "invalid --dry-run scope")
-		return 1
+		return writeRunError(ctx, stdout, stderr, g, rest, err, "usage", "invalid --dry-run scope", outputMode, 1)
 	}
 	if outputMode == "file" {
 		if err := preflightOutputFilePath(gf.OutputFile, ctx.OutputDir, g, knownFileDeliveryFormat(g, rest, format)); err != nil {
-			writeCLIError(stderr, err, "", 0, "filesystem", "provide a writable --output-dir or check the local file path and permissions")
-			return 2
+			return writeRunError(ctx, stdout, stderr, g, rest, err, "filesystem", "provide a writable --output-dir or check the local file path and permissions", outputMode, 2)
 		}
 	}
 	if ctx.GlobalSecretsFile != "" {
@@ -212,17 +207,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 	applyEnvelopeFilter := filterTargetsEnvelope(g, rest)
 	if ctx.Filter != "" && !applyEnvelopeFilter {
+		filterTarget := out
 		out, err = output.ApplyFilter(out, ctx.Filter)
 		if err != nil {
-			if emitsStructuredEnvelope(g, rest) {
-				if strings.TrimSpace(ctx.TraceDir) != "" {
-					_ = ctx.initTrace()
-				}
-				env := buildAPIErrorEnvelope(ctx, g, err, outputMode)
-				return writeStructuredError(stdout, stderr, err, ctx.RequestID, ctx.StatusCode, g, env)
-			}
-			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "invalid --jmes-filter")
-			return 3
+			return writeFilterApplicationError(ctx, stdout, stderr, g, rest, filterTarget, outputMode, err)
 		}
 	}
 	if format == output.FormatTable {
@@ -285,12 +273,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		if ctx.Filter != "" && applyEnvelopeFilter {
 			filtered, err := applyEnvelopeFilterResult(env, ctx.Filter)
 			if err != nil {
-				errorEnv := buildAPIErrorEnvelope(ctx, g, err, outputMode)
-				if err2 := output.Write(stdout, errorEnv, output.FormatJSON); err2 != nil {
-					writeCLIError(stderr, err2, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
-					return 3
-				}
-				return 3
+				return writeFilterApplicationError(ctx, stdout, stderr, g, rest, env, outputMode, err)
 			}
 			if err := output.Write(stdout, filtered, output.FormatJSON); err != nil {
 				writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
@@ -309,10 +292,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return exitCode
 	}
 	if ctx.Filter != "" && applyEnvelopeFilter {
+		filterTarget := out
 		out, err = applyEnvelopeFilterResult(out, ctx.Filter)
 		if err != nil {
-			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "invalid --jmes-filter")
-			return 3
+			return writeFilterApplicationError(ctx, stdout, stderr, g, rest, filterTarget, outputMode, err)
 		}
 	}
 	if notice, ok := fileDeliveryNoticeForOutput(out, g, rest); ok {
@@ -368,10 +351,63 @@ func emitsStructuredEnvelope(group string, rest []string) bool {
 	}
 	switch strings.TrimSpace(group) {
 	case "tool", "workflow":
-		return len(rest) > 0 && strings.TrimSpace(rest[0]) == "exec"
+		return true
 	default:
 		return false
 	}
+}
+
+func writeRunError(ctx *Context, stdout, stderr io.Writer, group string, rest []string, err error, kind string, hint string, outputMode string, code int) int {
+	if emitsStructuredEnvelope(group, rest) {
+		return writeStructuredError(stdout, stderr, err, "", 0, group, buildAPIErrorEnvelope(ctx, group, err, outputMode))
+	}
+	writeCLIError(stderr, err, "", 0, kind, hint)
+	return code
+}
+
+func writeFilterApplicationError(ctx *Context, stdout, stderr io.Writer, group string, rest []string, target any, outputMode string, err error) int {
+	if emitsStructuredEnvelope(group, rest) || hasStructuredEnvelopeOutput(target) {
+		if strings.TrimSpace(ctx.TraceDir) != "" {
+			_ = ctx.initTrace()
+		}
+		errorEnv := buildAPIErrorEnvelope(ctx, group, err, outputMode)
+		if err2 := output.Write(stdout, errorEnv, output.FormatJSON); err2 != nil {
+			writeCLIError(stderr, err2, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
+			return 3
+		}
+		return 3
+	}
+	writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "invalid --jmes-filter")
+	return 3
+}
+
+func structuredEnvelopeOutput(v any) (map[string]any, bool) {
+	env, ok := v.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	status, _ := env["status"].(string)
+	if strings.TrimSpace(status) == "" {
+		return nil, false
+	}
+	if _, ok := env["summary"].(map[string]any); !ok {
+		return nil, false
+	}
+	if _, ok := env["artifacts"]; !ok {
+		return nil, false
+	}
+	if _, ok := env["data"]; !ok {
+		return nil, false
+	}
+	if _, ok := env["error"]; !ok {
+		return nil, false
+	}
+	return env, true
+}
+
+func hasStructuredEnvelopeOutput(v any) bool {
+	_, ok := structuredEnvelopeOutput(v)
+	return ok
 }
 
 func applyEnvelopeFilterResult(v any, expr string) (any, error) {

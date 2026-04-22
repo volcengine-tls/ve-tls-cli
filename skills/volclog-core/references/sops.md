@@ -2,6 +2,9 @@
 
 Use this file only for cross-group execution order, stop conditions, and hand-off points between surfaces.
 
+Pick one SOP, follow it until its stop condition, then stop. Do not chain multiple SOPs unless the current one fails to resolve the task.
+If any step returns an error envelope, first follow `SKILL.md` Error Recovery Quick Map, then retry the same step or stop if the task itself changed.
+
 ## Create A Searchable Log Pipeline
 
 1. `project.create`
@@ -16,7 +19,7 @@ Stop when:
 Notes:
 - After `index.create`, wait for index readiness before trusting search results.
 - Prefer `index.describe` and read `Status` or equivalent readiness fields when available.
-- If readiness is not explicit, wait `10-30 seconds`, then retry one narrow validation query.
+- If readiness is not explicit, poll `index.describe` with a reasonable timeout and retry one narrow validation query only after the index looks ready.
 
 ## Ingest And Validate
 
@@ -33,7 +36,7 @@ Notes:
 
 ## Troubleshoot Empty Search
 
-1. `configure.list`
+1. runtime selector check
 2. `topic.describe-topic`
 3. `index.describe`
 4. `log.search`
@@ -43,7 +46,7 @@ Stop when:
 - search starts returning rows
 
 Notes:
-- Reconfirm the target profile before changing business input.
+- Reconfirm the runtime selector before changing business input. If local profiles matter, run `configure.list`; otherwise verify the injected selector that the session is already using.
 - If index readiness is unclear, check `Status` first, then retry with a narrow window.
 
 ## Preview Search Volume Before Reading Rows

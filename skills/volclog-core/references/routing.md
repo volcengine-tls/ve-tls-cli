@@ -2,6 +2,8 @@
 
 Use this file only to choose the execution surface. Do not use it for runtime/output decisions.
 
+Stop once one row clearly matches the current intent. After the surface is chosen, return to the main contract flow and do not keep comparing other surfaces.
+
 | Intent | Prefer | First Command | Escalate When |
 | --- | --- | --- | --- |
 | Import local lines/jsonl/json-array from file or stdin | `workflow log.ingest` | `volclog workflow describe log.ingest` | You actually need the raw public `PutLogs` contract |
@@ -23,6 +25,7 @@ Use this file only to choose the execution surface. Do not use it for runtime/ou
 
 ## Rediscovery
 
+- For non-`log` groups and plain CRUD intent, default to `volclog tool list <group> --verb <verb>` before browsing anything else.
 - If `unknown tool` happens, rerun `volclog tool list <group>` before guessing aliases.
 - If the intent already implies a verb, re-run `volclog tool list <group> --verb <user-intent-verb>`.
 - Example: create project -> `volclog tool list project --verb create`

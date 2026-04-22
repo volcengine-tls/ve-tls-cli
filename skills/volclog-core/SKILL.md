@@ -1,6 +1,6 @@
 ---
 name: volclog-core
-description: Use when operating volclog as an agent and you need routing, cross-group SOPs, runtime recovery, or stateless credential guidance beyond tool describe and workflow describe.
+description: Use when operating volclog in agent or CI sessions and you need a contract-first workflow for runtime selector resolution, discover/describe/exec routing, envelope reading, large-result delivery, and error recovery without guessing commands, flags, or shortcut flows.
 ---
 
 # Volclog Core
@@ -9,25 +9,100 @@ description: Use when operating volclog as an agent and you need routing, cross-
 
 Use this skill only for agent-only incremental knowledge.
 
-If `volclog tool describe ...` or `volclog workflow describe ...` already answers the question, stop and follow that contract instead of adding duplicate guidance here.
+Treat this file as the dominant generic operating model for `volclog`, not as an environment-specific bootstrap note and not as an API reference. This file is the behavior summary; references are the authoritative detail. If `volclog tool describe ...` or `volclog workflow describe ...` already answers the question, stop and follow that contract instead of adding duplicate guidance here.
 
-If both binaries are available, prefer `volclog` for agent or CI sessions. If only `volclog-human` is installed, stay on `tool / workflow / raw` and ignore human shortcut groups.
+## Operating Stance
 
-## Read Order
+- Treat `tool describe` or `workflow describe` as the contract truth source. Read `tool describe` or `workflow describe` first.
+- Treat profile configuration as a runtime-selector problem, not a region-discovery ritual.
+- Think in runtime selectors: active profile, explicit `--profile <name>`, one-shot `--secrets-file`, `context.secrets_file`, or process-scoped environment credentials.
+- Use `tool` for published public APIs, `workflow` for CLI-owned orchestration, and `raw` only when method/path is already known.
+- Prefer structured JSON input such as `--input '{...}'` when `tool exec` or `workflow exec` already supports it.
 
-1. Read `tool describe` or `workflow describe` first.
-2. If the contract returns `contract_cache_hint`, reuse cached results only while the same CLI build still reports the same `contract_digest`.
-3. Read [references/routing.md](references/routing.md) only when the intent is still ambiguous.
-4. Read [references/sops.md](references/sops.md) only for multi-step tasks.
-5. Read [references/best-practices.md](references/best-practices.md) for runtime semantics, recovery, credential injection, and traps.
+## Runtime Selector Model
 
-## Hard Rules
+- Treat the execution environment as unknown until the available runtime selectors are confirmed.
+- Do not assume the active or default profile is the right selector for the task.
+- Run `volclog configure list` only when local profile discovery is actually relevant.
+- Use `region` only when the contract or task explicitly requires an override. Do not infer it from endpoint or domain.
+- `--profile`/`context.profile` and `--secrets-file`/`context.secrets_file` are runtime selectors, not business input fields.
+- Never read, print, export, or persist AK/SK or token values in prompts, memory, request artifacts, or skill content.
 
+## Canonical Agent Loop
+
+Discover -> Describe -> Exec -> Read Result
+
+1. Resolve runtime selectors.
+   - decide whether this run is using profile, secrets file, or environment credentials
+   - if local profile discovery matters, run `volclog configure list`
+   - keep the chosen selector explicit in the command or context
+2. Discover the callable surface.
+   - `volclog tool list`
+   - `volclog tool list <group>`
+   - `volclog workflow list <group>`
+3. Read the contract.
+   - `volclog tool describe <group.action>`
+   - `volclog workflow describe <group.command>`
+4. Execute with structured input.
+   - `volclog tool exec <group.action> --input '{...}'`
+   - `volclog workflow exec <group.command> --input '{...}'`
+   - `volclog raw --method <METHOD> --path <PATH> --body '{...}'`
+5. Read result in this order.
+   - `status` (`"success"` or `"failed"`)
+   - `summary.deliveryMode`
+   - the flat `error` object (when `status` is `"failed"`)
+   - business fields under `data` (when `status` is `"success"`)
+
+## Reference Escalation
+
+- Do not read every reference file by default.
+- Read `tool describe` or `workflow describe` first.
+- Read [references/routing.md](references/routing.md) only when the surface is still unclear after describe or list.
+- Read [references/sops.md](references/sops.md) only when the task clearly spans multiple calls and you need stop conditions.
+- Read [references/best-practices.md](references/best-practices.md) only when runtime semantics, delivery mode, or recovery posture are still unclear after the contract is known.
+- `contract_cache_hint` and `contract_digest` come from `tool describe` or `workflow describe` output. Read `contract_cache_hint.safe_scope` and `contract_cache_hint.refresh_when`, and reuse cached results only while the same CLI build still reports the same `contract_digest`.
+- Stop after one reference resolves the current uncertainty; do not keep browsing all references “just in case”.
+
+## Key Rules
+
+- Do not guess command names, tool ids, workflow ids, JSON fields, or output shape.
+- If the action id is still unknown, run `volclog tool list <group>` or `volclog workflow list <group>` before guessing.
 - Do not use human shortcut commands as the primary agent flow.
 - Do not repeat schema details that already exist in `tool describe` or `workflow describe`.
-- Use `tool` for published public APIs, `workflow` for CLI-owned orchestration, and `raw` only when method/path is already known.
-- Prefer `--dry-run` before any write or destructive change.
-- Never persist AK/SK or token values in prompts, memory, request artifacts, or skill content.
+- Do not rebuild a valid `tool exec` or `workflow exec` request into flag-heavy shortcut form just because the shell path looks shorter.
+- Do not pipe `volclog` output into `jq` or `grep` just to rediscover schema or field paths.
+- Read the full JSON envelope first; use `--jmes-filter` only when you already know the envelope path you want.
+- Prefer `--dry-run` before any write or destructive change, but only on `raw`, `tool exec`, or `workflow exec`.
+- Treat `--dry-run` as contract or plan validation, not proof that the business query is correct.
+- If fields are uniquely named, prefer flat JSON input before manual nesting.
+
+## Error Recovery Quick Map
+
+Use this table as the default first response after a failed envelope. Read `references/best-practices.md` only when you need runtime-specific detail beyond the quick action below.
+
+| Signal | Next action |
+| --- | --- |
+| `error.kind=validation` | Go back to `describe` and fix shape or selector problems first. |
+| `error.kind=auth` or `401` | Re-check runtime selector, then credentials, then endpoint or region override. |
+| `403 Forbidden` | Re-check tenant or profile alignment before widening the permission search. |
+| `error.kind=usage` | Re-run `tool list` or `workflow list`; do not invent aliases. |
+| `error.kind=unsupported_feature` | Remove the unsupported flag or switch to the right surface. |
+| `error.kind=incompatible_flags` | Remove one conflicting flag and rerun. |
+| `error.kind=filesystem` | Fix `--output-dir`, local path, or permissions before retrying. |
+| `error.kind=decode` | Read `error.hint`, remove the wrong filter or projection if present, then rerun unfiltered or with `--trace-dir`. |
+| `error.kind=server` | Read `error.code` and `error.requestId`, then retry with backoff if it looks transient or escalate to the service owner with that evidence. |
+| `error.kind=config` | Run `volclog doctor` for host-side configuration checks, then inspect the reported runtime issue. |
+| `error.kind=unknown` | Read `error.hint` first, then `error.message` or `error.details`, and rerun with `--dry-run` or `--trace-dir` only if more detail is still needed. |
+| `ResultStatus=incomplete` | Narrow the time window and rerun before trusting counts or emptiness. |
+
+`volclog doctor` checks host/runtime configuration such as credentials, endpoint, and local setup. It does not replace `describe`, and it does not validate business query semantics.
+
+## Large Result Handling
+
+- Keep surface choice and delivery choice separate.
+- When a result may be large, provide a writable `--output-dir`.
+- Let `summary.deliveryMode` tell you what actually happened at runtime.
+- Read [references/best-practices.md](references/best-practices.md) for exact `outputMode`, `deliveryMode`, file delivery, and `--jmes-filter` semantics instead of duplicating them here.
 
 ## Quick Map
 
@@ -35,16 +110,10 @@ If both binaries are available, prefer `volclog` for agent or CI sessions. If on
 | --- | --- |
 | Public API contract already chosen | `volclog tool describe <group.action>` / `volclog tool exec <group.action>` |
 | CLI workflow already chosen | `volclog workflow describe <group.command>` / `volclog workflow exec <group.command>` |
+| Need to discover action or workflow ids | `volclog tool list <group>` / `volclog workflow list <group>` |
 | Need help choosing the surface | read `references/routing.md` |
 | Need multi-step execution order | read `references/sops.md` |
 | Need runtime/error/recovery semantics | read `references/best-practices.md` |
 | Use an exact method/path | `volclog raw --method ... --path ...` |
 | Authenticate a stateless run | host-selected local profile -> one-shot `--secrets-file` or `context.secrets_file` |
-
-## First Response Loop
-
-1. Pick the surface: `tool / workflow / raw`.
-2. Read the contract.
-3. Confirm `profile`, explicit region, and credential injection strategy. Do not infer region from endpoint/domain.
-4. Run with `--dry-run` when the operation mutates state.
-5. Let CLI runtime signals such as `summary.deliveryMode` and the flat `error` object drive the next step.
+| Need contract reuse safety | reuse cached results only while the same CLI build still reports the same `contract_digest` |

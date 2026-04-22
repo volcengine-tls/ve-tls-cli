@@ -2,19 +2,21 @@
 
 Use this file only for runtime semantics, recovery posture, and credential handling. Routing belongs in `routing.md`; multi-step execution order belongs in `sops.md`.
 
+Do not use this file to reopen surface selection once routing is already clear.
+This file refines the quick recovery map in `SKILL.md`; it does not override the main skill's default first response.
+
 ## Runtime Signals
 
-Read these signals in this order:
+Read these signals in this order after routing is already clear:
 
-1. choose the surface with `tool / workflow / raw`
+1. keep the chosen `tool / workflow / raw` surface fixed
 2. let CLI decide how the result is delivered
 3. inspect the flat `error` object only if the call failed
 
 Key rules:
 
 - Keep surface choice and delivery choice separate. Skill decides `tool / workflow / raw`; CLI decides stdout vs file delivery.
-- If both binaries are available, prefer `volclog` for agent or CI sessions.
-- `volclog-human` keeps the human shortcut layer; do not let that change the runtime reading order described here.
+- Do not let shortcut-oriented help or examples change the runtime reading order described here.
 - Let CLI `deliveryMode` decide stdout vs `file_auto`.
 - For `log.search`, let CLI `deliveryMode` decide stdout vs `file_auto` after the surface is already chosen.
 - Treat `outputMode` as caller intent and `deliveryMode` as runtime result:
@@ -25,6 +27,13 @@ Key rules:
 - If auto spill fails because no writable directory was provided, rerun with `--output-dir <writable-dir>` instead of inventing a filename.
 - `tool / workflow / raw` write a full JSON envelope when file delivery is used, even if stdout format preference was `jsonl`.
 - `log.export` and `log.export-analysis` are the exception: their files contain exported data rows, while stdout keeps the envelope and points to the file through `artifacts`.
+
+## Dry-Run Scope
+
+- `--dry-run` applies to `raw`, `tool exec`, and `workflow exec`. It does not apply to `tool describe`, `workflow describe`, or shortcut groups.
+- For `tool exec` and `workflow exec`, `--dry-run` validates contract shape and execution plan without sending the real mutating call.
+- For `raw`, `--dry-run` only validates the transport/local plan. It does not validate API-required fields the way `tool exec` or `workflow exec` can.
+- Treat any dry-run success as transport or contract confidence only. It is not proof that the business query or time window is semantically correct.
 
 ## Envelope Filtering
 
@@ -49,7 +58,6 @@ Use this section to interpret result semantics after the surface has already bee
 - Choose `log.export-analysis` when the user needs the full analysis row set written as an export file for offline reading, downstream processing, or token-safe handoff.
 - Stay on `log.search` when the user is still validating SQL, iterating on the query, or only needs a small interactive preview.
 - `raw --input` is only a compatibility alias for `--body`; it does not do `tool exec` style smart mapping for GET requests.
-- `raw --dry-run` only validates the transport/local plan. It does not validate API-required fields the way `tool exec` or `workflow exec` can.
 - `HitCount` is only the count returned in the current `SearchLogs` response window.
 - `Histogram.TotalCount` is the better whole-window total only for pure search when histogram is the correct surface.
 - `ResultStatus=incomplete` means the service returned only a partial scan. This can happen for SearchLogs in both search and analysis mode, so narrow the time range and rerun before trusting counts, rows, empty results, or bucket distribution.
@@ -63,11 +71,12 @@ Read it in this order:
 
 1. `error.source`
 2. `error.kind`
-3. `error.code`
-4. `error.message`
-5. `error.details`
-6. `error.requestId`
-7. `error.statusCode`
+3. `error.hint`
+4. `error.code`
+5. `error.statusCode`
+6. `error.message`
+7. `error.details`
+8. `error.requestId`
 
 Interpretation rules:
 
@@ -100,6 +109,13 @@ Hard rule:
 - Environment credentials override profile resolution. If a stateless run must target a specific local profile, use host-generated secrets files instead of sandbox-wide env injection.
 - `--profile`/`context.profile` and `--secrets-file`/`context.secrets_file` are mutually exclusive runtime selectors; conflicting selectors fail fast instead of silently overriding each other.
 
+## Doctor Boundary
+
+- `volclog doctor` is for host/runtime diagnosis: credentials, config, selector visibility, endpoint reachability, and similar local setup issues.
+- Use `volclog doctor` for `error.kind=config`, and for stubborn `401`/credential problems after selector and endpoint checks.
+- Do not use `volclog doctor` as a replacement for `tool describe` or `workflow describe`.
+- Do not expect `volclog doctor` to prove that a business query, time window, or SQL expression is semantically correct.
+
 ## Thin Client Boundary
 
 The CLI validates contract shape and runtime preconditions. It does not validate business semantics for you.
@@ -122,14 +138,36 @@ If the command reached the service without a local validation/decode/filesystem 
 
 When the command already failed, follow the smallest next action:
 
-- `403 Forbidden`: check tenant/profile alignment first, then verify resource permissions before retrying.
-- `401 Unauthorized`: run `volclog doctor`, then inspect credentials, region, and endpoint.
-- `IndexNotExists`: inspect or create the index, then wait for readiness before retrying search.
-- `ResultStatus=incomplete`: narrow the time range and rerun before trusting the result.
-- Empty search after write: confirm profile, topic, time range, and index readiness before widening the query.
+| Signal | Smallest next action |
+| --- | --- |
+| `unknown tool` | Re-run `tool list` or `workflow list` for the group before guessing aliases or fallback names. |
+| `missing --input` | Re-read `input_schema` and `input_encoding_hint`, then resend inline JSON, stdin, or file input using the documented shape. |
+| `filter matched no value` | Inspect one unfiltered response first, then correct the `--jmes-filter` or `execution.projection` path. |
+| `jmes filter returned literal null` | Treat literal `null` as a successful projection result; only debug further if the command returned a real filter error instead. |
+| `401 Unauthorized` | Run `volclog doctor`, then inspect credentials, region, and endpoint. |
+| `403 Forbidden` | Check tenant/profile alignment first, then verify resource permissions before retrying. |
+| `error.kind=server` or `5xx` | Read `error.code`, `error.requestId`, and `error.statusCode` first. Retry with backoff only for transient server failures; otherwise escalate with those identifiers. |
+| `IndexNotExists` | Inspect or create the index, then wait for readiness before retrying search. |
+| `TopicAlreadyExist` | Re-list topics in the target project, then switch to get or modify instead of repeating create. |
+| `ProjectAlreadyExist` | Re-list projects, then switch to get or modify instead of repeating create. |
+| `ResultStatus=incomplete` | Narrow the time range and rerun before trusting counts, rows, or empty results. |
+| `search returned empty after write` | Confirm selector, topic, time range, and index readiness before widening the query. |
+| `huge stdout payload` | Rerun with `--output-mode file --output-dir <writable-dir>`, or reduce stdout with `--jmes-filter` or `execution.projection`. |
+| `unsupported_feature` | Remove the unsupported capability such as `page.all`, or switch to a surface whose contract explicitly supports it. |
+| `filesystem` | Supply a writable `--output-dir`, or fix the local path and permissions before retrying. |
 
 ## Known Traps
 
-- `page.all` increases completeness and payload size; it is not a compression flag, and it only applies when the contract reports `execution.supports_all=true`.
-- `workflow` ids such as `log.ingest`, `log.export`, and `log.export-analysis` are workflow identities, not tool ids.
-- Human shortcut groups are for humans. Agent flows should stay on `tool / workflow / raw`.
+- `page-all-is-not-compression`: `page.all` increases completeness and payload size; combine it with file delivery instead of expecting smaller stdout.
+- `jmes-filter-and-projection-have-different-scope`: use `summary.*` or `data.*` under `--jmes-filter`, and raw keys only under `execution.projection`.
+- `jmes-filter-null-is-still-success`: literal `null` means the selected field exists and is null; that is not the same as `filter matched no value`.
+- `jmes-filter-does-not-mix-with-file-delivery`: `--jmes-filter` is stdout-only; remove it if the goal is file delivery.
+- `deliverymode-belongs-to-runtime`: choose `tool / workflow / raw` first, then read `summary.deliveryMode` from the actual result.
+- `hitcount-is-not-whole-window-total`: `HitCount` is only the current response window, not the whole-window total.
+- `incomplete-means-partial-scan`: treat `ResultStatus=incomplete` as partial evidence and rerun on a narrower time range.
+- `workflow-ids-are-not-tool-ids`: `log.ingest`, `log.export`, and `log.export-analysis` belong to `workflow`, not `tool`.
+- `ingest-is-not-tool-put`: use `workflow log.ingest` for local file or stdin import, and `tool log.put` only for the public PutLogs contract.
+- `shortcuts-are-human-first`: human shortcut groups are for humans; agent flows should stay on `tool / workflow / raw`.
+- `thin-client-does-not-judge-business-semantics`: if there was no local validation, decode, or filesystem error, debug the query semantics and time window before blaming the CLI.
+- `env-creds-override-profile`: process-wide environment credentials override local profile resolution.
+- `profile-and-secrets-file-are-exclusive`: choose exactly one runtime selector family, not both `profile` and `secrets_file`.

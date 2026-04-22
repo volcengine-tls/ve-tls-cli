@@ -233,6 +233,45 @@ func TestToolExecAllowsFlatQueryInputWithoutSectionWrapper(t *testing.T) {
 	}
 }
 
+func TestToolExecRejectsReservedContextRuntimeKeysInFlatInput(t *testing.T) {
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
+	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
+	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	input := `{"TopicId":"tid-demo","Query":"*","StartTime":1,"EndTime":2,"context":{"trace":{"enabled":true}}}`
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"--dry-run", "tool", "exec", "log.search", "--input", input}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("expected validation exit=1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	if out["status"] != "failed" {
+		t.Fatalf("expected failed status, got %#v", out["status"])
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if errObj["kind"] != "validation" {
+		t.Fatalf("expected validation kind, got %#v", errObj["kind"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "reserved context/runtime fields") {
+		t.Fatalf("unexpected error message: %#v", errObj["message"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["hint"]), "--context") {
+		t.Fatalf("unexpected error hint: %#v", errObj["hint"])
+	}
+}
+
 func TestToolExecLogPutAcceptsObjectContentsInDryRun(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
@@ -311,8 +350,8 @@ func TestToolExecRejectsConflictingGlobalAndContextProfile(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected error object, got %#v", out["error"])
 	}
-	if errObj["kind"] != "validation" {
-		t.Fatalf("expected validation kind, got %#v", errObj)
+	if errObj["kind"] != "incompatible_flags" {
+		t.Fatalf("expected incompatible_flags kind, got %#v", errObj)
 	}
 	if errObj["source"] != "cli" {
 		t.Fatalf("expected cli source, got %#v", errObj["source"])
@@ -413,8 +452,8 @@ func TestToolExecRejectsConflictingGlobalProfileAndSecretsFile(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected error object, got %#v", out["error"])
 	}
-	if errObj["kind"] != "validation" {
-		t.Fatalf("expected validation kind, got %#v", errObj)
+	if errObj["kind"] != "incompatible_flags" {
+		t.Fatalf("expected incompatible_flags kind, got %#v", errObj)
 	}
 	if !strings.Contains(asStringOrEmpty(errObj["message"]), "conflicting runtime selectors") {
 		t.Fatalf("unexpected error message: %#v", errObj["message"])
@@ -429,8 +468,8 @@ func TestToolExecMissingGlobalSecretsFileUsesFailedEnvelope(t *testing.T) {
 		"--secrets-file", filepath.Join(t.TempDir(), "missing.env"),
 		"tool", "exec", "account.get",
 	}, &stdout, &stderr)
-	if code == 0 {
-		t.Fatalf("expected missing secrets-file failure stdout=%q stderr=%q", stdout.String(), stderr.String())
+	if code != 1 {
+		t.Fatalf("expected missing secrets-file exit=1 stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 	if strings.TrimSpace(stderr.String()) != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
@@ -488,8 +527,39 @@ func TestToolExecGlobalSecretsFileConflictWithContextProfileFailsBeforeLoad(t *t
 	if !ok {
 		t.Fatalf("expected error object, got %#v", out["error"])
 	}
-	if errObj["kind"] != "validation" {
-		t.Fatalf("expected validation kind, got %#v", errObj["kind"])
+	if errObj["kind"] != "incompatible_flags" {
+		t.Fatalf("expected incompatible_flags kind, got %#v", errObj["kind"])
+	}
+}
+
+func TestToolExecUnknownIdentityReturnsUsageEnvelope(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"tool", "exec", "log.not-real"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("expected usage exit=1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	if out["status"] != "failed" {
+		t.Fatalf("expected failed status, got %#v", out["status"])
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if errObj["kind"] != "usage" {
+		t.Fatalf("expected usage kind, got %#v", errObj["kind"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "unknown tool: log.not-real") {
+		t.Fatalf("unexpected error message: %#v", errObj["message"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["hint"]), "volclog tool list") {
+		t.Fatalf("unexpected error hint: %#v", errObj["hint"])
 	}
 }
 
@@ -519,8 +589,8 @@ func TestToolExecBadSecretsFileDoesNotFallbackToDefaultCredentials(t *testing.T)
 		"--secrets-file", secretsFile,
 		"tool", "exec", "account.get",
 	}, &stdout, &stderr)
-	if code == 0 {
-		t.Fatalf("expected bad secrets-file failure stdout=%q stderr=%q", stdout.String(), stderr.String())
+	if code != 1 {
+		t.Fatalf("expected bad secrets-file exit=1 stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 	if requests != 0 {
 		t.Fatalf("expected bad secrets-file to fail before request, got requests=%d", requests)
