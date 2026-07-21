@@ -10,7 +10,7 @@
 - **双发行版** — 同时提供 `volclog`（agent/CI 优先）和 `volclog-human`（人类 shortcut 版），两者共享相同的 `tool / workflow / raw` 运行时语义。
 - **TLS 覆盖范围完整** — 覆盖项目、主题、索引、检索分析、告警、机器组、采集规则、ETL、消费组等主要领域。
 - **执行路径更安全** — `--dry-run`、结构化 envelope、trace 工件与 file delivery 让预检查、验证和恢复更直接。
-- **凭证接入更灵活** — 支持本地 profile、显式 region/endpoint、环境变量，以及一次性的 `--secrets-file` 注入。
+- **凭证接入更灵活** — 同时支持长期 AK/SK 和 STS 临时凭证（临时 AK/SK + Session Token），可通过本地 profile、环境变量或一次性的 `--secrets-file` 注入。
 - **分层使用** — 默认从 `tool / workflow / raw` 开始；只有你明确需要 `volclog-human` 的人工交互层时，才进入 shortcut。
 
 ---
@@ -97,6 +97,8 @@ volclog doctor
 ```
 
 对于无状态执行，优先使用一次性的 `--secrets-file`，不要把大范围环境变量直接灌进整个会话。`--profile` 和 `--secrets-file` 不应在同一条命令里同时出现。
+
+CLI 明确支持 STS 临时凭证。Session Token 不能单独使用，必须与对应的临时 AK/SK 一起提供：需要保存到 profile 时，在 `configure set` 中同时传入 `--ak`、`--sk` 和 `--token`；不希望凭证落盘时，通过 `--secrets-file` 或进程级环境变量同时设置 `VOLCENGINE_ACCESS_KEY_ID`、`VOLCENGINE_ACCESS_KEY_SECRET` 和 `VOLCENGINE_TOKEN`。完整示例和安全边界见[《使用 STS 临时凭证》](docs/cli-practical-guide.md#使用-sts-临时凭证)。
 
 #### 3. 先发现契约，再执行
 
@@ -256,7 +258,7 @@ npx @volcengine-tls/volclog skill install --dir <agent-skills-dir>
 
 ## 贡献与安全
 
-- **安全** — 避免把明文 AK/SK 直接写进命令参数。优先使用本地 profile、一次性的 `--secrets-file`，或有边界的环境变量注入。
+- **安全** — 避免把明文 AK/SK 或 Session Token 直接写进命令参数。优先使用本地 profile、一次性的 `--secrets-file`，或有边界的环境变量注入。
 - **region / endpoint 纪律** — 始终显式设置 `region`。CLI 不会从 endpoint 或域名反推。
 - **贡献** — 如果你修改了公开 tool catalog，请先重新生成：
 

@@ -10,7 +10,7 @@ The official Volcengine TLS CLI. `volclog` is the default agent and automation e
 - **Dual editions** — Ship both `volclog` (agent/CI focused) and `volclog-human` (human-friendly shortcut layer) while keeping the same `tool / workflow / raw` runtime semantics.
 - **Broad TLS coverage** — Covers projects, topics, indexes, search and analysis, alarms, host groups, collectors, ETL, consumer groups, and more.
 - **Safer execution flow** — `--dry-run`, structured envelopes, trace artifacts, and file delivery make preview, validation, and recovery easier.
-- **Flexible credential setup** — Supports local profiles, explicit region/endpoint, environment variables, and one-shot `--secrets-file` injection.
+- **Flexible credential setup** — Supports long-lived AK/SK and STS temporary credentials (temporary AK/SK plus session token) through local profiles, environment variables, or one-shot `--secrets-file` injection.
 - **Layered usage** — Start with `tool / workflow / raw`; use human shortcuts only when you intentionally want the full interactive layer.
 
 ---
@@ -37,7 +37,7 @@ The official Volcengine TLS CLI. `volclog` is the default agent and automation e
 Before you start, make sure you have:
 
 - A terminal environment for your operating system
-- Your Volcengine AK (Access Key ID) and SK (Secret Access Key)
+- Your Volcengine long-lived AK/SK, or a complete STS credential set consisting of temporary AK, temporary SK, and session token
 - An explicit target `region` such as `cn-beijing`
 - The matching TLS endpoint such as `https://tls-cn-beijing.volces.com`
 
@@ -97,6 +97,8 @@ volclog doctor
 ```
 
 For stateless runs, prefer one-shot `--secrets-file` over broad environment injection. Do not combine `--profile` and `--secrets-file` in the same run.
+
+STS temporary credentials are supported. The session token cannot be used alone; it must be supplied together with the temporary AK/SK. To store a temporary credential in a profile, pass `--ak`, `--sk`, and `--token` to `configure set`. For one-shot execution without persisting the credential, set `VOLCENGINE_ACCESS_KEY_ID`, `VOLCENGINE_ACCESS_KEY_SECRET`, and `VOLCENGINE_TOKEN` through `--secrets-file` or process-scoped environment variables. See [Using STS temporary credentials](docs/cli-practical-guide.md#使用-sts-临时凭证) for complete examples and security boundaries.
 
 #### 3. Discover Contracts Before Execution
 
@@ -252,5 +254,5 @@ Further reading:
 ## Security and privacy
 This project takes security seriously. 
 For vulnerability reporting and supported versions, see [SECURITY.md](SECURITY.md)
-- **Security** — Avoid hardcoding plaintext AK/SK in command arguments. Prefer local profiles, one-shot `--secrets-file`, or scoped environment injection.
+- **Security** — Avoid hardcoding plaintext AK/SK or session tokens in command arguments. Prefer local profiles, one-shot `--secrets-file`, or scoped environment injection.
 - **Region / endpoint discipline** — Always set `region` explicitly. The CLI does not infer it from endpoint or hostname.
