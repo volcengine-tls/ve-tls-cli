@@ -172,13 +172,81 @@ volclog configure set \
 - 多个 profile 复用同一套凭证：`--cred-ref`
 - CI / Agent / 临时执行：环境变量或 `--secrets-file`
 
-例如：
+### 使用 STS 临时凭证
+
+`volclog` 支持 STS 临时凭证。它不是只有一个 Token，而是必须同时具备：
+
+- 临时 Access Key ID
+- 临时 Secret Access Key
+- Session Token
+
+Session Token 必须与签发时配套的临时 AK/SK 一起使用，不能与长期 AK/SK 混用，也不能单独使用。CLI 只负责使用这组三元组签名请求，不负责申请、刷新或续期 STS；凭证过期后，需要从签发方重新获取并替换。
+
+#### 方式一：通过参数写入临时 profile
+
+`configure set` 支持直接传入 `--ak`、`--sk` 和 `--token`：
 
 ```bash
-export VOLCENGINE_ACCESS_KEY_ID=<ak>
-export VOLCENGINE_ACCESS_KEY_SECRET=<sk>
+volclog configure set \
+  --profile temp-sts \
+  --ak '<temporary-ak>' \
+  --sk '<temporary-sk>' \
+  --token '<session-token>' \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
+
+volclog --profile temp-sts doctor
+volclog --profile temp-sts tool exec project.describe-projects
+```
+
+这会把临时凭证保存到本地配置，适合需要在凭证有效期内连续执行多条命令的场景。`--ak`、`--sk`、`--token` 是 `configure set` 的参数，不是 `tool exec` 或 `workflow exec` 的请求级参数。
+
+不要在共享终端或自动化日志里直接填写真实值：命令行参数可能进入 shell 历史，也可能被同机进程观察。凭证过期后，应及时覆盖或清理对应的临时 profile。
+
+#### 方式二：通过 `--secrets-file` 一次性注入（推荐）
+
+准备一个不进入版本控制的文件，例如 `/secure/path/volclog-sts.env`：
+
+```dotenv
+VOLCENGINE_ACCESS_KEY_ID=<temporary-ak>
+VOLCENGINE_ACCESS_KEY_SECRET=<temporary-sk>
+VOLCENGINE_TOKEN=<session-token>
+VOLCENGINE_REGION=cn-beijing
+VOLCENGINE_ENDPOINT=https://tls-cn-beijing.volces.com
+```
+
+限制文件权限后，在每次命令中显式选择它：
+
+```bash
+chmod 600 /secure/path/volclog-sts.env
+volclog --secrets-file /secure/path/volclog-sts.env doctor
+volclog --secrets-file /secure/path/volclog-sts.env \
+  tool exec project.describe-projects
+```
+
+这种方式不会把凭证写入 CLI profile，适合 CI、Agent 和无状态执行。不要在同一条命令里同时使用 `--profile` 与 `--secrets-file`；它们是互斥的运行时选择器，冲突时 CLI 会直接失败。凭证过期后应替换或删除该文件。
+
+#### 方式三：通过进程级环境变量一次性执行
+
+如果不便创建文件，可以只给单条命令注入环境变量：
+
+```bash
+VOLCENGINE_ACCESS_KEY_ID='<temporary-ak>' \
+VOLCENGINE_ACCESS_KEY_SECRET='<temporary-sk>' \
+VOLCENGINE_TOKEN='<session-token>' \
+VOLCENGINE_REGION='cn-beijing' \
+VOLCENGINE_ENDPOINT='https://tls-cn-beijing.volces.com' \
 volclog tool exec project.describe-projects
 ```
+
+环境变量凭证优先于 profile。若命令看起来没有使用指定 profile，先检查当前进程是否已经设置了 `VOLCENGINE_ACCESS_KEY_ID` 和 `VOLCENGINE_ACCESS_KEY_SECRET`。
+
+#### 验证与排障
+
+1. 先运行 `doctor`，确认凭证、region 和 endpoint 被正确解析；不要打印或回显真实凭证。
+2. 再执行一个只读请求，例如 `project.describe-projects`。
+3. 遇到 `401 Unauthorized` 时，优先确认临时凭证是否过期、三元组是否来自同一次签发，再检查 region 和 endpoint。
+4. 遇到 `403 Forbidden` 时，确认临时身份具备目标资源权限，不要仅通过重试掩盖权限问题。
 
 ### Step 3：先跑健康检查
 
