@@ -34,12 +34,15 @@
 
 ### 准备工作
 
-开始前请确认：
+开始前请确认运行环境满足以下条件：
 
-- 已具备可用的终端环境
-- 已准备好火山引擎 AK（Access Key ID）与 SK（Secret Access Key）
-- 已明确目标 `region`，例如 `cn-beijing`
-- 已明确对应的 TLS endpoint，例如 `https://tls-cn-beijing.volces.com`
+| 类别 | 要求 |
+| --- | --- |
+| 操作系统与架构 | 支持 64-bit Linux / macOS / Windows，架构为 `amd64/x86_64` 或 `arm64/aarch64`。 |
+| 安装依赖 | 直接使用二进制无需 Node.js；通过 npm 安装时需要 Node.js `>= 18`，且安装环境可访问 GitHub Releases 或内部下载镜像。 |
+| 网络访问 | 执行真实请求时，机器需要能访问目标 TLS endpoint。 |
+| 凭证与配置 | 需要可用的长期 AK/SK，或由临时 AK、临时 SK、Session Token 组成的完整 STS 临时凭证；同时明确目标 `region` 和 TLS endpoint。 |
+| 大结果输出 | 自动化或沙箱环境建议提前准备可写目录，并对大查询显式使用 `--output-mode file --output-dir <dir>`。 |
 
 `region` 必须显式提供。CLI 不会从 endpoint 或域名反推 region。
 
