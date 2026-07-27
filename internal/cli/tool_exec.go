@@ -329,7 +329,13 @@ func buildToolExecRequest(contract toolCatalog, input map[string]any) (string, s
 }
 
 func normalizeToolExecInput(contract toolCatalog, input map[string]any) (map[string]any, error) {
-	if len(input) == 0 || hasToolInputSections(input) || len(contract.InputSchema) == 0 {
+	if len(input) == 0 {
+		return input, nil
+	}
+	if reserved := reservedToolExecInputKeys(input); len(reserved) > 0 {
+		return nil, fmt.Errorf("tool exec input contains reserved context/runtime fields: %s; move them to --context", strings.Join(reserved, ", "))
+	}
+	if hasToolInputSections(input) || len(contract.InputSchema) == 0 {
 		return input, nil
 	}
 
@@ -384,7 +390,7 @@ func normalizeToolExecInput(contract toolCatalog, input map[string]any) (map[str
 	}
 	if len(reserved) > 0 {
 		sort.Strings(reserved)
-		return nil, fmt.Errorf("flat input contains reserved context/runtime fields: %s; move them to --context", strings.Join(reserved, ", "))
+		return nil, fmt.Errorf("tool exec input contains reserved context/runtime fields: %s; move them to --context", strings.Join(reserved, ", "))
 	}
 	if len(unknown) > 0 {
 		sort.Strings(unknown)
@@ -400,6 +406,17 @@ func isReservedToolExecInputKey(key string) bool {
 	default:
 		return false
 	}
+}
+
+func reservedToolExecInputKeys(input map[string]any) []string {
+	reserved := make([]string, 0, 1)
+	for key := range input {
+		if isReservedToolExecInputKey(key) {
+			reserved = append(reserved, key)
+		}
+	}
+	sort.Strings(reserved)
+	return reserved
 }
 
 func toolSchemaAllowsLooseFields(schema map[string]any) bool {

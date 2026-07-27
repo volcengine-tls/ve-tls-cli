@@ -141,7 +141,7 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		strings.HasPrefix(msg, "missing required fields:") ||
 		strings.HasPrefix(msg, "workflow input missing required fields:") ||
 		strings.HasPrefix(msg, "flat input contains unknown fields:") ||
-		strings.HasPrefix(msg, "flat input contains reserved context/runtime fields:") ||
+		strings.HasPrefix(msg, "tool exec input contains reserved context/runtime fields:") ||
 		strings.Contains(msg, "must be json object") ||
 		strings.Contains(msg, "jsonl line must be object") ||
 		strings.Contains(msg, "json-array input must be json array") ||
@@ -149,7 +149,7 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		strings.HasPrefix(msg, "json: cannot unmarshal ") ||
 		strings.HasPrefix(msg, "result too large for stdout;") {
 		hint := validationHint(group, msg)
-		if strings.HasPrefix(msg, "flat input contains reserved context/runtime fields:") {
+		if strings.HasPrefix(msg, "tool exec input contains reserved context/runtime fields:") {
 			hint = "move runtime selector, trace, execution, and contract fields into --context / context.* instead of --input"
 		} else if strings.HasPrefix(msg, "result too large for stdout;") {
 			hint = "rerun with --output-dir <writable-dir> to allow file_auto, or reduce stdout with --jmes-filter / execution.projection"
