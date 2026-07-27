@@ -1,6 +1,6 @@
 {
   "name": "@volcengine-tls/volclog-human",
-  "version": "1.0.3",
+  "version": "1.0.5-rc.1",
   "description": "Volcengine TLS CLI human edition",
   "license": "Apache-2.0",
   "bin": {
@@ -14,10 +14,13 @@
     "LICENSE"
   ],
   "scripts": {
-    "postinstall": "node scripts/postinstall.js"
+    "postinstall": "node scripts/postinstall.js",
+    "prepublishOnly": "node ../../scripts/check-npm-rc-publish.mjs"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "tag": "rc",
+    "registry": "https://registry.npmjs.org/"
   },
   "engines": {
     "node": ">=18"

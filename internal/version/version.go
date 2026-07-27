@@ -1,3 +1,3 @@
 package version
 
-var Version = "v1.0.4"
+var Version = "volclog-v1.0.5-rc.1"

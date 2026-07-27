@@ -39,6 +39,17 @@ jobs:
         with:
           go-version: "1.22"
           cache: false
+      - name: Verify release versions
+        if: github.ref_type == 'tag'
+        run: |
+          set -euo pipefail
+          package_version="$(node -p "require('./package.json').version")"
+          human_version="$(node -p "require('./npm/human-package/package.json').version")"
+          lock_version="$(node -p "require('./package-lock.json').version")"
+          expected_tag="volclog-v${package_version}"
+          test "${GITHUB_REF_NAME}" = "${expected_tag}"
+          test "${human_version}" = "${package_version}"
+          test "${lock_version}" = "${package_version}"
       - name: Test
         run: |
           go test ./...
@@ -51,7 +62,11 @@ jobs:
         run: |
           mkdir -p dist
           set -euo pipefail
-          version="${{ github.ref_name }}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME}"
+          else
+            version="volclog-v$(node -p "require('./package.json').version")"
+          fi
           for edition in default human; do
             bin_name="volclog"
             build_tags=()
@@ -94,6 +109,7 @@ jobs:
             dist/volclog-human_${{ matrix.goos }}_${{ matrix.goarch }}.zip.sha256
 
   release:
+    if: github.ref_type == 'tag'
     needs: [build]
     runs-on: ubuntu-latest
     steps:
@@ -104,6 +120,8 @@ jobs:
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: ${{ contains(github.ref_name, '-rc.') }}
+          make_latest: ${{ contains(github.ref_name, '-rc.') && 'false' || 'legacy' }}
           files: |
             dist/volclog_*.tar.gz
             dist/volclog_*.tar.gz.sha256

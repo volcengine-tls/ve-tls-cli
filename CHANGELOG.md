@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## volclog-v1.0.5-rc.1
+
+- Add standalone SSO and Console Login (`mode=sso` / `mode=console-login`) with no runtime dependency on `ve`, `~/.volcengine`, or `volcengine-cli`.
+- Add standalone workload providers for RAM Role ARN, OIDC, and ECS Role.
+- Store SSO and Console Login token/STS caches in `0600` files under `<state-root>/sso/cache/` and `<state-root>/login/cache/`; cache roots can be overridden with `VOLCLOG_SSO_CACHE_DIRECTORY` / `VOLCLOG_LOGIN_CACHE_DIRECTORY`.
+- Dynamic mode never falls back to static AK/SK on failure; `ReauthRequired` errors recover with `volclog login --profile NAME` or `volclog sso login --profile NAME`.
+- Legacy AK/SK, environment variables, `--secrets-file`, `cred-ref`, and manual STS behaviors are unchanged.
+- Add `volclog login [--profile NAME] [--remote]`, `volclog logout [--profile NAME|--all]`, `volclog configure sso-session`, `volclog configure sso`, `volclog sso login|logout`.
+- Unify explicit TLS region, endpoint, and timeout configuration across authentication modes without deriving endpoints from regions.
+- Reject runtime and context fields placed in `tool exec --input`, including sectioned input, instead of silently ignoring them.
 
 ## volclog-v1.0.0
 

@@ -156,7 +156,7 @@ func main() {
 	spec := flag.String("spec", "", "path to swagger.json")
 	outCapabilities := flag.String("out-capabilities", "internal/cli/generated_capabilities.go", "output file for capabilities")
 	outToolCatalog := flag.String("out-tool-catalog", "internal/cli/generated_tool_catalog.go", "output file for tool catalog")
-	groupKeyMapping := flag.String("group-key-mapping", "docs/agentic-stage1/group_key_mapping.yaml", "path to group key mapping yaml")
+	groupKeyMapping := flag.String("group-key-mapping", "contracts/agentic-stage1/group_key_mapping.yaml", "path to group key mapping yaml")
 	swaggerTagMapping := flag.String("swagger-tag-mapping", "repos/日志服务/_swagger_tag_mapping.yaml", "path to swagger tag title mapping yaml")
 	apiDocRoot := flag.String("api-doc-root", "repos/日志服务/API 参考", "path to api reference markdown root")
 	toolRiskOverridesPath := flag.String("tool-risk-overrides", "contracts/overrides/risk.yaml", "path to tool risk override yaml")

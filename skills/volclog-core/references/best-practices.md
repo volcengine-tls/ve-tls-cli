@@ -109,6 +109,13 @@ Hard rule:
 - Environment credentials override profile resolution. If a stateless run must target a specific local profile, use host-generated secrets files instead of sandbox-wide env injection.
 - `--profile`/`context.profile` and `--secrets-file`/`context.secrets_file` are mutually exclusive runtime selectors; conflicting selectors fail fast instead of silently overriding each other.
 
+### Dynamic Auth Mode (SSO / Console Login)
+
+- Discover the auth mode via `volclog doctor` (offline) or by reading the profile `mode` field (`mode=sso` / `mode=console-login` for dynamic; no `mode` or `mode=ak` for static).
+- On `ReauthRequired`, recover with the mode-matching command: `volclog login --profile NAME` (Console Login) or `volclog sso login --profile NAME` (SSO).
+- Do not run login as an automatic retry; surface the `ReauthRequired` error to the user and wait for explicit re-login.
+- Do not manually copy tokens/cache from `~/.volcengine`; volclog uses an independently managed state root and lifecycle and does not read `~/.volcengine` at runtime; even where some cache schema/filenames are upstream-compatible, manual cache copying is not supported.
+
 ## Doctor Boundary
 
 - `volclog doctor` is for host/runtime diagnosis: credentials, config, selector visibility, endpoint reachability, and similar local setup issues.

@@ -28,6 +28,13 @@ Treat this file as the dominant generic operating model for `volclog`, not as an
 - `--profile`/`context.profile` and `--secrets-file`/`context.secrets_file` are runtime selectors, not business input fields.
 - Never read, print, export, or persist AK/SK or token values in prompts, memory, request artifacts, or skill content.
 
+## Authentication Mode & Recovery
+
+- Discover the auth mode with `volclog doctor` (offline) or by reading the profile `mode` field. Dynamic profiles use `mode=sso` or `mode=console-login`; static profiles have no `mode` or `mode=ak`.
+- On `error.kind=auth` with a `ReauthRequired` description, recover with the exact command matching the mode: `volclog login --profile NAME` (Console Login) or `volclog sso login --profile NAME` (SSO). Do not invent other commands.
+- Do **not** treat login as an automatic retry action. An Agent must not run `login`/`sso login` on its own; surface the `ReauthRequired` error to the user and wait for explicit re-login.
+- Do not suggest or manually copy tokens/cache from `~/.volcengine` into volclog. volclog uses an independently managed state root and lifecycle and does not read `~/.volcengine` at runtime; even where some cache schema/filenames are upstream-compatible, manual cache copying is not supported.
+
 ## Canonical Agent Loop
 
 Discover -> Describe -> Exec -> Read Result

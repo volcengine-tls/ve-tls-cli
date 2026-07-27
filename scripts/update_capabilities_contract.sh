@@ -10,7 +10,5 @@ echo "[capabilities-contract] updating lock + snapshot ..."
 UPDATE_CAPABILITIES_CONTRACT=1 GOCACHE="$GOCACHE_DIR" go test ./internal/cli -run TestCapabilitiesContractSnapshot -count=1
 
 echo "[capabilities-contract] updated files:"
-echo "  - docs/agentic-stage1/capabilities-contract-lock.json"
-echo "  - docs/agentic-stage1/capabilities-contract-snapshot.txt"
-echo
-echo "[next] append one entry to docs/agentic-stage1/capabilities-contract-changelog.md before commit."
+echo "  - contracts/agentic-stage1/tool-contract-lock.json"
+echo "  - contracts/agentic-stage1/tool-contract-snapshot.txt"
