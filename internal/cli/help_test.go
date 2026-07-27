@@ -409,3 +409,52 @@ func TestPublicV1DoesNotExposeAssistantOrMetricTopicProm(t *testing.T) {
 		})
 	}
 }
+
+func TestConfigureHelpDescribesDisableSSLScopeCorrectly(t *testing.T) {
+	text := usageConfigure()
+	// Positive: --disable-ssl only switches the RAM/OIDC STS scheme; the
+	// endpoint URL scheme remains authoritative.
+	for _, want := range []string{
+		"STS scheme",
+		"endpoint URL scheme",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("help text missing %q:\n%s", want, text)
+		}
+	}
+	// Positive: --token must be documented as the source session/security token
+	// for ramrolearn (RAM source temporary credentials).
+	for _, want := range []string{
+		"--token",
+		"ramrolearn",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("help text missing %q:\n%s", want, text)
+		}
+	}
+	// Positive: the warning must name the fixed STS host and state that
+	// --disable-ssl=true sends RAM/OIDC authentication materials over plaintext
+	// HTTP to it.
+	for _, want := range []string{
+		"sts.volcengineapi.com",
+		"plaintext",
+		"authentication",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("help text missing %q:\n%s", want, text)
+		}
+	}
+	// Negative: must not claim it disables TLS verification, send all
+	// subsequent requests over plain HTTP, or reference configurable/private
+	// STS endpoints (the STS host is fixed).
+	for _, bad := range []string{
+		"Disable TLS verification",
+		"all subsequent requests over plain HTTP",
+		"private STS endpoint",
+		"private STS endpoints",
+	} {
+		if strings.Contains(text, bad) {
+			t.Fatalf("help text must not contain %q:\n%s", bad, text)
+		}
+	}
+}

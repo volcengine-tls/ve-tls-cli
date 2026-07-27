@@ -43,6 +43,19 @@ type Context struct {
 	traceW    io.WriteCloser
 	defaults  config.ProfileDefaults
 	apiIOMeta apiIOMeta
+
+	// profileResolved tracks whether ResolveProfile has run for the current
+	// request. It replaces the old "AccessKeyID == \"\"" sentinel because
+	// dynamic profiles legitimately have no static AK.
+	profileResolved bool
+	// forceStaticAuth is set when --secrets-file (global or context) loads
+	// successfully. It forces the static EffectiveProfile path even when the
+	// selected profile declares a dynamic mode.
+	forceStaticAuth bool
+	// authFactory constructs dynamic providers (SSO, Console Login, RAM Role
+	// ARN, OIDC, ECS Role). Tests inject a fake; production uses
+	// defaultAuthProviderFactory.
+	authFactory authProviderFactory
 }
 
 func newContext(stdout, stderr io.Writer, format output.Format, profile, filter string) *Context {
@@ -62,11 +75,22 @@ func (c *Context) LoadConfig() error {
 	}
 	c.cfg = cfg
 	c.cfgPath = p
+	c.invalidateProfileCache()
 	return nil
 }
 
 func (c *Context) SaveConfig() error {
 	return config.Save(c.cfg, c.cfgPath)
+}
+
+func (c *Context) UpdateConfig(fn func(*config.Config) error) error {
+	cfg, err := config.Update(c.cfgPath, fn)
+	if err != nil {
+		return err
+	}
+	c.cfg = cfg
+	c.invalidateProfileCache()
+	return nil
 }
 
 func (c *Context) ResolveProfile() error {
@@ -75,29 +99,105 @@ func (c *Context) ResolveProfile() error {
 			return err
 		}
 	}
-	p, err := config.EffectiveProfile(c.cfg, c.Profile, c.defaults)
+	// forceStaticAuth (set by --secrets-file) always uses the legacy static path,
+	// even if the selected profile declares a dynamic mode.
+	if c.forceStaticAuth {
+		p, err := config.EffectiveProfile(c.cfg, c.Profile, c.defaults)
+		if err != nil {
+			return err
+		}
+		c.profile = p
+		c.profileResolved = true
+		return nil
+	}
+	// Resolve the selected profile name without environment AK/SK override so we
+	// can inspect its mode. Explicit --profile > current_profile > "default".
+	name := c.cfg.SelectedProfileName(c.Profile)
+	p, ok := c.cfg.GetProfile(name)
+	if !ok {
+		// No matching profile. Delegate to EffectiveProfile, which may still
+		// succeed via environment AK/SK for the static path or return a clear
+		// "profile not found" error.
+		ep, err := config.EffectiveProfile(c.cfg, c.Profile, c.defaults)
+		if err != nil {
+			return err
+		}
+		c.profile = ep
+		c.profileResolved = true
+		return nil
+	}
+	mode, err := config.NormalizeAuthMode(p.Mode)
 	if err != nil {
 		return err
 	}
-	c.profile = p
+	if mode == config.AuthModeAK {
+		// Static mode: unchanged behavior, full delegation to EffectiveProfile
+		// (env AK/SK precedence, cred-ref, project defaults, timeout).
+		ep, err := config.EffectiveProfile(c.cfg, c.Profile, c.defaults)
+		if err != nil {
+			return err
+		}
+		c.profile = ep
+		c.profileResolved = true
+		return nil
+	}
+	if !config.IsProviderAuthMode(mode) {
+		// Unknown or non-provider mode must not fall into the provider path.
+		return errors.New("unsupported auth mode: " + mode)
+	}
+	// Provider mode (sso / console-login / ramrolearn / oidc / ecsrole): ignore
+	// environment AK/SK and apply the fixed runtime settings precedence.
+	// Provider construction is deferred to Client() so failures fail closed at
+	// request time.
+	c.profile = resolveDynamicRuntimeSettings(p, c.defaults)
+	c.profileResolved = true
 	return nil
 }
 
 func (c *Context) SetProfileDefaults(d config.ProfileDefaults) {
 	c.defaults = d
+	c.invalidateProfileCache()
+}
+
+// invalidateProfileCache clears the resolved profile and cached client so the
+// next ResolveProfile/Client call re-reads the current config and defaults.
+// Any caller that replaces cfg, cfgPath, or defaults must invoke this to avoid
+// serving stale cached state from a previous request.
+func (c *Context) invalidateProfileCache() {
+	c.profileResolved = false
+	c.profile = config.Profile{}
+	c.client = nil
 }
 
 func (c *Context) Client() (*tlsapi.Client, error) {
 	if c.client != nil {
 		return c.client, nil
 	}
-	if c.profile.AccessKeyID == "" {
+	if !c.profileResolved {
 		if err := c.ResolveProfile(); err != nil {
 			return nil, err
 		}
 	}
-	t := time.Duration(c.profile.TimeoutSeconds) * time.Second
-	cl, err := tlsapi.New(c.profile.Endpoint, c.profile.Region, c.Profile, c.profile.AccessKeyID, c.profile.SecretAccessKey, c.profile.SecurityToken, t)
+	mode, err := config.NormalizeAuthMode(c.profile.Mode)
+	if err != nil {
+		return nil, err
+	}
+	if c.forceStaticAuth || mode == config.AuthModeAK {
+		t := time.Duration(c.profile.TimeoutSeconds) * time.Second
+		cl, err := tlsapi.New(c.profile.Endpoint, c.profile.Region, c.Profile, c.profile.AccessKeyID, c.profile.SecretAccessKey, c.profile.SecurityToken, t)
+		if err != nil {
+			return nil, err
+		}
+		c.client = cl
+		return cl, nil
+	}
+	if !config.IsProviderAuthMode(mode) {
+		return nil, errors.New("unsupported auth mode: " + mode)
+	}
+	// Provider mode: build the provider-backed client. Provider construction or
+	// Retrieve failures fail closed; never fall back to environment AK/SK.
+	name := c.cfg.SelectedProfileName(c.Profile)
+	cl, err := buildDynamicClient(mode, c.cfgPath, name, c.cfg, c.profile, c.authFactory)
 	if err != nil {
 		return nil, err
 	}

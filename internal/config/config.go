@@ -6,6 +6,17 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/volcengine-tls/ve-tls-cli/internal/securestore"
+)
+
+const (
+	AuthModeAK           = "ak"
+	AuthModeSSO          = "sso"
+	AuthModeConsoleLogin = "console-login"
+	AuthModeRamRoleARN   = "ramrolearn"
+	AuthModeOIDC         = "oidc"
+	AuthModeECSRole      = "ecsrole"
 )
 
 type Credential struct {
@@ -21,6 +32,22 @@ type Profile struct {
 	Endpoint        string `json:"endpoint,omitempty"`
 	TimeoutSeconds  int    `json:"timeout_seconds,omitempty"`
 	CredRef         string `json:"cred_ref,omitempty"`
+	Mode            string `json:"mode,omitempty"`
+	SSOSessionName  string `json:"sso-session-name,omitempty"`
+	AccountID       string `json:"account-id,omitempty"`
+	RoleName        string `json:"role-name,omitempty"`
+	LoginSession    string `json:"login-session,omitempty"`
+	STSExpiration   int64  `json:"sts-expiration,omitempty"`
+	OIDCTokenFile   string `json:"oidc-token-file,omitempty"`
+	RoleTRN         string `json:"role-trn,omitempty"`
+	DisableSSL      bool   `json:"disable-ssl,omitempty"`
+}
+
+type SSOSession struct {
+	Name               string   `json:"name"`
+	StartURL           string   `json:"start-url"`
+	Region             string   `json:"region"`
+	RegistrationScopes []string `json:"registration-scopes,omitempty"`
 }
 
 type Config struct {
@@ -28,6 +55,7 @@ type Config struct {
 	CurrentProfile string                `json:"current_profile,omitempty"`
 	Profiles       map[string]Profile    `json:"profiles,omitempty"`
 	Creds          map[string]Credential `json:"creds,omitempty"`
+	SSOSessions    map[string]SSOSession `json:"sso-session,omitempty"`
 }
 
 type ProfileDefaults struct {
@@ -50,9 +78,10 @@ type CredentialStatus struct {
 
 func DefaultConfig() Config {
 	return Config{
-		Version:  1,
-		Profiles: map[string]Profile{},
-		Creds:    map[string]Credential{},
+		Version:     1,
+		Profiles:    map[string]Profile{},
+		Creds:       map[string]Credential{},
+		SSOSessions: map[string]SSOSession{},
 	}
 }
 
@@ -84,6 +113,46 @@ func Load() (Config, string, error) {
 	if err := json.Unmarshal(b, &cfg); err != nil {
 		return Config{}, "", err
 	}
+	normalizeConfig(&cfg)
+	return cfg, p, nil
+}
+
+var updateFile = securestore.UpdateFile
+
+func Save(cfg Config, path string) error {
+	normalizeConfig(&cfg)
+	return updateFile(path, 0o600, func([]byte) ([]byte, error) {
+		return marshalIndentNoEscape(cfg)
+	})
+}
+
+func Update(path string, fn func(*Config) error) (Config, error) {
+	var updated Config
+	err := updateFile(path, 0o600, func(current []byte) ([]byte, error) {
+		var cfg Config
+		if current == nil {
+			cfg = DefaultConfig()
+		} else if err := json.Unmarshal(current, &cfg); err != nil {
+			return nil, err
+		}
+		normalizeConfig(&cfg)
+		if err := fn(&cfg); err != nil {
+			return nil, err
+		}
+		data, err := marshalIndentNoEscape(cfg)
+		if err != nil {
+			return nil, err
+		}
+		updated = cfg
+		return data, nil
+	})
+	if err != nil {
+		return Config{}, err
+	}
+	return updated, nil
+}
+
+func normalizeConfig(cfg *Config) {
 	if cfg.Version == 0 {
 		cfg.Version = 1
 	}
@@ -93,26 +162,9 @@ func Load() (Config, string, error) {
 	if cfg.Creds == nil {
 		cfg.Creds = map[string]Credential{}
 	}
-	return cfg, p, nil
-}
-
-func Save(cfg Config, path string) error {
-	if cfg.Version == 0 {
-		cfg.Version = 1
+	if cfg.SSOSessions == nil {
+		cfg.SSOSessions = map[string]SSOSession{}
 	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	b, err := marshalIndentNoEscape(cfg)
-	if err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
 }
 
 func (c *Config) GetProfile(name string) (Profile, bool) {
@@ -128,6 +180,61 @@ func (c *Config) PutProfile(name string, p Profile) {
 		c.Profiles = map[string]Profile{}
 	}
 	c.Profiles[name] = p
+}
+
+func NormalizeAuthMode(raw string) (string, error) {
+	mode := strings.ToLower(strings.TrimSpace(raw))
+	switch mode {
+	case "", AuthModeAK:
+		return AuthModeAK, nil
+	case AuthModeSSO, AuthModeConsoleLogin:
+		return mode, nil
+	case AuthModeRamRoleARN, AuthModeOIDC, AuthModeECSRole:
+		return mode, nil
+	default:
+		return "", errors.New("unknown auth mode: " + mode)
+	}
+}
+
+func IsCachedLoginAuthMode(mode string) bool {
+	switch mode {
+	case AuthModeSSO, AuthModeConsoleLogin:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsWorkloadAuthMode(mode string) bool {
+	switch mode {
+	case AuthModeRamRoleARN, AuthModeOIDC, AuthModeECSRole:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsProviderAuthMode(mode string) bool {
+	return IsCachedLoginAuthMode(mode) || IsWorkloadAuthMode(mode)
+}
+
+func (c *Config) SelectedProfileName(explicit string) string {
+	if name := strings.TrimSpace(explicit); name != "" {
+		return name
+	}
+	if name := strings.TrimSpace(c.CurrentProfile); name != "" {
+		return name
+	}
+	return "default"
+}
+
+func (c *Config) PatchProfile(name string, patch func(*Profile) error) error {
+	profile, _ := c.GetProfile(name)
+	if err := patch(&profile); err != nil {
+		return err
+	}
+	c.PutProfile(name, profile)
+	return nil
 }
 
 func (c *Config) GetCred(name string) (Credential, bool) {

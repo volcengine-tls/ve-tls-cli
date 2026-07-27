@@ -14,7 +14,7 @@ func TestDefaultUsageTextOmitsShortcutGuidance(t *testing.T) {
 		"\n  tool",
 		"\n  workflow",
 		"\n  raw",
-		"当前 volclog 只暴露 configure/doctor/skill/tool/workflow/raw",
+		"当前 volclog 只暴露 configure/doctor/skill/tool/workflow/raw/login/logout/sso",
 		"[--output json|jsonl]",
 		"--output-dir <path>",
 		"--trace-redact <enabled>",
@@ -37,7 +37,7 @@ func TestDefaultUsageTextOmitsShortcutGuidance(t *testing.T) {
 		"\n  topic",
 		"\n  metric-topic",
 		"\n  index",
-		"\n  log",
+		"\n  log ",
 		"\n  host-group",
 		"\n  collector",
 	} {

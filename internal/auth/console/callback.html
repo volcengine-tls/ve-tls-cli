@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="{{.Lang}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{if .HasError}}{{.TitleFailure}}{{else}}{{.TitleSuccess}}{{end}}</title>
+  <style>
+    body {
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      background: #f8f9ff;
+      color: #17191f;
+      margin: 0;
+      padding: 48px 24px;
+      display: flex;
+      justify-content: center;
+    }
+    .card {
+      max-width: 420px;
+      width: 100%;
+      background: #fff;
+      border: 1px solid rgba(40, 57, 92, 0.08);
+      border-radius: 8px;
+      padding: 32px;
+      box-shadow: 0 24px 54px rgba(57, 79, 119, 0.14);
+      text-align: center;
+    }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    p { color: #7d8798; font-size: 15px; line-height: 1.5; margin: 0; }
+    .error { color: #e9402f; margin-top: 16px; font-size: 13px; word-break: break-word; }
+    .success { color: #1fbf75; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    {{if .HasError}}
+    <h1 class="error">{{.TitleFailure}}</h1>
+    <p>{{.CopyFailure}}</p>
+    {{else}}
+    <h1 class="success">{{.TitleSuccess}}</h1>
+    <p>{{.CopySuccess}}</p>
+    {{end}}
+  </div>
+</body>
+</html>

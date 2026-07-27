@@ -84,6 +84,7 @@ func applyToolExecContext(ctx *Context, cfg toolExecContext) error {
 		if err := loadSecretsFile(resolved.SecretsFile); err != nil {
 			return err
 		}
+		ctx.forceStaticAuth = true
 	}
 	if strings.TrimSpace(cfg.Region) != "" {
 		ctx.defaults.Region = strings.TrimSpace(cfg.Region)

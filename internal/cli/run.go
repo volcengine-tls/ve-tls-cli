@@ -11,7 +11,20 @@ import (
 	"github.com/volcengine-tls/ve-tls-cli/internal/version"
 )
 
+// Run is the production entry point. It always assembles the real console login
+// adapter (FileCache, LoginService, local+remote authorizer, confirm prompt) and
+// the real SSO adapter. Tests that need to inject fakes call
+// runWithLoginAdapterFactory directly.
 func Run(args []string, stdout, stderr io.Writer) int {
+	return runWithLoginAdapterFactory(args, stdout, stderr, newProductionLoginAdapter, newProductionSSOAdapter)
+}
+
+// runWithLoginAdapterFactory contains the full Run pipeline. The factory
+// parameters are only consulted for the login/logout/sso commands; all other
+// commands are unaffected. Production always passes the real factories; tests
+// pass fake factories for a single invocation so no process-level mutable state
+// is shared.
+func runWithLoginAdapterFactory(args []string, stdout, stderr io.Writer, factory loginAdapterFactory, ssoFactory ssoAdapterFactory) int {
 	if len(args) == 0 {
 		_, _ = stderr.Write([]byte(usageText()))
 		return 1
@@ -104,6 +117,18 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	})
 	defer ctx.Close()
 
+	// login/logout/sso and configure sso freeze stdout to their exact JSON result
+	// shape. Reject any global option that would rewrite, divert, or wrap that
+	// result before any side effect runs (and before the generic file preflight
+	// can misclassify --output-mode file as a filesystem error). This must happen
+	// before the adapter factory is built so no login/configure-sso side effect
+	// runs when stdout would be diverted.
+	if isInteractiveAuthCommand(g, rest) {
+		if err := rejectFrozenOutputOptions(ctx); err != nil {
+			return writeRunError(ctx, stdout, stderr, g, rest, err, "usage", "login/logout/sso/configure-sso writes only JSON to stdout; remove output/file/filter/trace flags", outputMode, 1)
+		}
+	}
+
 	if outputMode != "stdout" && outputMode != "file" {
 		return writeRunError(ctx, stdout, stderr, g, rest, errors.New("unsupported output-mode: "+gf.OutputMode), "usage", "invalid --output-mode", outputMode, 1)
 	}
@@ -122,14 +147,15 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	if ctx.GlobalSecretsFile != "" {
-		if _, err := resolveRuntimeSelectors(runtimeSelectorSet{
-			GlobalProfile:     ctx.Profile,
-			GlobalSecretsFile: ctx.GlobalSecretsFile,
-		}); err != nil {
+		if err := preflightGlobalSecretsFile(g, ctx.Profile, ctx.GlobalSecretsFile); err != nil {
 			if emitsStructuredEnvelope(g, rest) {
 				return writeStructuredError(stdout, stderr, err, "", 0, g, buildAPIErrorEnvelope(ctx, g, err, outputMode))
 			}
-			writeCLIError(stderr, err, "", 0, "validation", "use exactly one runtime selector: --profile or --secrets-file")
+			hint := "use exactly one runtime selector: --profile or --secrets-file"
+			if rejectsSecretsFileForGroup(g) {
+				hint = "--secrets-file cannot be combined with interactive login commands"
+			}
+			writeCLIError(stderr, err, "", 0, "validation", hint)
 			return 1
 		}
 		if !defersSecretsResolutionToCommand(g, rest) {
@@ -140,6 +166,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 				writeCLIError(stderr, err, "", 0, "config", "failed to load --secrets-file")
 				return 2
 			}
+			ctx.forceStaticAuth = true
 		}
 	}
 
@@ -147,7 +174,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	exitCode := 0
 	switch g {
 	case "configure":
-		out, err = runConfigure(ctx, rest)
+		out, err = runConfigure(ctx, rest, ssoFactory)
 	case "tool":
 		out, err = runTool(ctx, rest)
 	case "workflow":
@@ -162,6 +189,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		err = removedLegacyCommandError("api", legacyAPIHint(rest))
 	case "doctor":
 		out, exitCode, err = runDoctor(ctx, rest)
+	case "login":
+		out, err = runLoginWithFactory(ctx, rest, factory)
+	case "logout":
+		out, err = runLogoutWithFactory(ctx, rest, factory)
+	case "sso":
+		out, err = runSSOGroup(ctx, rest, ssoFactory)
 	default:
 		handled := false
 		out, handled, err = runEditionSpecificGroup(ctx, g, rest)
@@ -481,6 +514,56 @@ func defersSecretsResolutionToCommand(group string, rest []string) bool {
 	}
 }
 
+// preflightGlobalSecretsFile validates the global --secrets-file in the order
+// required by Task 5: runtime selector conflicts (--profile vs --secrets-file)
+// are checked first, then groups that manage their own dynamic identity
+// (login/logout/sso) are rejected. Checking conflicts first ensures users see
+// the actionable "use exactly one selector" message before the group-specific
+// rejection, even when both --profile and --secrets-file are passed to a
+// login/logout/sso command.
+func preflightGlobalSecretsFile(group, profile, secretsFile string) error {
+	if _, err := resolveRuntimeSelectors(runtimeSelectorSet{
+		GlobalProfile:     profile,
+		GlobalSecretsFile: secretsFile,
+	}); err != nil {
+		return err
+	}
+	if rejectsSecretsFileForGroup(group) {
+		return errors.New("--secrets-file is not supported for " + strings.TrimSpace(group) + "; use --profile to select a dynamic login identity")
+	}
+	return nil
+}
+
+// rejectsSecretsFileForGroup reports whether the group must never accept
+// --secrets-file. Interactive login commands (login/logout/sso) manage their
+// own dynamic identity and must not be handed long-lived static credentials.
+// configure sso is handled separately by isInteractiveAuthCommand because it
+// lives under the configure group.
+func rejectsSecretsFileForGroup(group string) bool {
+	switch strings.TrimSpace(group) {
+	case "login", "logout", "sso":
+		return true
+	default:
+		return false
+	}
+}
+
+// isInteractiveAuthCommand reports whether the invoked command is one that
+// manages its own dynamic identity and freezes stdout to a fixed JSON shape:
+// login, logout, sso (any subcommand), or configure sso. These commands must
+// reject frozen output/secrets flags before the adapter factory is built so no
+// side effect runs when stdout would be diverted.
+func isInteractiveAuthCommand(group string, rest []string) bool {
+	switch strings.TrimSpace(group) {
+	case "login", "logout", "sso":
+		return true
+	case "configure":
+		return len(rest) > 0 && strings.TrimSpace(rest[0]) == "sso"
+	default:
+		return false
+	}
+}
+
 func appendEnvelopeWarning(env map[string]any, warning map[string]any) {
 	if env == nil || len(warning) == 0 {
 		return
@@ -538,7 +621,7 @@ func usageText() string {
 	}
 	if currentEdition() == cliEditionVolclog {
 		b.WriteString("\n  可用 volclog skill install --dir <skills-dir> 安装内置 volclog 技能。\n")
-		b.WriteString("  当前 volclog 只暴露 configure/doctor/skill/tool/workflow/raw；human shortcut 需切到 volclog-human（-tags=human）。\n\n")
+		b.WriteString("  当前 volclog 只暴露 configure/doctor/skill/tool/workflow/raw/login/logout/sso；human shortcut 需切到 volclog-human（-tags=human）。\n\n")
 	} else {
 		b.WriteString("\n  project/topic/index/log 等 shortcut 仅供人工交互；默认 volclog 不把它们当主流程，也不要默认停在 shortcut 的 --describe / --print-request-template。\n")
 		b.WriteString("  可用 volclog skill install --dir <skills-dir> 安装内置 volclog 技能。\n")

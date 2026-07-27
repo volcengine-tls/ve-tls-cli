@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/auth"
+	"github.com/volcengine-tls/ve-tls-cli/internal/config"
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
@@ -94,6 +96,58 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 	if ue, ok := asUsageError(err); ok {
 		return errPayload{Kind: "usage"}, ue.ExitCode
 	}
+	// Stable outer transaction/partial-failure sentinels take priority over any
+	// inner business cause. These sentinels may wrap an *auth.Error (e.g. a
+	// ProtocolError from a failed revoke or config update) as their cause; if the
+	// generic dynamicAuthError/auth.Error classification ran first, the
+	// dedicated partial_failure/rollback kind and hint would be lost. Stable
+	// outer state must win.
+	if errors.Is(err, ErrSSOLogoutPartialFailure) {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "partial_failure",
+			Hint:       "sso local token/sts cache cleared but remote revoke or config update failed; rerun 'volclog sso logout' to retry, or inspect config with 'volclog configure show --profile <name>'",
+		}, 2
+	}
+	if errors.Is(err, ErrSSORollbackFailure) {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "auth",
+			Hint:       "sso login failed and token cache rollback failed; rerun 'volclog sso login --profile <name>' to re-establish a consistent login state",
+		}, 2
+	}
+	if errors.Is(err, ErrLogoutPartialFailure) {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "partial_failure",
+			Hint:       "console login cache deleted but profile binding could not be cleared; rerun logout to retry, or inspect config with 'volclog configure show --profile <name>'",
+		}, 2
+	}
+	// Dynamic auth errors carry the profile mode via *dynamicAuthError so the
+	// re-login hint is exact and mode-aware, never guessed from free text.
+	var dae *dynamicAuthError
+	if errors.As(err, &dae) {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "auth",
+			Hint:       dynamicReauthHint(dae.mode),
+		}, 2
+	}
+	// Plain auth.Error (not wrapped with a mode) is still classified as
+	// kind=auth so callers can detect authentication failures uniformly, but
+	// without a mode-specific re-login hint.
+	var authErr *auth.Error
+	if errors.As(err, &authErr) {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "auth",
+		}, 2
+	}
 	if strings.HasPrefix(msg, "missing --") ||
 		strings.HasPrefix(msg, "missing tool identity:") ||
 		strings.HasPrefix(msg, "missing workflow identity:") ||
@@ -116,6 +170,12 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		strings.HasPrefix(msg, "unexpected extra arguments for tool describe") ||
 		strings.HasPrefix(msg, "--dry-run currently supports ") ||
 		strings.HasPrefix(msg, "unsupported output-mode:") ||
+		strings.HasPrefix(msg, "missing value for ") ||
+		strings.HasPrefix(msg, "unexpected argument:") ||
+		strings.HasPrefix(msg, "--output-mode ") ||
+		strings.HasPrefix(msg, "--output-file is not supported for login/logout") ||
+		strings.HasPrefix(msg, "--jmes-filter is not supported for login/logout") ||
+		strings.HasPrefix(msg, "--trace-dir is not supported for login/logout") ||
 		(strings.Contains(msg, "unknown ") && strings.Contains(msg, " command:")) {
 		hint := surfaceDiscoveryHint(group)
 		if strings.HasPrefix(msg, "missing --") || strings.HasPrefix(msg, "unknown flag:") {
@@ -147,7 +207,8 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		strings.Contains(msg, "json-array input must be json array") ||
 		strings.Contains(msg, "unsupported log contents type") ||
 		strings.HasPrefix(msg, "json: cannot unmarshal ") ||
-		strings.HasPrefix(msg, "result too large for stdout;") {
+		strings.HasPrefix(msg, "result too large for stdout;") ||
+		strings.HasPrefix(msg, "--secrets-file is not supported for ") {
 		hint := validationHint(group, msg)
 		if strings.HasPrefix(msg, "flat input contains reserved context/runtime fields:") {
 			hint = "move runtime selector, trace, execution, and contract fields into --context / context.* instead of --input"
@@ -178,12 +239,16 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		strings.Contains(msg, "cannot be used with PageNumber") ||
 		strings.Contains(msg, "cannot be used with Cursor") ||
 		strings.Contains(msg, "--all cannot be used with --page-number") ||
-		strings.Contains(msg, "--all cannot be used with --cursor") {
+		strings.Contains(msg, "--all cannot be used with --cursor") ||
+		strings.Contains(msg, "--all cannot be combined with --profile") ||
+		strings.Contains(msg, "--profile and --sso-session cannot be combined") {
 		hint := "remove one of the conflicting output flags and retry"
 		if strings.Contains(msg, "PageNumber") || strings.Contains(msg, "Cursor") || strings.Contains(msg, "--page-number") || strings.Contains(msg, "--cursor") {
 			hint = "remove PageNumber/Cursor when execution.page.all or --page-all is enabled"
 		} else if strings.HasPrefix(msg, "conflicting profile selectors:") || strings.HasPrefix(msg, "conflicting runtime selectors:") {
 			hint = "use exactly one runtime selector: --profile, --secrets-file, context.profile, or context.secrets_file"
+		} else if strings.Contains(msg, "--profile and --sso-session cannot be combined") {
+			hint = "use exactly one selector: --profile or --sso-session"
 		}
 		return errPayload{
 			RequestID:  requestID,
@@ -273,6 +338,27 @@ func surfaceContractHint(group string) string {
 	default:
 		return "inspect constraints with 'volclog tool describe <group.action>' or 'volclog workflow describe <group.command>', or run --help"
 	}
+}
+
+// dynamicReauthHint returns a mode-specific diagnostic hint for the given
+// dynamic auth mode. SSO/Console errors direct the user to the exact re-login
+// command. Workload modes (ramrolearn/oidc/ecsrole) describe what to inspect
+// locally; they never suggest volclog login/sso login and never contain role,
+// TRN, token path, or credential material.
+func dynamicReauthHint(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case config.AuthModeSSO:
+		return "volclog sso login --profile <name>"
+	case config.AuthModeConsoleLogin:
+		return "volclog login --profile <name>"
+	case config.AuthModeRamRoleARN:
+		return "check source credential (inline or cred_ref), account-id, role-name, trust policy, and AssumeRole permission"
+	case config.AuthModeOIDC:
+		return "check token file, audience/issuer, role-trn, and trust policy"
+	case config.AuthModeECSRole:
+		return "check attached instance role, IMDSv2 reachable and enabled"
+	}
+	return "volclog login --profile <name>"
 }
 
 func validationHint(group string, msg string) string {
