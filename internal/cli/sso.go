@@ -172,7 +172,7 @@ func (a *ssoAdapter) runSSOLogin(ctx context.Context, opts ssoLoginOpts) (*ssoLo
 		return nil, newSafeCLIError("load config failed", err)
 	}
 
-	var sessionName, startURL, region, profileName string
+	var sessionName, startURL, ssoRegion, profileName string
 	var origSession config.SSOSession
 	var origProfileSSOSession string
 	if opts.SSOSession == "" {
@@ -195,7 +195,7 @@ func (a *ssoAdapter) runSSOLogin(ctx context.Context, opts ssoLoginOpts) (*ssoLo
 			return nil, fmt.Errorf("sso session not found: %s", sessionName)
 		}
 		startURL = sess.StartURL
-		region = sess.Region
+		ssoRegion = sess.Region
 		origSession = sess
 		origProfileSSOSession = sessionName
 	} else {
@@ -205,7 +205,7 @@ func (a *ssoAdapter) runSSOLogin(ctx context.Context, opts ssoLoginOpts) (*ssoLo
 			return nil, fmt.Errorf("sso session not found: %s", sessionName)
 		}
 		startURL = sess.StartURL
-		region = sess.Region
+		ssoRegion = sess.Region
 		origSession = sess
 	}
 
@@ -221,8 +221,10 @@ func (a *ssoAdapter) runSSOLogin(ctx context.Context, opts ssoLoginOpts) (*ssoLo
 	}
 
 	var (
-		finalToken  *sso.TokenCache
-		finalExpiry time.Time
+		finalToken       *sso.TokenCache
+		finalExpiry      time.Time
+		finalTLSRegion   string
+		finalTLSEndpoint string
 	)
 	err = a.cache.WithTokenLock(ctx, startURL, sessionName, func() error {
 		oldToken, oldExisted, rerr := a.readTokenSnapshot(startURL, sessionName)
@@ -263,6 +265,8 @@ func (a *ssoAdapter) runSSOLogin(ctx context.Context, opts ssoLoginOpts) (*ssoLo
 			if strings.TrimSpace(curProfile.SSOSessionName) != origProfileSSOSession {
 				return a.restoreTokenOnFailure(startURL, sessionName, oldToken, oldExisted, errors.New("profile rebind during login; aborting"))
 			}
+			finalTLSRegion = curProfile.Region
+			finalTLSEndpoint = curProfile.Endpoint
 		}
 		tokenCopy := *newToken
 		expiresAt, perr := time.Parse(time.RFC3339, tokenCopy.ExpiresAt)
@@ -283,7 +287,9 @@ func (a *ssoAdapter) runSSOLogin(ctx context.Context, opts ssoLoginOpts) (*ssoLo
 		Profile:   profileName,
 		Provider:  "sso",
 		Session:   sessionName,
-		Region:    region,
+		Region:    finalTLSRegion,
+		Endpoint:  finalTLSEndpoint,
+		SSORegion: ssoRegion,
 		ExpiresAt: finalExpiry,
 	}, nil
 }

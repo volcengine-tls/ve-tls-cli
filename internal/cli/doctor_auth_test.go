@@ -109,6 +109,127 @@ func TestDoctorStaticOutputContractUnchanged(t *testing.T) {
 	}
 }
 
+func TestDoctorStaticRuntimeMatchesEffectiveProfileEnvContract(t *testing.T) {
+	tests := []struct {
+		name          string
+		completeEnvAK bool
+		runtimeRegion string
+		runtimeEP     string
+		wantRegion    string
+		wantRegionSrc string
+		wantEndpoint  string
+		wantEPSrc     string
+	}{
+		{
+			name:          "runtime_env_without_complete_env_credentials_is_ignored",
+			wantRegion:    "profile-region",
+			wantRegionSrc: "profile",
+			wantEndpoint:  "https://profile.example.com",
+			wantEPSrc:     "profile",
+		},
+		{
+			name:          "complete_env_credentials_select_env_runtime",
+			completeEnvAK: true,
+			wantRegion:    "env-region",
+			wantRegionSrc: "env",
+			wantEndpoint:  "https://env.example.com",
+			wantEPSrc:     "env",
+		},
+		{
+			name:          "explicit_cli_runtime_always_wins",
+			runtimeRegion: "flag-region",
+			runtimeEP:     "https://flag.example.com",
+			wantRegion:    "flag-region",
+			wantRegionSrc: "flag",
+			wantEndpoint:  "https://flag.example.com",
+			wantEPSrc:     "flag",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			clearAuthTestEnv(t)
+			t.Setenv("VOLCENGINE_REGION", "env-region")
+			t.Setenv("VOLCENGINE_ENDPOINT", "https://env.example.com")
+			if tc.completeEnvAK {
+				t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ENV-AK")
+				t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "ENV-SK")
+			}
+
+			cfg := config.Config{
+				Version: 1,
+				Profiles: map[string]config.Profile{
+					"static": {
+						Mode:            config.AuthModeAK,
+						AccessKeyID:     "PROFILE-AK",
+						SecretAccessKey: "PROFILE-SK",
+						Region:          "profile-region",
+						Endpoint:        "https://profile.example.com",
+					},
+				},
+			}
+			ctx := newDoctorTestContext(t, cfg)
+			ctx.Profile = "static"
+			ctx.RuntimeRegion = tc.runtimeRegion
+			ctx.RuntimeEndpoint = tc.runtimeEP
+
+			out, _, err := runDoctor(ctx, nil)
+			if err != nil {
+				t.Fatalf("runDoctor: %v", err)
+			}
+			result := out.(map[string]any)
+			region := result["region"].(map[string]any)
+			if region["value"] != tc.wantRegion || region["source"] != tc.wantRegionSrc {
+				t.Fatalf("region=%v, want value=%q source=%q", region, tc.wantRegion, tc.wantRegionSrc)
+			}
+			endpoint := result["endpoint"].(map[string]any)
+			if endpoint["value"] != tc.wantEndpoint || endpoint["source"] != tc.wantEPSrc {
+				t.Fatalf("endpoint=%v, want value=%q source=%q", endpoint, tc.wantEndpoint, tc.wantEPSrc)
+			}
+		})
+	}
+}
+
+func TestDoctorStaticCompleteEnvCredentialsDoNotFallBackToProfileRuntime(t *testing.T) {
+	clearAuthTestEnv(t)
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ENV-AK")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "ENV-SK")
+
+	cfg := config.Config{
+		Version: 1,
+		Profiles: map[string]config.Profile{
+			"static": {
+				Mode:            config.AuthModeAK,
+				AccessKeyID:     "PROFILE-AK",
+				SecretAccessKey: "PROFILE-SK",
+				Region:          "profile-region",
+				Endpoint:        "https://profile.example.com",
+				TimeoutSeconds:  17,
+			},
+		},
+	}
+	ctx := newDoctorTestContext(t, cfg)
+	ctx.Profile = "static"
+
+	out, code, err := runDoctor(ctx, nil)
+	if err != nil {
+		t.Fatalf("runDoctor: %v", err)
+	}
+	if code != 2 {
+		t.Fatalf("exit=%d, want 2 when selected env identity has no runtime settings", code)
+	}
+	result := out.(map[string]any)
+	if region := result["region"].(map[string]any); region["value"] != "" || region["source"] != "" {
+		t.Fatalf("region fell back to static profile unexpectedly: %v", region)
+	}
+	if endpoint := result["endpoint"].(map[string]any); endpoint["value"] != "" || endpoint["source"] != "" {
+		t.Fatalf("endpoint fell back to static profile unexpectedly: %v", endpoint)
+	}
+	if timeout := result["timeout"].(map[string]any); timeout["seconds"] != 60 || timeout["source"] != "default" {
+		t.Fatalf("timeout fell back to static profile unexpectedly: %v", timeout)
+	}
+}
+
 // TestDoctorOfflineDynamicModeReadsMetadataWithoutRefresh proves that an
 // offline doctor for a dynamic profile reads cache metadata via the
 // authStatusReader without invoking Retrieve (no refresh, no network).
@@ -399,6 +520,34 @@ func TestDoctorOnlineDynamicUsesResolvedEnvEndpointAndRegion(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected online_describe_projects check in output, got checks: %v", checks)
+	}
+}
+
+func TestDoctorDoesNotDeriveMissingEndpointFromRegion(t *testing.T) {
+	clearAuthTestEnv(t)
+	cfg := config.Config{
+		Version: 1,
+		Profiles: map[string]config.Profile{
+			"console": {
+				Mode:         config.AuthModeConsoleLogin,
+				LoginSession: "session",
+				Region:       "cn-beijing",
+			},
+		},
+	}
+	ctx := newDoctorTestContext(t, cfg)
+	ctx.Profile = "console"
+
+	out, code, err := runDoctor(ctx, nil)
+	if err != nil {
+		t.Fatalf("runDoctor: %v", err)
+	}
+	if code != 2 {
+		t.Fatalf("exit=%d, want 2 for missing endpoint", code)
+	}
+	endpoint := out.(map[string]any)["endpoint"].(map[string]any)
+	if endpoint["value"] != "" || endpoint["source"] != "" {
+		t.Fatalf("doctor derived endpoint unexpectedly: %v", endpoint)
 	}
 }
 

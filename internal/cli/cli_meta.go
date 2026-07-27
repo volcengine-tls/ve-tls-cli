@@ -61,6 +61,8 @@ func cliGroupNames() []string {
 func cliGlobalFlagSpecs() []cliGlobalFlagSpec {
 	specs := []cliGlobalFlagSpec{
 		{Name: "--profile", Usage: "--profile <name>", Description: "配置名称", TakesValue: true},
+		{Name: "--region", Usage: "--region <region>", Description: "当前命令的 TLS Region 覆盖", TakesValue: true},
+		{Name: "--endpoint", Usage: "--endpoint <url>", Description: "当前命令的 TLS Endpoint 覆盖", TakesValue: true},
 		{Name: "--output", Usage: "--output <json|jsonl|table>", Description: "输出格式（table 适用于常用快捷 list/get、index get、log search）", TakesValue: true},
 		{Name: "--output-mode", Usage: "--output-mode <stdout|file>", Description: "输出目标", TakesValue: true},
 		{Name: "--output-dir", Usage: "--output-dir <path>", Description: "file delivery 的输出目录", TakesValue: true},

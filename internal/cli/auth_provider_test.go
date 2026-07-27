@@ -593,6 +593,77 @@ func TestDynamicModeResolvesTLSRuntimeSettings(t *testing.T) {
 	})
 }
 
+func TestGlobalRuntimeFlagsOverrideDynamicProfileAndReachRamFactory(t *testing.T) {
+	clearAuthTestEnv(t)
+	cfg := config.Config{Version: 1, Profiles: map[string]config.Profile{
+		"ram": {
+			Mode: config.AuthModeRamRoleARN, RoleName: "r", AccountID: "1",
+			AccessKeyID: "src-ak", SecretAccessKey: "src-sk",
+			Region: "profile-region", Endpoint: "https://profile.example.com",
+		},
+	}}
+	provider := &fakeProvider{value: auth.Value{AccessKeyID: "AK", SecretAccessKey: "SK", SessionToken: "ST"}}
+	factory := &fakeAuthFactory{ramProvider: provider}
+	ctx := newTestContext(t, cfg, "/tmp/config.json")
+	ctx.Profile = "ram"
+	ctx.RuntimeRegion = "global-region"
+	ctx.RuntimeEndpoint = "https://global.example.com"
+	ctx.authFactory = factory
+
+	if _, err := ctx.Client(); err != nil {
+		t.Fatalf("Client: %v", err)
+	}
+	if ctx.profile.Region != "global-region" || ctx.profile.Endpoint != "https://global.example.com" {
+		t.Fatalf("resolved runtime=(%q,%q), want global values", ctx.profile.Region, ctx.profile.Endpoint)
+	}
+	factoryProfile := factory.lastCfg.Profiles["ram"]
+	if factoryProfile.Region != "global-region" || factoryProfile.Endpoint != "https://global.example.com" {
+		t.Fatalf("factory runtime=(%q,%q), want resolved global values", factoryProfile.Region, factoryProfile.Endpoint)
+	}
+	original := ctx.cfg.Profiles["ram"]
+	if original.Region != "profile-region" || original.Endpoint != "https://profile.example.com" {
+		t.Fatalf("runtime override mutated config: %+v", original)
+	}
+}
+
+func TestGlobalRuntimeFlagsPreserveStaticAKIdentity(t *testing.T) {
+	clearAuthTestEnv(t)
+	cfg := config.Config{Version: 1, Profiles: map[string]config.Profile{
+		"static": {
+			Mode: config.AuthModeAK, AccessKeyID: "profile-ak", SecretAccessKey: "profile-sk",
+			Region: "profile-region", Endpoint: "https://profile.example.com",
+		},
+	}}
+	ctx := newTestContext(t, cfg, "/tmp/config.json")
+	ctx.Profile = "static"
+	ctx.RuntimeRegion = "global-region"
+	ctx.RuntimeEndpoint = "https://global.example.com"
+
+	if err := ctx.ResolveProfile(); err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if ctx.profile.AccessKeyID != "profile-ak" || ctx.profile.SecretAccessKey != "profile-sk" {
+		t.Fatalf("static identity changed: %+v", ctx.profile)
+	}
+	if ctx.profile.Region != "global-region" || ctx.profile.Endpoint != "https://global.example.com" {
+		t.Fatalf("static runtime=(%q,%q), want global values", ctx.profile.Region, ctx.profile.Endpoint)
+	}
+}
+
+func TestParseGlobalRuntimeFlags(t *testing.T) {
+	group, rest, flags, ok := parseGlobal([]string{
+		"--region", "cn-shanghai",
+		"--endpoint", "https://tls-cn-shanghai.volces.com",
+		"tool", "list",
+	})
+	if !ok || group != "tool" || len(rest) != 1 || rest[0] != "list" {
+		t.Fatalf("parse result group=%q rest=%v ok=%v", group, rest, ok)
+	}
+	if flags.Region != "cn-shanghai" || flags.Endpoint != "https://tls-cn-shanghai.volces.com" {
+		t.Fatalf("runtime flags=(%q,%q)", flags.Region, flags.Endpoint)
+	}
+}
+
 // TestUnknownModeFailsBeforeHTTPRequest proves that an unrecognized mode
 // produces an error before any HTTP request is attempted.
 func TestUnknownModeFailsBeforeHTTPRequest(t *testing.T) {

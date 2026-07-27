@@ -389,17 +389,6 @@ func credentialMode(token string) string {
 	return "aksk"
 }
 
-func DefaultEndpointForRegion(region string) string {
-	r := strings.TrimSpace(region)
-	if r == "" {
-		return ""
-	}
-	if strings.HasPrefix(r, "http://") || strings.HasPrefix(r, "https://") {
-		return r
-	}
-	return "https://tls-" + r + ".volces.com"
-}
-
 func MaskAK(ak string) string {
 	s := strings.TrimSpace(ak)
 	if len(s) <= 6 {

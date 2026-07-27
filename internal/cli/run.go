@@ -101,6 +101,8 @@ func runWithLoginAdapterFactory(args []string, stdout, stderr io.Writer, factory
 	}
 
 	ctx := newContext(stdout, stderr, format, gf.Profile, gf.Filter)
+	ctx.RuntimeRegion = strings.TrimSpace(gf.Region)
+	ctx.RuntimeEndpoint = strings.TrimSpace(gf.Endpoint)
 	ctx.OutputExplicit = outputExplicit
 	ctx.OutputMode = outputMode
 	ctx.OutputModeExplicit = gf.OutputModeExplicit
@@ -584,9 +586,9 @@ func usageText() string {
 	var b strings.Builder
 	b.WriteString("Usage:\n")
 	if currentEdition() == cliEditionVolclog {
-		b.WriteString("  volclog [--profile <name>] [--output json|jsonl] [--output-mode stdout|file] [--output-dir <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact <enabled>] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
+		b.WriteString("  volclog [--profile <name>] [--region <region>] [--endpoint <url>] [--output json|jsonl] [--output-mode stdout|file] [--output-dir <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact <enabled>] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
 	} else {
-		b.WriteString("  volclog [--profile <name>] [--output json|jsonl|table] [--output-mode stdout|file] [--output-dir <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact <enabled>] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
+		b.WriteString("  volclog [--profile <name>] [--region <region>] [--endpoint <url>] [--output json|jsonl|table] [--output-mode stdout|file] [--output-dir <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact <enabled>] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
 	}
 	b.WriteString("主入口（Agent / 自动化优先）:\n")
 	if currentEdition() == cliEditionVolclog {

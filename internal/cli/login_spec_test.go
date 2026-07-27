@@ -160,6 +160,7 @@ func TestConsoleLoginServiceAdapterTranslatesOptionsAndResult(t *testing.T) {
 		Profile:         "p1",
 		Provider:        "console-login",
 		Region:          "cn-beijing",
+		Endpoint:        "https://tls-cn-beijing.volces.com",
 		ExpiresAt:       time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
 		MaskedAccessKey: "AKLT***wxyz",
 	}
@@ -167,21 +168,22 @@ func TestConsoleLoginServiceAdapterTranslatesOptionsAndResult(t *testing.T) {
 	adapter := &consoleLoginServiceAdapter{svc: svc}
 
 	res, err := adapter.Login(context.Background(), loginOpts{
-		Profile:     "p1",
-		Region:      "cn-beijing",
-		Remote:      true,
-		EndpointURL: "https://example.com",
+		Profile:  "p1",
+		Region:   "cn-beijing",
+		Endpoint: "https://tls-cn-beijing.volces.com",
+		Remote:   true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if res.Profile != want.Profile || res.Provider != want.Provider ||
 		res.Region != want.Region || !res.ExpiresAt.Equal(want.ExpiresAt) ||
-		res.MaskedAccessKey != want.MaskedAccessKey {
+		res.Endpoint != want.Endpoint || res.MaskedAccessKey != want.MaskedAccessKey {
 		t.Fatalf("translation mismatch: got %+v want %+v", res, want)
 	}
 	if svc.gotOpts.Profile != "p1" || svc.gotOpts.Region != "cn-beijing" ||
-		!svc.gotOpts.Remote || svc.gotOpts.EndpointURL != "https://example.com" {
+		svc.gotOpts.Endpoint != "https://tls-cn-beijing.volces.com" ||
+		!svc.gotOpts.Remote || svc.gotOpts.EndpointURL != "" {
 		t.Fatalf("options not translated: %+v", svc.gotOpts)
 	}
 }
@@ -320,6 +322,7 @@ func TestRunLoginFullPipelineWithFakeFactory(t *testing.T) {
 		Profile:         "myprof",
 		Provider:        "console-login",
 		Region:          "cn-beijing",
+		Endpoint:        "https://tls-cn-beijing.volces.com",
 		ExpiresAt:       time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC),
 		MaskedAccessKey: "AKLT***wxyz",
 	}
@@ -335,14 +338,14 @@ func TestRunLoginFullPipelineWithFakeFactory(t *testing.T) {
 		t.Fatal("factory should have been called")
 	}
 
-	// stdout must be valid JSON with exactly the 5 allowed fields.
+	// stdout must be valid JSON with exactly the 6 allowed fields.
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(stdout.Bytes(), &m); err != nil {
 		t.Fatalf("stdout is not valid JSON: %v\nstdout=%q", err, stdout.String())
 	}
 	wantKeys := map[string]bool{
 		"profile": true, "provider": true, "region": true,
-		"expires_at": true, "masked_access_key": true,
+		"endpoint": true, "expires_at": true, "masked_access_key": true,
 	}
 	if len(m) != len(wantKeys) {
 		t.Fatalf("expected %d fields, got %d: %v", len(wantKeys), len(m), keysOf(m))
@@ -384,6 +387,7 @@ func TestRunLoginForcesJSONWithTableAndJSONLOutput(t *testing.T) {
 		Profile:         "p",
 		Provider:        "console-login",
 		Region:          "r",
+		Endpoint:        "https://tls.example.com",
 		ExpiresAt:       time.Now(),
 		MaskedAccessKey: "AK***",
 	}
@@ -550,7 +554,7 @@ func TestLoginMissingValueFlagsAreUsageAndDoNotCallFactory(t *testing.T) {
 		{"long-profile", "--profile"},
 		{"short-region", "-r"},
 		{"long-region", "--region"},
-		{"endpoint-url", "--endpoint-url"},
+		{"endpoint", "--endpoint"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -575,6 +579,28 @@ func TestLoginMissingValueFlagsAreUsageAndDoNotCallFactory(t *testing.T) {
 				t.Fatalf("expected kind usage for missing %s value, got %q", tc.flag, payload.Kind)
 			}
 		})
+	}
+}
+
+func TestLoginEndpointURLIsRejectedBeforeFactory(t *testing.T) {
+	var factoryCalled bool
+	factory := func(c *Context) (*loginAdapter, error) {
+		factoryCalled = true
+		return &loginAdapter{}, nil
+	}
+	var stdout, stderr bytes.Buffer
+	code := runWithLoginAdapterFactory(
+		[]string{"login", "--endpoint-url", "https://signin.example.com"},
+		&stdout,
+		&stderr,
+		factory,
+		nil,
+	)
+	if code != 1 {
+		t.Fatalf("expected exit 1, got %d", code)
+	}
+	if factoryCalled {
+		t.Fatal("factory should not be called for unsupported --endpoint-url")
 	}
 }
 
@@ -1080,7 +1106,7 @@ func TestLoginResultJSONHasExactFields(t *testing.T) {
 	}
 	wantKeys := map[string]bool{
 		"profile": true, "provider": true, "region": true,
-		"expires_at": true, "masked_access_key": true,
+		"endpoint": true, "expires_at": true, "masked_access_key": true,
 	}
 	if len(m) != len(wantKeys) {
 		t.Fatalf("expected %d keys, got %d: %v", len(wantKeys), len(m), keysOf(m))

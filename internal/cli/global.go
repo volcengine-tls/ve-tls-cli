@@ -4,6 +4,8 @@ import "strings"
 
 type GlobalFlags struct {
 	Profile            string
+	Region             string
+	Endpoint           string
 	Output             string
 	Filter             string
 	OutputMode         string
@@ -31,6 +33,18 @@ func parseGlobal(args []string) (group string, rest []string, flags GlobalFlags,
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.Profile = args[1]
+			args = args[2:]
+		case "--region":
+			if len(args) < 2 {
+				return "", nil, GlobalFlags{}, false
+			}
+			flags.Region = args[1]
+			args = args[2:]
+		case "--endpoint":
+			if len(args) < 2 {
+				return "", nil, GlobalFlags{}, false
+			}
+			flags.Endpoint = args[1]
 			args = args[2:]
 		case "--output":
 			if len(args) < 2 {

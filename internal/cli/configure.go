@@ -101,10 +101,105 @@ func runConfigureCred(ctx *Context, args []string) (any, error) {
 }
 
 func configureSet(ctx *Context, args []string) (any, error) {
-	if !hasExplicitModeFlag(args) {
-		return configureSetLegacy(ctx, args)
+	if hasExplicitModeFlag(args) {
+		return configureSetExplicitMode(ctx, args)
 	}
-	return configureSetExplicitMode(ctx, args)
+	if isRuntimeOnlyProfilePatch(args) {
+		return configureSetRuntimeOnly(ctx, args)
+	}
+	return configureSetLegacy(ctx, args)
+}
+
+func isRuntimeOnlyProfilePatch(args []string) bool {
+	hasRuntimeField := false
+	for len(args) > 0 {
+		if len(args) < 2 {
+			return false
+		}
+		switch args[0] {
+		case "--profile":
+		case "--region", "--endpoint", "--timeout-seconds":
+			hasRuntimeField = true
+		default:
+			return false
+		}
+		args = args[2:]
+	}
+	return hasRuntimeField
+}
+
+func configureSetRuntimeOnly(ctx *Context, args []string) (any, error) {
+	name := "default"
+	var (
+		regionSet   bool
+		endpointSet bool
+		timeoutSet  bool
+		region      string
+		endpoint    string
+		timeout     int
+	)
+	for len(args) > 0 {
+		switch args[0] {
+		case "--profile":
+			name = strings.TrimSpace(args[1])
+			if name == "" {
+				name = "default"
+			}
+		case "--region":
+			region = strings.TrimSpace(args[1])
+			if region == "" {
+				return nil, errors.New("missing --region value")
+			}
+			regionSet = true
+		case "--endpoint":
+			endpoint = strings.TrimSpace(args[1])
+			if endpoint == "" {
+				return nil, errors.New("missing --endpoint value")
+			}
+			endpointSet = true
+		case "--timeout-seconds":
+			v, err := strconv.Atoi(args[1])
+			if err != nil {
+				return nil, err
+			}
+			timeout = v
+			timeoutSet = true
+		default:
+			return nil, errors.New("unknown flag: " + args[0])
+		}
+		args = args[2:]
+	}
+
+	var final config.Profile
+	if err := ctx.UpdateConfig(func(latest *config.Config) error {
+		existing, ok := latest.GetProfile(name)
+		if !ok {
+			return errors.New("profile not found: " + name)
+		}
+		if regionSet {
+			existing.Region = region
+		}
+		if endpointSet {
+			existing.Endpoint = endpoint
+		}
+		if timeoutSet {
+			existing.TimeoutSeconds = timeout
+		}
+		latest.PutProfile(name, existing)
+		final = existing
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	credStatus := config.ResolveProfileCredentialStatus(ctx.cfg, final)
+	return map[string]any{
+		"profile":       name,
+		"region":        final.Region,
+		"endpoint":      final.Endpoint,
+		"timeout":       final.TimeoutSeconds,
+		"cred_ref":      strings.TrimSpace(final.CredRef),
+		"access_key_id": config.MaskAK(credStatus.AccessKeyID),
+	}, nil
 }
 
 // hasExplicitModeFlag reports whether --mode (or --mode=<value>) appears as a
@@ -595,18 +690,13 @@ func configureSetExplicitMode(ctx *Context, args []string) (any, error) {
 	return out, nil
 }
 
-// validateWorkloadProfile checks the merged profile against the requirements of
-// the selected auth mode. All modes require region and endpoint. ak and
-// ramrolearn require a source credential (inline AK/SK or a cred-ref);
+// validateWorkloadProfile checks only the identity requirements of the selected
+// auth mode. Region and endpoint are runtime settings resolved later from
+// command flags, environment, profile, or project config. ak and ramrolearn
+// require a source credential (inline AK/SK or a cred-ref);
 // ramrolearn additionally requires account-id and role-name; oidc requires
 // oidc-token-file and role-trn; ecsrole requires role-name.
 func validateWorkloadProfile(p config.Profile, mode string) error {
-	if strings.TrimSpace(p.Region) == "" {
-		return errors.New("missing required fields: --region")
-	}
-	if strings.TrimSpace(p.Endpoint) == "" {
-		return errors.New("missing required fields: --endpoint")
-	}
 	switch mode {
 	case config.AuthModeAK:
 		hasSource := (strings.TrimSpace(p.AccessKeyID) != "" && strings.TrimSpace(p.SecretAccessKey) != "") ||

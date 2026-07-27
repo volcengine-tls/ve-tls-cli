@@ -257,9 +257,9 @@ func TestLoginShortFlagsMatchLongFlags(t *testing.T) {
 		{"short region", []string{"-r", "cn-beijing"}, loginOpts{Region: "cn-beijing"}},
 		{"long region", []string{"--region", "cn-beijing"}, loginOpts{Region: "cn-beijing"}},
 		{"remote", []string{"--remote"}, loginOpts{Remote: true}},
-		{"endpoint-url", []string{"--endpoint-url", "https://signin.example.com"}, loginOpts{EndpointURL: "https://signin.example.com"}},
-		{"all short", []string{"-p", "prod", "-r", "cn-beijing", "--remote", "--endpoint-url", "https://signin.example.com"},
-			loginOpts{Profile: "prod", Region: "cn-beijing", Remote: true, EndpointURL: "https://signin.example.com"}},
+		{"endpoint", []string{"--endpoint", "https://tls-cn-beijing.volces.com"}, loginOpts{Endpoint: "https://tls-cn-beijing.volces.com"}},
+		{"all flags", []string{"-p", "prod", "-r", "cn-beijing", "--remote", "--endpoint", "https://tls-cn-beijing.volces.com"},
+			loginOpts{Profile: "prod", Region: "cn-beijing", Remote: true, Endpoint: "https://tls-cn-beijing.volces.com"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -271,6 +271,16 @@ func TestLoginShortFlagsMatchLongFlags(t *testing.T) {
 				t.Fatalf("got %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestLoginRejectsPublicConsoleAuthEndpointOverride(t *testing.T) {
+	_, err := parseLoginFlags([]string{"--endpoint-url", "https://signin.example.com"})
+	if err == nil {
+		t.Fatal("expected --endpoint-url to be rejected")
+	}
+	if !strings.Contains(err.Error(), "unknown flag") {
+		t.Fatalf("expected unknown flag error, got %q", err.Error())
 	}
 }
 
@@ -334,6 +344,7 @@ func TestLoginProgressUsesStderrAndResultUsesStdout(t *testing.T) {
 			Profile:         "prod",
 			Provider:        "console-login",
 			Region:          "cn-beijing",
+			Endpoint:        "https://tls-cn-beijing.volces.com",
 			ExpiresAt:       time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 			MaskedAccessKey: "AKLT***abcd",
 		},
@@ -360,7 +371,7 @@ func TestLoginProgressUsesStderrAndResultUsesStdout(t *testing.T) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatalf("unmarshal result: %v", err)
 	}
-	for _, key := range []string{"profile", "provider", "region", "expires_at", "masked_access_key"} {
+	for _, key := range []string{"profile", "provider", "region", "endpoint", "expires_at", "masked_access_key"} {
 		if _, ok := m[key]; !ok {
 			t.Fatalf("result missing key %q: %s", key, string(b))
 		}

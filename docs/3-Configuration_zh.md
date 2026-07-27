@@ -73,15 +73,23 @@ volclog --profile default tool exec project.describe-projects
 
 `disable-ssl` 字段不是通用的运行时开关。它仅适用于 RAM Role ARN 和 OIDC 的 STS 凭证交换请求：当为 `true` 时，这些认证材料会通过明文 HTTP 发送到固定的 STS 主机。它不会改变 TLS 业务端点的方案。其他模式（静态 AK/SK、SSO、Console Login、ECS Role）在凭证交换时不使用它。在不可信网络上请避免使用；详见 [认证](2-Authentication_zh.md)。
 
-### 3.1 省略 `--mode`（传统静态路径）
+### 3.1 省略 `--mode`
 
-当省略 `--mode` 时，`configure set` 走传统静态路径。它始终将配置档模式设为 `ak`，并在每次调用时**覆盖**标准静态配置档字段：`access_key_id`、`secret_access_key`、`security_token`、`region`、`endpoint`、`timeout_seconds`、`cred_ref` 和 `mode`。它要求提供 `--ak --sk`（或 `--cred-ref`）、`--region` 和 `--endpoint`。
+对于已有配置档，如果命令只包含 `--profile` 以及一个或多个 `--region`、`--endpoint`、`--timeout-seconds`，`configure set` 只补丁这些运行字段，不改变鉴权模式、身份字段、登录绑定或凭证 TTL：
+
+```bash
+volclog configure set --profile NAME \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
+```
+
+其他不带 `--mode` 的调用继续走传统静态路径。该路径会把配置档模式设为 `ak`、覆盖标准静态字段，并要求 `--ak --sk`（或 `--cred-ref`）、`--region` 和 `--endpoint`。
 
 由于省略的标志被视为空值，不带 `--token` 重新运行 `configure set` 会清除之前存储的 `security_token`。此路径的存在是为了精确保留原有的静态 AK/SK 行为。
 
 ### 3.2 提供 `--mode`（显式补丁路径）
 
-当提供 `--mode` 时，`configure set` 加载现有配置档并**仅补丁显式提供的标志**。未提及的字段保持不变，因此之前模式留下的休眠字段（例如切换到动态模式后遗留的静态 AK/SK）在模式切换间会被保留。补丁完成后，合并后的配置档会根据所选模式的要求进行校验。
+当提供 `--mode` 时，`configure set` 加载现有配置档并**仅补丁显式提供的标志**。未提及的字段保持不变。校验只覆盖所选模式的身份必填项；TLS Region 和 Endpoint 可以之后通过 runtime-only patch、环境或单次命令参数提供。
 
 `configure set` 不接受 `--mode sso` 和 `--mode console-login`；这两种模式使用 [认证](2-Authentication_zh.md) 中描述的专用 `login` 和 `configure sso` 流程。
 
@@ -129,19 +137,19 @@ volclog configure cred delete shared-creds
 
 ## 5. 运行时优先级
 
-运行时值的解析方式取决于所选配置档使用的是静态 AK/SK 还是动态提供者。`context.region` 和 `context.endpoint` 仅可通过 `tool`/`workflow` 上下文使用；它们成为每次执行的回退默认值，优先于项目 `region`/`endpoint`，但不会覆盖非空的所选配置档值或动态环境值。
+运行时值的解析方式取决于所选配置档使用的是静态 AK/SK 还是动态提供者。全局 `--region` 和 `--endpoint` 是仅作用于单条命令的显式覆盖，永不落盘。`context.region` 和 `context.endpoint` 仅可通过 `tool`/`workflow` 上下文使用，是项目配置之前的回退值。Endpoint 永远不会从 Region 推导。
 
 ### 5.1 静态模式
 
-在静态模式（`mode: ak`）下，当存在完整的环境 AK/SK 集合（`VOLCENGINE_ACCESS_KEY_ID` 和 `VOLCENGINE_ACCESS_KEY_SECRET`）时，静态解析会从环境值构建身份并**完全绕过所选配置档**。region/endpoint 优先级为：环境 > 上下文默认值 > 项目默认值。timeout 优先级为：项目默认值 > `60` 秒。如果环境和回退值都未提供所需的 region/endpoint，解析将失败。
+在静态模式（`mode: ak`）下，当存在完整的环境 AK/SK 集合（`VOLCENGINE_ACCESS_KEY_ID` 和 `VOLCENGINE_ACCESS_KEY_SECRET`）时，静态解析会从环境值构建身份并**完全绕过所选配置档**。region/endpoint 优先级为：显式 CLI > 环境 > 上下文默认值 > 项目默认值。timeout 优先级为：项目默认值 > `60` 秒。如果环境和回退值都未提供所需的 region/endpoint，解析将失败。
 
-没有完整的环境 AK/SK 集合时，使用所选配置档。region/endpoint 优先级为：配置档 > 上下文默认值 > 项目默认值。timeout 优先级为：配置档 > 项目默认值 > `60` 秒。
+没有完整的环境 AK/SK 集合时，使用所选配置档。region/endpoint 优先级为：显式 CLI > 配置档 > 上下文默认值 > 项目默认值。只有 Region/Endpoint 环境变量而没有完整环境 AK/SK 时，不改变这条旧静态路径。timeout 优先级为：配置档 > 项目默认值 > `60` 秒。
 
 上下文没有 timeout 字段。
 
 ### 5.2 动态提供者模式
 
-对于动态提供者模式（SSO、Console Login、RAM Role ARN、OIDC、ECS Role），环境 AK/SK 会被有意忽略。region/endpoint 优先级为：环境 region/endpoint > 配置档 > 上下文默认值 > 项目默认值。
+对于动态提供者模式（SSO、Console Login、RAM Role ARN、OIDC、ECS Role），环境 AK/SK 会被有意忽略。region/endpoint 优先级为：显式 CLI > 环境 region/endpoint > 配置档 > 上下文默认值 > 项目默认值。
 
 timeout 优先级为：配置档 > 项目默认值 > `60` 秒。没有全局或上下文的 timeout 覆盖。
 

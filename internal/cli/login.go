@@ -19,10 +19,10 @@ import (
 // loginOpts mirrors console.LoginOptions but is local to the CLI package so the
 // adapter interface does not leak the console package type into tests.
 type loginOpts struct {
-	Profile     string
-	Region      string
-	Remote      bool
-	EndpointURL string
+	Profile  string
+	Region   string
+	Endpoint string
+	Remote   bool
 }
 
 // loginResult is the redacted result of a successful console login. It is the
@@ -32,6 +32,7 @@ type loginResult struct {
 	Profile         string    `json:"profile"`
 	Provider        string    `json:"provider"`
 	Region          string    `json:"region"`
+	Endpoint        string    `json:"endpoint"`
 	ExpiresAt       time.Time `json:"expires_at"`
 	MaskedAccessKey string    `json:"masked_access_key"`
 }
@@ -155,8 +156,8 @@ func resolveProfileSelector(global, local string) (string, error) {
 }
 
 // parseLoginFlags parses login command flags. It accepts -p/--profile,
-// -r/--region, --remote, and --endpoint-url. Any --secrets-file flag is
-// rejected explicitly.
+// -r/--region, --endpoint, and --remote. Any --secrets-file flag is rejected
+// explicitly.
 func parseLoginFlags(args []string) (loginOpts, error) {
 	var opts loginOpts
 	for i := 0; i < len(args); i++ {
@@ -172,15 +173,21 @@ func parseLoginFlags(args []string) (loginOpts, error) {
 			if i+1 >= len(args) {
 				return opts, errors.New("missing value for " + a)
 			}
-			opts.Region = args[i+1]
+			opts.Region = strings.TrimSpace(args[i+1])
+			if opts.Region == "" {
+				return opts, errors.New("invalid --region: empty value")
+			}
 			i++
 		case "--remote":
 			opts.Remote = true
-		case "--endpoint-url":
+		case "--endpoint":
 			if i+1 >= len(args) {
-				return opts, errors.New("missing value for --endpoint-url")
+				return opts, errors.New("missing value for --endpoint")
 			}
-			opts.EndpointURL = args[i+1]
+			opts.Endpoint = strings.TrimSpace(args[i+1])
+			if opts.Endpoint == "" {
+				return opts, errors.New("invalid --endpoint: empty value")
+			}
 			i++
 		case "--secrets-file":
 			return opts, errors.New("--secrets-file is not supported for login; use --profile to select a dynamic login identity")
@@ -648,10 +655,10 @@ type consoleLoginServiceAdapter struct {
 
 func (a *consoleLoginServiceAdapter) Login(ctx context.Context, opts loginOpts) (*loginResult, error) {
 	res, err := a.svc.Login(ctx, console.LoginOptions{
-		Profile:     opts.Profile,
-		Region:      opts.Region,
-		Remote:      opts.Remote,
-		EndpointURL: opts.EndpointURL,
+		Profile:  opts.Profile,
+		Region:   opts.Region,
+		Endpoint: opts.Endpoint,
+		Remote:   opts.Remote,
 	})
 	if err != nil {
 		return nil, err
@@ -663,6 +670,7 @@ func (a *consoleLoginServiceAdapter) Login(ctx context.Context, opts loginOpts) 
 		Profile:         res.Profile,
 		Provider:        res.Provider,
 		Region:          res.Region,
+		Endpoint:        res.Endpoint,
 		ExpiresAt:       res.ExpiresAt,
 		MaskedAccessKey: res.MaskedAccessKey,
 	}, nil

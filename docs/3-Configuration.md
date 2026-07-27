@@ -73,15 +73,23 @@ A profile can carry auth-mode fields (AK/SK, SSO session binding, OIDC token fil
 
 The `disable-ssl` field is not a general runtime toggle. It applies only to RAM Role ARN and OIDC STS credential-exchange requests: when `true`, those authentication materials are sent over plaintext HTTP to the fixed STS host. It does not change the TLS business endpoint scheme. Other modes (static AK/SK, SSO, Console Login, ECS Role) do not use it for their credential exchange. Avoid it on untrusted networks; see [Authentication](2-Authentication.md) for details.
 
-### 3.1 Omitting `--mode` (legacy static path)
+### 3.1 Omitting `--mode`
 
-When `--mode` is omitted, `configure set` takes the legacy static path. It always sets the profile mode to `ak` and **overwrites** the standard static profile fields on every invocation: `access_key_id`, `secret_access_key`, `security_token`, `region`, `endpoint`, `timeout_seconds`, `cred_ref`, and `mode`. It requires `--ak --sk` (or `--cred-ref`), `--region`, and `--endpoint`.
+For an existing profile, when the command contains only `--profile` plus one or more of `--region`, `--endpoint`, and `--timeout-seconds`, `configure set` patches only those runtime fields. It does not change the auth mode, identity fields, login binding, or credential TTL:
+
+```bash
+volclog configure set --profile NAME \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
+```
+
+Other invocations without `--mode` take the legacy static path. That path sets the profile mode to `ak`, overwrites the standard static fields, and requires `--ak --sk` (or `--cred-ref`), `--region`, and `--endpoint`.
 
 Because omitted flags are treated as empty, re-running `configure set` without `--token` clears any previously stored `security_token`. This path exists to preserve the original static AK/SK behavior exactly.
 
 ### 3.2 Supplying `--mode` (explicit patch path)
 
-When `--mode` is supplied, `configure set` loads the existing profile and **patches only the flags explicitly provided**. Fields you do not mention are left untouched, so dormant fields from a previous mode (for example, static AK/SK left behind after switching to a dynamic mode) are preserved across mode switches. After patching, the merged profile is validated against the selected mode's requirements.
+When `--mode` is supplied, `configure set` loads the existing profile and **patches only the flags explicitly provided**. Fields you do not mention are left untouched. Validation covers the selected mode's identity requirements; TLS region and endpoint may be supplied later through the runtime-only patch, environment, or per-command flags.
 
 `--mode sso` and `--mode console-login` are not accepted by `configure set`; those modes use the dedicated `login` and `configure sso` flows described in [Authentication](2-Authentication.md).
 
@@ -129,19 +137,19 @@ volclog configure cred delete shared-creds
 
 ## 5. Runtime precedence
 
-Runtime values are resolved differently depending on whether the selected profile uses static AK/SK or a dynamic provider. `context.region` and `context.endpoint` are only available through `tool`/`workflow` context; they become the per-execution fallback defaults ahead of the project `region`/`endpoint`, but do not override a non-empty selected-profile value or a dynamic environment value.
+Runtime values are resolved differently depending on whether the selected profile uses static AK/SK or a dynamic provider. Global `--region` and `--endpoint` are explicit one-command overrides and are never persisted. `context.region` and `context.endpoint` are only available through `tool`/`workflow` context and act as fallbacks ahead of project configuration. Endpoint is never derived from region.
 
 ### 5.1 Static mode
 
-In static mode (`mode: ak`), when a complete set of environment AK/SK is present (`VOLCENGINE_ACCESS_KEY_ID` and `VOLCENGINE_ACCESS_KEY_SECRET`), static resolution constructs the identity from the environment values and **bypasses the selected profile entirely**. Region/endpoint precedence is: environment > context default > project default. Timeout precedence is: project default > `60` seconds. If neither environment nor a fallback supplies the required region/endpoint, resolution fails.
+In static mode (`mode: ak`), when a complete set of environment AK/SK is present (`VOLCENGINE_ACCESS_KEY_ID` and `VOLCENGINE_ACCESS_KEY_SECRET`), static resolution constructs the identity from the environment values and **bypasses the selected profile entirely**. Region/endpoint precedence is: explicit CLI > environment > context default > project default. Timeout precedence is: project default > `60` seconds. If neither environment nor a fallback supplies the required region/endpoint, resolution fails.
 
-Without a complete environment AK/SK set, the selected profile is used. Region/endpoint precedence is: profile > context default > project default. Timeout precedence is: profile > project default > `60` seconds.
+Without a complete environment AK/SK set, the selected profile is used. Region/endpoint precedence is: explicit CLI > profile > context default > project default. Region/endpoint environment variables alone do not alter this legacy path. Timeout precedence is: profile > project default > `60` seconds.
 
 Context has no timeout field.
 
 ### 5.2 Dynamic provider mode
 
-For dynamic provider modes (SSO, Console Login, RAM Role ARN, OIDC, ECS Role), environment AK/SK are intentionally ignored. Region/endpoint precedence is: environment region/endpoint > profile > context default > project default.
+For dynamic provider modes (SSO, Console Login, RAM Role ARN, OIDC, ECS Role), environment AK/SK are intentionally ignored. Region/endpoint precedence is: explicit CLI > environment region/endpoint > profile > context default > project default.
 
 Timeout precedence is: profile > project default > `60` seconds. There is no global or context timeout override.
 

@@ -155,7 +155,7 @@ volclog --profile default raw --method POST --path /CreateProject \
 
 冲突会失败并报错 `conflicting runtime selectors`（当提供两个不同的配置档名称时为 `conflicting profile selectors`）。
 
-没有全局 CLI `--region` 或 `--endpoint` 标志。`context.region` 和 `context.endpoint` 是仅可通过 `tool`/`workflow` 上下文使用的每次执行回退默认值（不是身份选择器）；它们优先于项目默认值，但不会覆盖非空的所选配置档值或动态环境值。完整的 region/endpoint/timeout 优先级在 [配置](3-Configuration_zh.md) 中有详细说明。
+全局 `--region` 和 `--endpoint` 是只影响单条命令且永不落盘的显式覆盖。`context.region` 和 `context.endpoint` 仍是仅可通过 `tool`/`workflow` 上下文使用的回退默认值。完整的 region/endpoint/timeout 优先级在 [配置](3-Configuration_zh.md) 中有详细说明。
 
 ### 6.2 `--dry-run` 与上下文预执行
 

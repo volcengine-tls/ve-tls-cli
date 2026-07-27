@@ -47,6 +47,8 @@ type ssoConfigureOpts struct {
 	SSOSession string
 	AccountID  string
 	RoleName   string
+	Region     string
+	Endpoint   string
 	NoBrowser  bool
 }
 
@@ -127,6 +129,8 @@ type ssoLoginResult struct {
 	AccountID string    `json:"account_id,omitempty"`
 	RoleName  string    `json:"role_name,omitempty"`
 	Region    string    `json:"region"`
+	Endpoint  string    `json:"endpoint"`
+	SSORegion string    `json:"sso_region"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
@@ -261,6 +265,24 @@ func parseSSOConfigureFlags(args []string) (ssoConfigureOpts, error) {
 			}
 			opts.RoleName = args[i+1]
 			i++
+		case "--region":
+			if i+1 >= len(args) {
+				return opts, errors.New("missing value for --region")
+			}
+			opts.Region = strings.TrimSpace(args[i+1])
+			if opts.Region == "" {
+				return opts, errors.New("invalid --region: empty value")
+			}
+			i++
+		case "--endpoint":
+			if i+1 >= len(args) {
+				return opts, errors.New("missing value for --endpoint")
+			}
+			opts.Endpoint = strings.TrimSpace(args[i+1])
+			if opts.Endpoint == "" {
+				return opts, errors.New("invalid --endpoint: empty value")
+			}
+			i++
 		case "--no-browser":
 			opts.NoBrowser = true
 		case "-h", "--help":
@@ -276,6 +298,8 @@ func parseSSOConfigureFlags(args []string) (ssoConfigureOpts, error) {
 	opts.SSOSession = strings.TrimSpace(opts.SSOSession)
 	opts.AccountID = strings.TrimSpace(opts.AccountID)
 	opts.RoleName = strings.TrimSpace(opts.RoleName)
+	opts.Region = strings.TrimSpace(opts.Region)
+	opts.Endpoint = strings.TrimSpace(opts.Endpoint)
 	return opts, nil
 }
 
@@ -422,7 +446,7 @@ func (a *ssoAdapter) runConfigureSSO(ctx context.Context, opts ssoConfigureOpts)
 	// binding (session/account/role) so stale STS caches can be cleared when the
 	// binding changes, preventing the old Provider fast path from reusing
 	// expired dynamic credentials.
-	origProfile, _ := cfg.GetProfile(profileName)
+	origProfile, origProfileExists := cfg.GetProfile(profileName)
 	origSSOSession := strings.TrimSpace(origProfile.SSOSessionName)
 	origMode := origProfile.Mode
 	origAccountID := strings.TrimSpace(origProfile.AccountID)
@@ -454,6 +478,7 @@ func (a *ssoAdapter) runConfigureSSO(ctx context.Context, opts ssoConfigureOpts)
 		finalToken   *sso.TokenCache
 		finalBinding *sso.BindingResult
 		finalExpiry  time.Time
+		finalProfile config.Profile
 	)
 
 	// For cross-session rebinds, acquire BOTH the old and new session token
@@ -554,11 +579,15 @@ func (a *ssoAdapter) runConfigureSSO(ctx context.Context, opts ssoConfigureOpts)
 				// caller restore the old token so the profile is never silently
 				// switched.
 				curProfile, cpok := c.GetProfile(profileName)
-				if !cpok {
-					return errors.New("profile removed during login; aborting")
-				}
-				if strings.TrimSpace(curProfile.SSOSessionName) != origSSOSession || curProfile.Mode != origMode {
-					return errors.New("profile rebind during login; aborting")
+				if origProfileExists {
+					if !cpok {
+						return errors.New("profile removed during login; aborting")
+					}
+					if strings.TrimSpace(curProfile.SSOSessionName) != origSSOSession || curProfile.Mode != origMode {
+						return errors.New("profile rebind during login; aborting")
+					}
+				} else if cpok {
+					return errors.New("profile created during login; aborting")
 				}
 				return c.PatchProfile(profileName, func(p *config.Profile) error {
 					p.Mode = config.AuthModeSSO
@@ -567,6 +596,13 @@ func (a *ssoAdapter) runConfigureSSO(ctx context.Context, opts ssoConfigureOpts)
 					p.RoleName = bind.RoleName
 					p.LoginSession = ""
 					p.STSExpiration = 0
+					if opts.Region != "" {
+						p.Region = opts.Region
+					}
+					if opts.Endpoint != "" {
+						p.Endpoint = opts.Endpoint
+					}
+					finalProfile = *p
 					return nil
 				})
 			}); cerr != nil {
@@ -628,7 +664,9 @@ func (a *ssoAdapter) runConfigureSSO(ctx context.Context, opts ssoConfigureOpts)
 		Session:   session.Name,
 		AccountID: acctID,
 		RoleName:  roleName,
-		Region:    session.Region,
+		Region:    finalProfile.Region,
+		Endpoint:  finalProfile.Endpoint,
+		SSORegion: session.Region,
 		ExpiresAt: finalExpiry,
 	}, nil
 }

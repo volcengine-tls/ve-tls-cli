@@ -66,11 +66,13 @@ Every TLS request must be able to determine a region and an endpoint. Configurat
 
 For SSO, Console Login, RAM Role ARN, OIDC, and ECS Role, the runtime configuration is resolved in this order:
 
-1. `VOLCENGINE_REGION`, `VOLCENGINE_ENDPOINT`;
-2. The `region` and `endpoint` in the selected profile;
-3. The `context.region` and `context.endpoint` defaults for the current `tool` or `workflow` execution;
-4. The project configuration in the current directory;
-5. When timeout is not configured, 60 seconds is used.
+1. Global `--region`, `--endpoint` for this invocation;
+2. `VOLCENGINE_REGION`, `VOLCENGINE_ENDPOINT`;
+3. The `region` and `endpoint` in the selected profile;
+4. The `context.region` and `context.endpoint` defaults for the current `tool` or `workflow` execution;
+5. The project configuration in the current directory.
+
+The CLI does not derive an endpoint from a region. Supply both values explicitly through one of these layers. When timeout is not configured, 60 seconds is used.
 
 If a dynamic-login profile does not carry TLS runtime configuration, you can supply the environment variables explicitly for a single command:
 
@@ -316,33 +318,20 @@ volclog tool exec project.describe-projects
 - Know the TLS region and endpoint;
 - In remote mode, copy the authorization URL shown by the terminal to a local browser, then paste the authorization code back into the terminal.
 
-`login --region` writes the region into the target profile, but it does not guess the TLS endpoint for the user. If the target profile originally has no endpoint, supply it explicitly for verification and business commands:
-
-```bash
-VOLCENGINE_ENDPOINT=https://tls-cn-beijing.volces.com \
-volclog --profile console-dev doctor --online
-```
+`login --region --endpoint` writes both TLS runtime values into the target profile. Either value may be omitted to preserve an existing value and supplied later with `configure set`.
 
 ### 5.3 Local browser login
 
 ```bash
 volclog login \
   --profile console-dev \
-  --region cn-beijing
-```
-
-Local mode uses a loopback callback to receive the browser authorization result. After a successful login, the profile switches to `mode=console-login` and stores the login session binding. The login flow patches only the mode, login-session, and region fields; any existing static `AccessKeyID`, `SecretAccessKey`, `SecurityToken`, and `CredRef` remain stored on disk as dormant fields. The Console Login provider does not use them, and the provider path is fail-closed, but the dormant values are still present in the configuration file.
-
-If no region is specified explicitly, the profile's existing region is used first; if that is also empty, `cn-beijing` is used.
-
-The optional `--endpoint-url` flag overrides the Console authorization/token service endpoint. This is the Console sign-in endpoint, not the TLS business endpoint. It must be a clean HTTPS URL (no userinfo, query, fragment, or non-root path) and must be supplied by the user or administrator; do not invent a value.
-
-```bash
-volclog login \
-  --profile console-dev \
   --region cn-beijing \
-  --endpoint-url 'https://<console-sign-in-host>'
+  --endpoint https://tls-cn-beijing.volces.com
 ```
+
+Local mode uses a loopback callback to receive the browser authorization result. After a successful login, the profile switches to `mode=console-login`, stores the login session binding, and patches only explicitly supplied TLS runtime values. Existing identity and runtime fields that were not supplied remain unchanged. A new profile does not receive an implicit default region.
+
+The Console authorization service endpoint is managed internally and is not user-configurable. The `--endpoint` flag always means the TLS business endpoint.
 
 ### 5.4 Remote or cross-device login
 
@@ -453,14 +442,16 @@ When scopes are not supplied explicitly, a new Session uses the default scopes. 
 
 ### 6.4 Bind a profile and first login
 
-`configure sso` binds an existing profile to an SSO Session. It preserves the profile's existing TLS region, endpoint, and timeout, and switches the auth mode to `sso`. The binding updates the mode, SSO Session name, account ID, and role name fields; it also clears the profile's Console Login `login-session` binding and resets old `sts-expiration` metadata. This binding step does not itself mean a pre-existing Console Login cache was deleted. Any existing static `AccessKeyID`, `SecretAccessKey`, `SecurityToken`, and `CredRef` remain stored on disk as dormant fields. The SSO provider does not use them, and the provider path is fail-closed, but the dormant values are still present in the configuration file.
+`configure sso` creates or updates a profile and binds it to an SSO Session. It switches the auth mode to `sso`, patches only explicitly supplied TLS region/endpoint values, and preserves timeout and dormant identity fields. The binding also clears the profile's Console Login binding and resets old STS-expiration metadata.
 
 Select the account and role interactively:
 
 ```bash
 volclog configure sso \
   --profile sso-dev \
-  --sso-session corp
+  --sso-session corp \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
 ```
 
 When the account and role are already known:
@@ -490,12 +481,12 @@ The command prints an authorization URL and a device code prompt. Complete the a
 volclog configure use sso-dev
 ```
 
-If the profile does not yet have a TLS region or endpoint, supply them explicitly for verification and business commands:
+If you omitted a TLS region or endpoint during login, add it without changing the SSO binding:
 
 ```bash
-VOLCENGINE_REGION=cn-beijing \
-VOLCENGINE_ENDPOINT=https://tls-cn-beijing.volces.com \
-volclog --profile sso-dev doctor --online
+volclog configure set --profile sso-dev \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
 ```
 
 ### 6.5 Use and verify

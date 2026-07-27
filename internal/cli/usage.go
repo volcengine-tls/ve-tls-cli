@@ -34,14 +34,18 @@ Configure Set Flags:
   --token <token>                      Source session/security token for ramrolearn
   --cred-ref <name>                    Reference a shared credential
   --region <region> --endpoint <url>   Target region and endpoint
+  --timeout-seconds <seconds>          Per-request TLS business timeout
 
-  When --mode is omitted the legacy static AK/SK behavior is preserved. When
+  For an existing profile, a command containing only --profile plus region,
+  endpoint, and/or timeout-seconds patches those runtime fields without changing
+  its auth mode or identity. Other commands without --mode preserve the legacy
+  static AK/SK behavior. When
   --mode is supplied only ak/ramrolearn/oidc/ecsrole are accepted; sso and
   console-login must use their dedicated flows (configure sso / login). Explicit
   --mode merges only the supplied flags into the existing profile and validates
-  the result: all modes need region+endpoint; ak needs AK/SK or cred-ref;
-  ramrolearn needs source AK/SK or cred-ref plus account-id+role-name; oidc
-  needs oidc-token-file+role-trn; ecsrole needs role-name.
+  identity fields: ak needs AK/SK or cred-ref; ramrolearn needs source AK/SK or
+  cred-ref plus account-id+role-name; oidc needs oidc-token-file+role-trn;
+  ecsrole needs role-name. TLS region/endpoint may be supplied later.
 
   WARNING: --disable-ssl only switches the RAM/OIDC STS assumption scheme to
   HTTP. The endpoint URL scheme remains authoritative: an https:// endpoint still
@@ -51,10 +55,11 @@ Configure Set Flags:
   untrusted networks.
 
 Examples:
-  tlsctl configure set --profile default --ak <ak> --sk <sk> --endpoint https://tls-cn-beijing.volces.com
-  tlsctl configure set --profile tenant-a-sg --ak <ak> --sk <sk> --endpoint https://tls-ap-singapore-1.volces.com
-  tlsctl configure set --profile abc-bj --cred-ref ma-abc-root --ak <ak> --sk <sk> --endpoint https://tls-cn-beijing.volces.com
-  tlsctl configure set --profile abc-sg --cred-ref ma-abc-root --endpoint https://tls-ap-singapore-1.volces.com
+  tlsctl configure set --profile default --ak <ak> --sk <sk> --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
+  tlsctl configure set --profile tenant-a-sg --ak <ak> --sk <sk> --region ap-southeast-1 --endpoint https://tls-ap-singapore-1.volces.com
+  tlsctl configure set --profile abc-bj --cred-ref ma-abc-root --ak <ak> --sk <sk> --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
+  tlsctl configure set --profile abc-sg --cred-ref ma-abc-root --region ap-southeast-1 --endpoint https://tls-ap-singapore-1.volces.com
+  tlsctl configure set --profile abc-sg --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure set --profile ram-1 --mode ramrolearn --ak <ak> --sk <sk> --account-id 2100000000 --role-name TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure set --profile oidc-1 --mode oidc --oidc-token-file /var/run/secrets/token --role-trn trn:iam::2100000000:role/TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure set --profile ecs-1 --mode ecsrole --role-name TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
@@ -346,7 +351,7 @@ Agent:
 
 func usageLogin() string {
 	return u(`Usage:
-  tlsctl login [-p|--profile NAME] [-r|--region REGION] [--remote] [--endpoint-url URL]
+  tlsctl login [-p|--profile NAME] [-r|--region REGION] [--endpoint URL] [--remote]
 
 概览:
   通过 Console Login（OAuth Authorization Code + PKCE）登录并获取临时 STS 凭证。
@@ -355,12 +360,12 @@ func usageLogin() string {
 
 Flags:
   -p, --profile <name>       目标 profile（与全局 --profile 冲突时报错）
-  -r, --region <region>      TLS region（覆盖 profile 中的 region）
+  -r, --region <region>      保存到 profile 的 TLS region
+  --endpoint <url>           保存到 profile 的 TLS 业务 endpoint
   --remote                   使用跨设备远程登录（手动输入授权码）
-  --endpoint-url <url>       自定义 Console 登录端点（必须是干净的 HTTPS URL）
 
 输出:
-  - stdout 仅输出最终 JSON（profile/provider/region/expires_at/masked_access_key）
+  - stdout 仅输出最终 JSON（profile/provider/region/endpoint/expires_at/masked_access_key）
   - 授权 URL、prompt、浏览器提示、进度只写 stderr
 
 Exit Code:
@@ -369,6 +374,8 @@ Exit Code:
   2 runtime failure
 
 注意:
+  - Console 授权端点由 CLI 内部固定；--endpoint 始终表示 TLS 业务地址
+  - 省略 region/endpoint 时保留 profile 原值；新 profile 可在登录后补充
   - 不接受 --secrets-file；不要把长期静态凭证注入交互登录进程
   - 登录失败必须失败关闭，不会回退到环境 AK/SK
 `)
@@ -444,7 +451,9 @@ Flags:
   --no-browser               不自动打开浏览器，仅打印授权 URL
 
 输出:
-  - stdout 仅输出最终 JSON（provider/sso_session/region/expires_at）
+  - stdout 仅输出最终 JSON（profile/provider/sso_session/region/endpoint/sso_region/expires_at）
+  - region/endpoint 是 TLS 运行值；sso_region 是 CloudIdentity 鉴权区域
+  - 直接按 --sso-session 登录时没有目标 profile，TLS region/endpoint 为空
   - 授权 URL、prompt、浏览器提示、进度只写 stderr
   - 此阶段没有真实 STS AK，绝不输出 masked_access_key 或任何 OAuth token 片段
 
@@ -520,11 +529,11 @@ Exit Code:
 
 func usageConfigureSSO() string {
 	return u(`Usage:
-  tlsctl configure sso --profile NAME --sso-session SESSION [--account-id ID] [--role-name NAME] [--no-browser]
+  tlsctl configure sso --profile NAME --sso-session SESSION [--account-id ID] [--role-name NAME] [--region REGION] [--endpoint URL] [--no-browser]
 
 概览:
   绑定 profile 到 SSO session 并完成首次 Device Authorization 登录。
-  可在 profile 尚未配置 TLS endpoint/region 时先完成认证绑定。
+  profile 可以不存在；TLS endpoint/region 可一步保存，也可稍后补充。
   不改变 CurrentProfile。
 
 Flags:
@@ -532,10 +541,13 @@ Flags:
   --sso-session <name>       已配置的 SSO session 名称（必填）
   --account-id <id>          显式指定账号（可选，省略时交互选择）
   --role-name <name>         显式指定角色（可选，省略时交互选择）
+  --region <region>          TLS SignV4 region（不是 SSO session region）
+  --endpoint <url>           TLS 业务 endpoint
   --no-browser               不自动打开浏览器，仅打印授权 URL
 
 行为:
-  - 把 profile 切到 mode=sso：保留 TLS Region/Endpoint/TimeoutSeconds
+  - 把 profile 切到 mode=sso；只更新显式提供的 TLS Region/Endpoint
+  - SSO session region 仅用于 CloudIdentity，绝不写入 TLS region
   - 保留休眠静态字段 AccessKeyID/SecretAccessKey/SecurityToken/CredRef
   - 清除且仅清除 Console Login 的 LoginSession
   - 写入 SSOSessionName/AccountID/RoleName

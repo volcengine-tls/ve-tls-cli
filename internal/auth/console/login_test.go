@@ -381,6 +381,65 @@ func TestLoginPreservesTLSAndDormantStaticFields(t *testing.T) {
 	}
 }
 
+func TestLoginPersistsExplicitTLSRuntimeFields(t *testing.T) {
+	const session = "trn:iam::1:user/explicit-runtime"
+	cfg := config.DefaultConfig()
+	cfg.PutProfile("default", config.Profile{
+		Region:   "cn-shanghai",
+		Endpoint: "https://tls-cn-shanghai.volces.com",
+	})
+
+	client := &fakeOAuthClient{exchangeResp: validTokenResponse(session), endpointURL: DefaultEndpoint}
+	store := &fakeProfileStore{cfg: cfg, path: "/tmp/config.json"}
+	svc := newLoginService(t, client, newFakeCache(), store)
+
+	result, err := svc.Login(context.Background(), LoginOptions{
+		Profile:  "default",
+		Region:   "cn-beijing",
+		Endpoint: "https://tls-cn-beijing.volces.com",
+	})
+	if err != nil {
+		t.Fatalf("Login error: %v", err)
+	}
+
+	p := store.cfg.Profiles["default"]
+	if p.Region != "cn-beijing" {
+		t.Fatalf("Region = %q, want %q", p.Region, "cn-beijing")
+	}
+	if p.Endpoint != "https://tls-cn-beijing.volces.com" {
+		t.Fatalf("Endpoint = %q, want explicit TLS endpoint", p.Endpoint)
+	}
+	if result.Region != "cn-beijing" {
+		t.Fatalf("result Region = %q, want %q", result.Region, "cn-beijing")
+	}
+	if result.Endpoint != "https://tls-cn-beijing.volces.com" {
+		t.Fatalf("result Endpoint = %q, want explicit TLS endpoint", result.Endpoint)
+	}
+}
+
+func TestLoginDoesNotInventTLSRuntimeConfig(t *testing.T) {
+	const session = "trn:iam::1:user/no-runtime"
+	client := &fakeOAuthClient{exchangeResp: validTokenResponse(session), endpointURL: DefaultEndpoint}
+	store := &fakeProfileStore{cfg: config.DefaultConfig(), path: "/tmp/config.json"}
+	svc := newLoginService(t, client, newFakeCache(), store)
+
+	result, err := svc.Login(context.Background(), LoginOptions{Profile: "new-profile"})
+	if err != nil {
+		t.Fatalf("Login error: %v", err)
+	}
+
+	p := store.cfg.Profiles["new-profile"]
+	if p.Region != "" || p.Endpoint != "" {
+		t.Fatalf("login invented TLS runtime config: region=%q endpoint=%q", p.Region, p.Endpoint)
+	}
+	if result.Region != "" {
+		t.Fatalf("result Region = %q, want empty", result.Region)
+	}
+	if result.Endpoint != "" {
+		t.Fatalf("result Endpoint = %q, want empty", result.Endpoint)
+	}
+}
+
 func TestLoginConfigFailureRestoresCacheSnapshot(t *testing.T) {
 	const session = "trn:iam::1:user/rollback"
 	client := &fakeOAuthClient{exchangeResp: validTokenResponse(session), endpointURL: DefaultEndpoint}

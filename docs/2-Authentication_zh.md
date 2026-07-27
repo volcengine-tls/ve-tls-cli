@@ -66,11 +66,13 @@ TLS 请求必须能够确定 Region 和 Endpoint。配置示例：
 
 对于 SSO、Console Login、RAM Role ARN、OIDC 和 ECS Role，运行配置按以下顺序解析：
 
-1. `VOLCENGINE_REGION`、`VOLCENGINE_ENDPOINT`；
-2. 所选 profile 中的 `region`、`endpoint`；
-3. 当前 `tool` 或 `workflow` 执行的 `context.region`、`context.endpoint` 默认值；
-4. 当前目录的项目配置；
-5. timeout 未配置时使用 60 秒。
+1. 本次调用的全局 `--region`、`--endpoint`；
+2. `VOLCENGINE_REGION`、`VOLCENGINE_ENDPOINT`；
+3. 所选 profile 中的 `region`、`endpoint`；
+4. 当前 `tool` 或 `workflow` 执行的 `context.region`、`context.endpoint` 默认值；
+5. 当前目录的项目配置。
+
+CLI 不会根据 Region 推导 Endpoint，必须通过其中一层显式提供两个值。timeout 未配置时使用 60 秒。
 
 如果动态登录 profile 中没有 TLS 运行配置，可以在执行 TLS 命令时显式提供环境变量：
 
@@ -316,33 +318,20 @@ volclog tool exec project.describe-projects
 - 明确 TLS Region 和 Endpoint；
 - 远程模式下，可以把终端显示的授权 URL 复制到本地浏览器，并把授权码粘贴回终端。
 
-`login --region` 会把 Region 写入目标 profile，但不会替用户猜测 TLS Endpoint。如果目标 profile 原本没有 Endpoint，验证和业务命令应显式提供：
-
-```bash
-VOLCENGINE_ENDPOINT=https://tls-cn-beijing.volces.com \
-volclog --profile console-dev doctor --online
-```
+`login --region --endpoint` 会把两个 TLS 运行值写入目标 profile。任一参数都可以省略以保留旧值，之后再通过 `configure set` 补充。
 
 ### 5.3 本地浏览器登录
 
 ```bash
 volclog login \
   --profile console-dev \
-  --region cn-beijing
-```
-
-本地模式使用 loopback callback 接收浏览器授权结果。登录成功后，profile 会切换为 `mode=console-login`，并保存登录会话绑定。登录流程只修补 mode、login-session 和 region 字段；任何已有的静态 `AccessKeyID`、`SecretAccessKey`、`SecurityToken` 和 `CredRef` 会作为休眠字段继续保留在磁盘上。Console Login provider 不会使用它们，且 provider 路径是失败关闭的，但这些休眠值仍然存在于配置文件中。
-
-如果没有显式指定 Region，优先使用 profile 已有 Region；仍为空时使用 `cn-beijing`。
-
-可选的 `--endpoint-url` 标志用于覆盖 Console 授权/令牌服务端点。这是 Console 登录端点，不是 TLS 业务端点。它必须是干净的 HTTPS URL（不含 userinfo、查询参数、片段或非根路径），且必须由用户或管理员提供；不要自行编造值。
-
-```bash
-volclog login \
-  --profile console-dev \
   --region cn-beijing \
-  --endpoint-url 'https://<console-sign-in-host>'
+  --endpoint https://tls-cn-beijing.volces.com
 ```
+
+本地模式使用 loopback callback 接收浏览器授权结果。登录成功后，profile 会切换为 `mode=console-login`，保存登录会话绑定，并且只修补显式提供的 TLS 运行字段。未提供的已有身份和运行字段保持不变，新 profile 不会自动写入默认 Region。
+
+Console 授权服务地址由 CLI 内部管理，不提供用户配置参数。`--endpoint` 始终表示 TLS 业务 Endpoint。
 
 ### 5.4 远程或跨设备登录
 
@@ -453,14 +442,16 @@ volclog configure sso-session \
 
 ### 6.4 绑定 Profile 并首次登录
 
-`configure sso` 把一个已有 profile 绑定到 SSO Session。它会保留该 profile 已有的 TLS Region、Endpoint 和 timeout，并把鉴权模式切换为 `sso`。绑定会更新 mode、SSO Session 名称、账号 ID 和角色名字段；同时清除 profile 的 Console Login `login-session` 绑定并重置旧的 `sts-expiration` 元数据。此绑定步骤本身并不意味着之前存在的 Console Login 缓存已被删除。任何已有的静态 `AccessKeyID`、`SecretAccessKey`、`SecurityToken` 和 `CredRef` 会作为休眠字段继续保留在磁盘上。SSO provider 不会使用它们，且 provider 路径是失败关闭的，但这些休眠值仍然存在于配置文件中。
+`configure sso` 可以创建或更新 profile，并把它绑定到 SSO Session。它会把鉴权模式切换为 `sso`，只修补显式提供的 TLS Region/Endpoint，并保留 timeout 和休眠身份字段。绑定同时清除 Console Login 绑定并重置旧的 STS 过期元数据。
 
 交互选择账号和角色：
 
 ```bash
 volclog configure sso \
   --profile sso-dev \
-  --sso-session corp
+  --sso-session corp \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
 ```
 
 账号和角色已经明确时：
@@ -490,12 +481,12 @@ volclog configure sso \
 volclog configure use sso-dev
 ```
 
-如果该 profile 还没有 TLS Region 或 Endpoint，验证和业务命令应显式提供：
+如果登录时省略了 TLS Region 或 Endpoint，可以在不改变 SSO 绑定的情况下补充：
 
 ```bash
-VOLCENGINE_REGION=cn-beijing \
-VOLCENGINE_ENDPOINT=https://tls-cn-beijing.volces.com \
-volclog --profile sso-dev doctor --online
+volclog configure set --profile sso-dev \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
 ```
 
 ### 6.5 使用和验证

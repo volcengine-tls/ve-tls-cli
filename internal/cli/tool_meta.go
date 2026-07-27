@@ -1088,14 +1088,14 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 			"description":    "Target region for the TLS OpenAPI endpoint.",
 			"when_to_use":    "Set this to choose a region explicitly or override defaults.",
 			"default":        "resolved from profile or environment",
-			"runtime_effect": "Runtime derives service endpoint and request signing region from this value.",
+			"runtime_effect": "Runtime uses this value as the request signing region. Endpoint remains independently explicit.",
 		},
 		"endpoint": {
 			"type":           "string",
 			"description":    "Explicit TLS OpenAPI endpoint URL.",
-			"when_to_use":    "Set this when you must override endpoint resolution.",
-			"default":        "derived from region",
-			"runtime_effect": "Runtime sends requests to this endpoint instead of auto-derived endpoint.",
+			"when_to_use":    "Set this to choose the TLS service address explicitly.",
+			"default":        "resolved from explicit runtime configuration",
+			"runtime_effect": "Runtime sends requests to this endpoint; it is never derived from region.",
 		},
 		"trace": {
 			"description":    "Trace configuration for request/response diagnostics.",

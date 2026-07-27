@@ -60,6 +60,8 @@ func runDoctor(ctx *Context, args []string) (any, int, error) {
 
 	envRegion := strings.TrimSpace(os.Getenv("VOLCENGINE_REGION"))
 	envEndpoint := strings.TrimSpace(os.Getenv("VOLCENGINE_ENDPOINT"))
+	runtimeRegion := strings.TrimSpace(ctx.RuntimeRegion)
+	runtimeEndpoint := strings.TrimSpace(ctx.RuntimeEndpoint)
 
 	var p config.Profile
 	if pp, ok := cfg.GetProfile(profileName); ok {
@@ -74,6 +76,7 @@ func runDoctor(ctx *Context, args []string) (any, int, error) {
 	var credStatus config.CredentialStatus
 	var dynStatus authStatus
 	var dynReader authStatusReader
+	staticUsesEnvIdentity := false
 	if isDynamic {
 		credStatus = config.CredentialStatus{Mode: mode, Source: "profile"}
 		if reader, rerr := dynamicAuthStatusReader(mode, cfgPath, profileName, cfg, ctx.authFactory); rerr == nil && reader != nil {
@@ -88,6 +91,7 @@ func runDoctor(ctx *Context, args []string) (any, int, error) {
 		credStatus = profileCredStatus
 		if envCredStatus := config.ResolveEnvCredentialStatus(); envCredStatus.Present {
 			credStatus = envCredStatus
+			staticUsesEnvIdentity = true
 		}
 	}
 	credMode := credStatus.Mode
@@ -100,38 +104,26 @@ func runDoctor(ctx *Context, args []string) (any, int, error) {
 	// modes and used in the offline exit gate.
 	sourceReady := false
 
-	region := ""
-	regionSource := ""
-	if envRegion != "" {
-		region = envRegion
-		regionSource = "env"
-	} else if strings.TrimSpace(p.Region) != "" {
-		region = strings.TrimSpace(p.Region)
-		regionSource = "profile"
-	} else if strings.TrimSpace(projectCfg.Region) != "" {
-		region = strings.TrimSpace(projectCfg.Region)
-		regionSource = "project"
-	}
-
-	endpoint := ""
-	endpointSource := ""
-	if envEndpoint != "" {
-		endpoint = envEndpoint
-		endpointSource = "env"
-	} else if strings.TrimSpace(p.Endpoint) != "" {
-		endpoint = strings.TrimSpace(p.Endpoint)
-		endpointSource = "profile"
-	} else if strings.TrimSpace(projectCfg.Endpoint) != "" {
-		endpoint = strings.TrimSpace(projectCfg.Endpoint)
-		endpointSource = "project"
-	} else if region != "" {
-		endpoint = config.DefaultEndpointForRegion(region)
-		endpointSource = "derived"
-	}
+	region, regionSource := resolveDoctorRuntimeValue(
+		runtimeRegion,
+		envRegion,
+		p.Region,
+		projectCfg.Region,
+		isDynamic,
+		staticUsesEnvIdentity,
+	)
+	endpoint, endpointSource := resolveDoctorRuntimeValue(
+		runtimeEndpoint,
+		envEndpoint,
+		p.Endpoint,
+		projectCfg.Endpoint,
+		isDynamic,
+		staticUsesEnvIdentity,
+	)
 
 	timeoutSeconds := 0
 	timeoutSource := ""
-	if p.TimeoutSeconds > 0 {
+	if !staticUsesEnvIdentity && p.TimeoutSeconds > 0 {
 		timeoutSeconds = p.TimeoutSeconds
 		timeoutSource = "profile"
 	} else if projectCfg.TimeoutSeconds > 0 {
@@ -442,6 +434,45 @@ func runDoctor(ctx *Context, args []string) (any, int, error) {
 		return out, 2, nil
 	}
 	return out, 0, nil
+}
+
+// resolveDoctorRuntimeValue mirrors request-time runtime selection. Dynamic
+// providers use environment runtime overrides independently of their identity.
+// Static auth uses environment runtime values only when a complete environment
+// AK/SK pair selected the environment identity; otherwise it stays on the
+// profile. Explicit command flags always win.
+func resolveDoctorRuntimeValue(flagValue, envValue, profileValue, projectValue string, isDynamic, staticUsesEnvIdentity bool) (string, string) {
+	if value := strings.TrimSpace(flagValue); value != "" {
+		return value, "flag"
+	}
+	if isDynamic {
+		if value := strings.TrimSpace(envValue); value != "" {
+			return value, "env"
+		}
+		if value := strings.TrimSpace(profileValue); value != "" {
+			return value, "profile"
+		}
+		if value := strings.TrimSpace(projectValue); value != "" {
+			return value, "project"
+		}
+		return "", ""
+	}
+	if staticUsesEnvIdentity {
+		if value := strings.TrimSpace(envValue); value != "" {
+			return value, "env"
+		}
+		if value := strings.TrimSpace(projectValue); value != "" {
+			return value, "project"
+		}
+		return "", ""
+	}
+	if value := strings.TrimSpace(profileValue); value != "" {
+		return value, "profile"
+	}
+	if value := strings.TrimSpace(projectValue); value != "" {
+		return value, "project"
+	}
+	return "", ""
 }
 
 func parseHTTPDate(s string) (time.Time, bool) {

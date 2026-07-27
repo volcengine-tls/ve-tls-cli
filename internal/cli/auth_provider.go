@@ -443,17 +443,18 @@ func buildDynamicClient(mode string, cfgPath string, profileName string, cfg con
 	}
 	var provider auth.Provider
 	var err error
+	providerCfg := configWithResolvedRuntimeProfile(cfg, profileName, p)
 	switch mode {
 	case config.AuthModeSSO:
-		provider, _, err = factory.SSO(cfgPath, profileName, cfg)
+		provider, _, err = factory.SSO(cfgPath, profileName, providerCfg)
 	case config.AuthModeConsoleLogin:
-		provider, _, err = factory.Console(cfgPath, profileName, cfg)
+		provider, _, err = factory.Console(cfgPath, profileName, providerCfg)
 	case config.AuthModeRamRoleARN:
-		provider, err = factory.RamRoleARN(cfgPath, profileName, cfg)
+		provider, err = factory.RamRoleARN(cfgPath, profileName, providerCfg)
 	case config.AuthModeOIDC:
-		provider, err = factory.OIDC(cfgPath, profileName, cfg)
+		provider, err = factory.OIDC(cfgPath, profileName, providerCfg)
 	case config.AuthModeECSRole:
-		provider, err = factory.ECSRole(cfgPath, profileName, cfg)
+		provider, err = factory.ECSRole(cfgPath, profileName, providerCfg)
 	default:
 		return nil, errors.New("unsupported auth mode: " + mode)
 	}
@@ -468,6 +469,21 @@ func buildDynamicClient(mode string, cfgPath string, profileName string, cfg con
 	}
 	timeout := time.Duration(p.TimeoutSeconds) * time.Second
 	return tlsapi.NewWithProvider(p.Endpoint, p.Region, &modeAwareProvider{mode: mode, p: provider}, timeout)
+}
+
+func configWithResolvedRuntimeProfile(cfg config.Config, profileName string, resolved config.Profile) config.Config {
+	profiles := make(map[string]config.Profile, len(cfg.Profiles))
+	for name, profile := range cfg.Profiles {
+		profiles[name] = profile
+	}
+	if profile, ok := profiles[profileName]; ok {
+		profile.Region = resolved.Region
+		profile.Endpoint = resolved.Endpoint
+		profile.TimeoutSeconds = resolved.TimeoutSeconds
+		profiles[profileName] = profile
+	}
+	cfg.Profiles = profiles
+	return cfg
 }
 
 // dynamicAuthError wraps an error returned by a dynamic provider's Retrieve

@@ -354,13 +354,6 @@ func TestPatchAuthFieldsPreservesLegacyAndTLSFields(t *testing.T) {
 	}
 }
 
-func TestDefaultEndpointForRegion(t *testing.T) {
-	got := DefaultEndpointForRegion("cn-beijing")
-	if got != "https://tls-cn-beijing.volces.com" {
-		t.Fatalf("unexpected endpoint: %q", got)
-	}
-}
-
 func TestEffectiveProfile_ResolveCredRefRequiresExplicitRegion(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "")

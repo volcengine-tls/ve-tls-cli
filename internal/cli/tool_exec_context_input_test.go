@@ -272,6 +272,42 @@ func TestToolExecRejectsReservedContextRuntimeKeysInFlatInput(t *testing.T) {
 	}
 }
 
+func TestToolExecRejectsReservedContextRuntimeKeysInSectionedInput(t *testing.T) {
+	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
+	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
+	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
+	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+
+	input := `{"context":{"profile":"p1","region":"cn-guilin-boe"},"body":{"TopicId":"tid-demo","Query":"*","StartTime":1,"EndTime":2}}`
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"--dry-run", "tool", "exec", "log.search", "--input", input}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("expected validation exit=1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	}
+	errObj, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", out["error"])
+	}
+	if errObj["kind"] != "validation" {
+		t.Fatalf("expected validation kind, got %#v", errObj["kind"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["message"]), "reserved context/runtime fields") {
+		t.Fatalf("unexpected error message: %#v", errObj["message"])
+	}
+	if !strings.Contains(asStringOrEmpty(errObj["hint"]), "--context") {
+		t.Fatalf("unexpected error hint: %#v", errObj["hint"])
+	}
+}
+
 func TestToolExecLogPutAcceptsObjectContentsInDryRun(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")

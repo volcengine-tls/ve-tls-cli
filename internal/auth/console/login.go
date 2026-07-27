@@ -109,10 +109,13 @@ type AuthorizerFactory func(client OAuthClient, state, codeChallenge string) Aut
 
 // LoginOptions holds the parameters for a Console Login attempt.
 type LoginOptions struct {
-	Remote      bool
+	Remote bool
+	// EndpointURL is the internal Console OAuth endpoint. It is retained for
+	// cache refresh compatibility and tests, but is not exposed as a CLI flag.
 	EndpointURL string
 	Profile     string
 	Region      string
+	Endpoint    string
 }
 
 // LoginResult is the redacted result of a successful Console Login. It never
@@ -122,6 +125,7 @@ type LoginResult struct {
 	Profile         string
 	Provider        string
 	Region          string
+	Endpoint        string
 	ExpiresAt       time.Time
 	MaskedAccessKey string
 }
@@ -245,8 +249,9 @@ func (s *LoginService) Login(ctx context.Context, opts LoginOptions) (*LoginResu
 	if region == "" {
 		region = strings.TrimSpace(profile.Region)
 	}
-	if region == "" {
-		region = "cn-beijing"
+	tlsEndpoint := strings.TrimSpace(opts.Endpoint)
+	if tlsEndpoint == "" {
+		tlsEndpoint = strings.TrimSpace(profile.Endpoint)
 	}
 
 	// 2. Generate PKCE and random state.
@@ -397,11 +402,16 @@ func (s *LoginService) Login(ctx context.Context, opts LoginOptions) (*LoginResu
 			if p.LoginSession != "" && p.LoginSession != loginSession && p.LoginSession != existingSession {
 				return errors.New("concurrent login-session replacement detected")
 			}
-			// Patch only mode, login-session, and the necessary/explicit region.
+			// Patch the auth binding plus only the TLS runtime fields explicitly
+			// supplied by the user. Omitted fields preserve the latest config
+			// values, including an intentionally unconfigured empty value.
 			p.Mode = config.AuthModeConsoleLogin
 			p.LoginSession = loginSession
-			if opts.Region != "" || p.Region == "" {
-				p.Region = region
+			if explicitRegion := strings.TrimSpace(opts.Region); explicitRegion != "" {
+				p.Region = explicitRegion
+			}
+			if explicitEndpoint := strings.TrimSpace(opts.Endpoint); explicitEndpoint != "" {
+				p.Endpoint = explicitEndpoint
 			}
 			c.PutProfile(profileName, p)
 			return nil
@@ -432,6 +442,7 @@ func (s *LoginService) Login(ctx context.Context, opts LoginOptions) (*LoginResu
 		Profile:         profileName,
 		Provider:        "console-login",
 		Region:          region,
+		Endpoint:        tlsEndpoint,
 		ExpiresAt:       expiresAt,
 		MaskedAccessKey: config.MaskAK(sts.AccessKeyID),
 	}, nil

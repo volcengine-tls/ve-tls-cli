@@ -463,6 +463,27 @@ func TestConfigureSSODoesNotChangeCurrentProfile(t *testing.T) {
 	}
 }
 
+func TestParseConfigureSSOSupportsTLSRuntimeFields(t *testing.T) {
+	got, err := parseSSOConfigureFlags([]string{
+		"--profile", "prod",
+		"--sso-session", "corp",
+		"--region", "cn-shanghai",
+		"--endpoint", "https://tls-cn-shanghai.volces.com",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := ssoConfigureOpts{
+		Profile:    "prod",
+		SSOSession: "corp",
+		Region:     "cn-shanghai",
+		Endpoint:   "https://tls-cn-shanghai.volces.com",
+	}
+	if got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}
+
 func TestConfigureSSOPreservesTLSAndDormantStaticFields(t *testing.T) {
 	cfg := testConfigWithSession()
 	cache := newFakeSSOCache()
@@ -573,6 +594,71 @@ func TestConfigureSSORegionNeverOverwritesTLSRegion(t *testing.T) {
 	got := cfgStore.cfg.Profiles["default"]
 	if got.Region != "us-east-1" {
 		t.Fatalf("TLS region was overwritten by SSO region: got %q, want us-east-1", got.Region)
+	}
+}
+
+func TestConfigureSSOPersistsExplicitTLSRuntimeFieldsSeparatelyFromSSORegion(t *testing.T) {
+	cfg := testConfigWithSession()
+	cache := newFakeSSOCache()
+	cfgStore := &fakeConfigStore{cfg: cfg, path: ""}
+	df := &fakeSSODeviceFlow{token: testTokenCache()}
+	bs := &fakeSSOBindingService{result: &sso.BindingResult{AccountID: "acct-1", RoleName: "role-1"}}
+	adapter := newSSOAdapterForTest(cache, cfgStore, df, bs, nil)
+
+	result, err := adapter.runConfigureSSO(context.Background(), ssoConfigureOpts{
+		Profile:    "default",
+		SSOSession: "corp",
+		Region:     "cn-shanghai",
+		Endpoint:   "https://tls-cn-shanghai.volces.com",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	p := cfgStore.cfg.Profiles["default"]
+	if p.Region != "cn-shanghai" {
+		t.Fatalf("TLS region = %q, want %q", p.Region, "cn-shanghai")
+	}
+	if p.Endpoint != "https://tls-cn-shanghai.volces.com" {
+		t.Fatalf("TLS endpoint = %q, want explicit value", p.Endpoint)
+	}
+	if result.Region != "cn-shanghai" || result.Endpoint != "https://tls-cn-shanghai.volces.com" {
+		t.Fatalf("result TLS runtime = region %q endpoint %q", result.Region, result.Endpoint)
+	}
+	if result.SSORegion != "cn-beijing" {
+		t.Fatalf("result SSO region = %q, want auth region %q", result.SSORegion, "cn-beijing")
+	}
+}
+
+func TestConfigureSSOCreatesMissingProfileWithoutInventingTLSRuntimeConfig(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SSOSessions["corp"] = testSSOSession()
+	cache := newFakeSSOCache()
+	cfgStore := &fakeConfigStore{cfg: cfg, path: ""}
+	df := &fakeSSODeviceFlow{token: testTokenCache()}
+	bs := &fakeSSOBindingService{result: &sso.BindingResult{AccountID: "acct-1", RoleName: "role-1"}}
+	adapter := newSSOAdapterForTest(cache, cfgStore, df, bs, nil)
+
+	result, err := adapter.runConfigureSSO(context.Background(), ssoConfigureOpts{
+		Profile:    "new-profile",
+		SSOSession: "corp",
+	})
+	if err != nil {
+		t.Fatalf("expected missing profile to be created, got: %v", err)
+	}
+
+	p, ok := cfgStore.cfg.GetProfile("new-profile")
+	if !ok {
+		t.Fatal("new profile was not created")
+	}
+	if p.Mode != config.AuthModeSSO || p.SSOSessionName != "corp" {
+		t.Fatalf("unexpected new profile binding: %+v", p)
+	}
+	if p.Region != "" || p.Endpoint != "" {
+		t.Fatalf("SSO auth region leaked into TLS runtime config: region=%q endpoint=%q", p.Region, p.Endpoint)
+	}
+	if result.Region != "" || result.Endpoint != "" || result.SSORegion != "cn-beijing" {
+		t.Fatalf("unexpected result regions: %+v", result)
 	}
 }
 

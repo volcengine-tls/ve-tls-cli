@@ -1602,8 +1602,9 @@ func TestConfigureSetWithoutModePreservesLegacyAKBehavior(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	t.Setenv("VOLCLOG_CONFIG", path)
 
-	// Without --mode, the legacy path must require --ak/--sk (or --cred-ref)
-	// and set the profile mode to ak exactly as before.
+	// A profile plus runtime fields only is an update, not profile creation.
+	// The missing target must fail explicitly without falling through to the
+	// legacy AK/SK creation path.
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{
 		"configure", "set",
@@ -1615,11 +1616,12 @@ func TestConfigureSetWithoutModePreservesLegacyAKBehavior(t *testing.T) {
 		t.Fatalf("expected non-zero exit without ak/sk; stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 	out := stdout.String() + stderr.String()
-	if !strings.Contains(out, "missing required fields: --ak --sk") {
-		t.Fatalf("expected legacy ak/sk required error, got: %q", out)
+	if !strings.Contains(out, "profile not found: legacy") {
+		t.Fatalf("expected missing profile error, got: %q", out)
 	}
 
-	// With ak/sk it must succeed and set mode=ak.
+	// Supplying AK/SK still selects the legacy creation path and sets mode=ak
+	// exactly as before.
 	stdout.Reset()
 	stderr.Reset()
 	code = Run([]string{
@@ -1647,6 +1649,190 @@ func TestConfigureSetWithoutModePreservesLegacyAKBehavior(t *testing.T) {
 	}
 	if p.AccessKeyID != "AKLTlegacy" || p.SecretAccessKey != "sk-legacy" {
 		t.Fatalf("ak/sk not set: %+v", p)
+	}
+}
+
+func TestConfigureSetRuntimeOnlyPatchPreservesAuthModeAndIdentity(t *testing.T) {
+	clearAuthTestEnv(t)
+	profiles := map[string]config.Profile{
+		"ak": {
+			Mode: config.AuthModeAK, AccessKeyID: "AK", SecretAccessKey: "SK", SecurityToken: "TOKEN",
+			Region: "old-region", Endpoint: "https://old.example.com", TimeoutSeconds: 10,
+		},
+		"ram": {
+			Mode: config.AuthModeRamRoleARN, AccessKeyID: "SRC-AK", SecretAccessKey: "SRC-SK",
+			AccountID: "2100000000", RoleName: "ram-role", DisableSSL: true,
+			Region: "old-region", Endpoint: "https://old.example.com", TimeoutSeconds: 10,
+		},
+		"oidc": {
+			Mode: config.AuthModeOIDC, OIDCTokenFile: "/var/run/token", RoleTRN: "trn:iam::1:role/oidc",
+			Region: "old-region", Endpoint: "https://old.example.com", TimeoutSeconds: 10,
+		},
+		"ecs": {
+			Mode: config.AuthModeECSRole, RoleName: "ecs-role",
+			Region: "old-region", Endpoint: "https://old.example.com", TimeoutSeconds: 10,
+		},
+		"sso": {
+			Mode: config.AuthModeSSO, SSOSessionName: "corp", AccountID: "1", RoleName: "sso-role",
+			Region: "old-region", Endpoint: "https://old.example.com", TimeoutSeconds: 10,
+		},
+		"console": {
+			Mode: config.AuthModeConsoleLogin, LoginSession: "login-session",
+			Region: "old-region", Endpoint: "https://old.example.com", TimeoutSeconds: 10,
+		},
+	}
+
+	for name, before := range profiles {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			t.Setenv("VOLCLOG_CONFIG", path)
+			cfg := config.DefaultConfig()
+			cfg.PutProfile(name, before)
+			if err := config.Save(cfg, path); err != nil {
+				t.Fatalf("save config: %v", err)
+			}
+
+			var stdout, stderr bytes.Buffer
+			code := Run([]string{
+				"configure", "set", "--profile", name,
+				"--region", "new-region",
+				"--endpoint", "https://new.example.com",
+				"--timeout-seconds", "45",
+			}, &stdout, &stderr)
+			if code != 0 {
+				t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+			}
+
+			loaded, _, err := config.Load()
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			got, ok := loaded.GetProfile(name)
+			if !ok {
+				t.Fatal("profile not found")
+			}
+			want := before
+			want.Region = "new-region"
+			want.Endpoint = "https://new.example.com"
+			want.TimeoutSeconds = 45
+			if got != want {
+				t.Fatalf("runtime-only patch changed auth fields:\ngot:  %+v\nwant: %+v", got, want)
+			}
+		})
+	}
+}
+
+func TestConfigureSetRuntimeOnlyPatchIsPartialAndIgnoresEnvironment(t *testing.T) {
+	clearAuthTestEnv(t)
+	t.Setenv("VOLCENGINE_REGION", "env-region")
+	t.Setenv("VOLCENGINE_ENDPOINT", "https://env.example.com")
+
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("VOLCLOG_CONFIG", path)
+	cfg := config.DefaultConfig()
+	before := config.Profile{
+		Mode: config.AuthModeConsoleLogin, LoginSession: "session",
+		Region: "old-region", Endpoint: "https://old.example.com", TimeoutSeconds: 30,
+	}
+	cfg.PutProfile("console", before)
+	if err := config.Save(cfg, path); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"configure", "set", "--profile", "console",
+		"--endpoint", "https://explicit.example.com",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+
+	loaded, _, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	got, _ := loaded.GetProfile("console")
+	want := before
+	want.Endpoint = "https://explicit.example.com"
+	if got != want {
+		t.Fatalf("partial patch persisted unrelated values:\ngot:  %+v\nwant: %+v", got, want)
+	}
+}
+
+func TestConfigureSetRuntimeOnlyPatchRejectsMissingProfile(t *testing.T) {
+	clearAuthTestEnv(t)
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("VOLCLOG_CONFIG", path)
+	if err := config.Save(config.DefaultConfig(), path); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"configure", "set", "--profile", "missing",
+		"--region", "cn-beijing",
+	}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected missing profile failure; stdout=%q", stdout.String())
+	}
+	if out := stdout.String() + stderr.String(); !strings.Contains(out, "profile not found: missing") {
+		t.Fatalf("unexpected error: %q", out)
+	}
+
+	loaded, _, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if _, ok := loaded.GetProfile("missing"); ok {
+		t.Fatal("runtime-only patch created a missing profile")
+	}
+}
+
+func TestValidateWorkloadProfileDefersRuntimeFields(t *testing.T) {
+	tests := []struct {
+		name    string
+		mode    string
+		profile config.Profile
+	}{
+		{
+			name: "ak",
+			mode: config.AuthModeAK,
+			profile: config.Profile{
+				AccessKeyID: "AK", SecretAccessKey: "SK",
+			},
+		},
+		{
+			name: "ram_role",
+			mode: config.AuthModeRamRoleARN,
+			profile: config.Profile{
+				AccessKeyID: "AK", SecretAccessKey: "SK",
+				AccountID: "2100000000", RoleName: "TLSReadOnly",
+			},
+		},
+		{
+			name: "oidc",
+			mode: config.AuthModeOIDC,
+			profile: config.Profile{
+				OIDCTokenFile: "/var/run/token",
+				RoleTRN:       "trn:iam::2100000000:role/TLSReadOnly",
+			},
+		},
+		{
+			name: "ecs_role",
+			mode: config.AuthModeECSRole,
+			profile: config.Profile{
+				RoleName: "TLSReadOnly",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := validateWorkloadProfile(tc.profile, tc.mode); err != nil {
+				t.Fatalf("runtime fields must resolve at execution time: %v", err)
+			}
+		})
 	}
 }
 

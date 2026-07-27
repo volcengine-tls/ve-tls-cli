@@ -25,6 +25,8 @@ type Context struct {
 	OutputDir          string
 	OutputFile         string
 	Profile            string
+	RuntimeRegion      string
+	RuntimeEndpoint    string
 	GlobalSecretsFile  string
 	Filter             string
 	TraceDir           string
@@ -102,11 +104,11 @@ func (c *Context) ResolveProfile() error {
 	// forceStaticAuth (set by --secrets-file) always uses the legacy static path,
 	// even if the selected profile declares a dynamic mode.
 	if c.forceStaticAuth {
-		p, err := config.EffectiveProfile(c.cfg, c.Profile, c.defaults)
+		p, err := config.EffectiveProfile(c.cfg, c.Profile, c.staticProfileDefaults())
 		if err != nil {
 			return err
 		}
-		c.profile = p
+		c.profile = applyRuntimeOverrides(p, c.RuntimeRegion, c.RuntimeEndpoint)
 		c.profileResolved = true
 		return nil
 	}
@@ -118,11 +120,11 @@ func (c *Context) ResolveProfile() error {
 		// No matching profile. Delegate to EffectiveProfile, which may still
 		// succeed via environment AK/SK for the static path or return a clear
 		// "profile not found" error.
-		ep, err := config.EffectiveProfile(c.cfg, c.Profile, c.defaults)
+		ep, err := config.EffectiveProfile(c.cfg, c.Profile, c.staticProfileDefaults())
 		if err != nil {
 			return err
 		}
-		c.profile = ep
+		c.profile = applyRuntimeOverrides(ep, c.RuntimeRegion, c.RuntimeEndpoint)
 		c.profileResolved = true
 		return nil
 	}
@@ -133,11 +135,11 @@ func (c *Context) ResolveProfile() error {
 	if mode == config.AuthModeAK {
 		// Static mode: unchanged behavior, full delegation to EffectiveProfile
 		// (env AK/SK precedence, cred-ref, project defaults, timeout).
-		ep, err := config.EffectiveProfile(c.cfg, c.Profile, c.defaults)
+		ep, err := config.EffectiveProfile(c.cfg, c.Profile, c.staticProfileDefaults())
 		if err != nil {
 			return err
 		}
-		c.profile = ep
+		c.profile = applyRuntimeOverrides(ep, c.RuntimeRegion, c.RuntimeEndpoint)
 		c.profileResolved = true
 		return nil
 	}
@@ -149,9 +151,34 @@ func (c *Context) ResolveProfile() error {
 	// environment AK/SK and apply the fixed runtime settings precedence.
 	// Provider construction is deferred to Client() so failures fail closed at
 	// request time.
-	c.profile = resolveDynamicRuntimeSettings(p, c.defaults)
+	c.profile = applyRuntimeOverrides(
+		resolveDynamicRuntimeSettings(p, c.defaults),
+		c.RuntimeRegion,
+		c.RuntimeEndpoint,
+	)
 	c.profileResolved = true
 	return nil
+}
+
+func (c *Context) staticProfileDefaults() config.ProfileDefaults {
+	defaults := c.defaults
+	if region := strings.TrimSpace(c.RuntimeRegion); region != "" {
+		defaults.Region = region
+	}
+	if endpoint := strings.TrimSpace(c.RuntimeEndpoint); endpoint != "" {
+		defaults.Endpoint = endpoint
+	}
+	return defaults
+}
+
+func applyRuntimeOverrides(p config.Profile, region, endpoint string) config.Profile {
+	if region = strings.TrimSpace(region); region != "" {
+		p.Region = region
+	}
+	if endpoint = strings.TrimSpace(endpoint); endpoint != "" {
+		p.Endpoint = endpoint
+	}
+	return p
 }
 
 func (c *Context) SetProfileDefaults(d config.ProfileDefaults) {

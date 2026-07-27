@@ -155,7 +155,7 @@ The identity selectors are: global `--profile`, global `--secrets-file`, `contex
 
 A conflict fails with `conflicting runtime selectors` (or `conflicting profile selectors` when two different profile names are supplied).
 
-There are no global CLI `--region` or `--endpoint` flags. `context.region` and `context.endpoint` are per-execution fallback defaults (not identity selectors) available only through `tool`/`workflow` context; they take precedence over project defaults but do not override a non-empty selected-profile value or a dynamic environment value. The full region/endpoint/timeout precedence is detailed in [Configuration](3-Configuration.md).
+Global `--region` and `--endpoint` flags provide explicit one-command overrides and are never persisted. `context.region` and `context.endpoint` remain fallback defaults available only through `tool`/`workflow` context. The full region/endpoint/timeout precedence is detailed in [Configuration](3-Configuration.md).
 
 ### 6.2 `--dry-run` and context dry-run
 

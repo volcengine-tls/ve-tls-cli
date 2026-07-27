@@ -63,6 +63,12 @@ func TestSSOLoginByProfileAndSession(t *testing.T) {
 	if res.Profile != "default" {
 		t.Fatalf("expected profile default, got %q", res.Profile)
 	}
+	if res.Region != "cn-beijing" || res.Endpoint != "https://tls-cn-beijing.volces.com" {
+		t.Fatalf("unexpected profile TLS runtime: region=%q endpoint=%q", res.Region, res.Endpoint)
+	}
+	if res.SSORegion != "cn-beijing" {
+		t.Fatalf("unexpected SSO region: %q", res.SSORegion)
+	}
 
 	// Login by session
 	cfg2 := testConfigWithSession()
@@ -79,6 +85,12 @@ func TestSSOLoginByProfileAndSession(t *testing.T) {
 	}
 	if res2.Profile != "" {
 		t.Fatalf("expected empty profile for session login, got %q", res2.Profile)
+	}
+	if res2.Region != "" || res2.Endpoint != "" {
+		t.Fatalf("session-only login should not invent TLS runtime: %+v", res2)
+	}
+	if res2.SSORegion != "cn-beijing" {
+		t.Fatalf("unexpected SSO region: %q", res2.SSORegion)
 	}
 }
 
