@@ -225,7 +225,7 @@ func TestToolExecAllowsFlatQueryInputWithoutSectionWrapper(t *testing.T) {
 		t.Fatalf("unexpected preview query: %#v", query)
 	}
 	body, _ := preview["body"].(map[string]any)
-	if body != nil && len(body) != 0 {
+	if len(body) != 0 {
 		t.Fatalf("expected empty body for GET flat query input, got %#v", body)
 	}
 	if strings.TrimSpace(stderr.String()) != "" {

@@ -1,0 +1,262 @@
+{
+  "project_create_resolved_region": {
+    "action": "project.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "Description": "created by baseline",
+          "ProjectName": "baseline-project",
+          "Region": "cn-beijing"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateProject",
+        "query": {}
+      }
+    }
+  },
+  "project_delete": {
+    "action": "project.delete",
+    "data": {
+      "request_preview": {
+        "body": {
+          "ProjectId": "project-delete-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "DELETE",
+        "path": "/DeleteProject",
+        "query": {}
+      }
+    }
+  },
+  "project_get": {
+    "action": "project.get",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeProject",
+        "query": {
+          "ProjectId": "project-get-id",
+          "TopicTypes": "log"
+        }
+      }
+    }
+  },
+  "project_list_common_query_flags": {
+    "action": "project.list",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeProjects",
+        "query": {
+          "Description": "baseline description",
+          "Favourite": "true",
+          "FuzzySearchKey": "baseline",
+          "IamProjectName": "iam-baseline",
+          "IsFullName": "true",
+          "PageNumber": "3",
+          "PageSize": "25",
+          "ProjectId": "project-list-id",
+          "ProjectName": "baseline-project",
+          "Tags": "[{\"Key\":\"env\",\"Value\":\"test\"}]",
+          "TopicTypes": "log,metric"
+        }
+      }
+    }
+  },
+  "project_modify": {
+    "action": "project.modify",
+    "data": {
+      "request_preview": {
+        "body": {
+          "Description": "modified by baseline",
+          "Favourite": true,
+          "ProjectId": "project-modify-id",
+          "ProjectName": "renamed-project"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "PUT",
+        "path": "/ModifyProject",
+        "query": {}
+      }
+    }
+  },
+  "topic_create_defaults": {
+    "action": "topic.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "ProjectId": "topic-create-project-id",
+          "ShardCount": 2,
+          "TopicName": "baseline-topic",
+          "Ttl": 30
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateTopic",
+        "query": {}
+      }
+    }
+  },
+  "topic_create_flags_override_request": {
+    "action": "topic.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "Description": "flag-description",
+          "EnableTracking": false,
+          "ProjectId": "flag-project",
+          "ShardCount": 8,
+          "TopicName": "flag-topic",
+          "Ttl": 60
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateTopic",
+        "query": {}
+      }
+    }
+  },
+  "topic_delete": {
+    "action": "topic.delete",
+    "data": {
+      "request_preview": {
+        "body": {
+          "TopicId": "topic-delete-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "DELETE",
+        "path": "/DeleteTopic",
+        "query": {}
+      }
+    }
+  },
+  "topic_get": {
+    "action": "topic.get",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeTopic",
+        "query": {
+          "TopicId": "topic-get-id"
+        }
+      }
+    }
+  },
+  "topic_list": {
+    "action": "topic.list",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeTopics",
+        "query": {
+          "Cursor": "cursor-1",
+          "Description": "topic description",
+          "Favourite": "true",
+          "FuzzySearchKey": "topic",
+          "IsFullName": "false",
+          "OrderByProject": "true",
+          "PageNumber": "4",
+          "PageSize": "50",
+          "ProjectId": "topic-list-project-id",
+          "Region": "cn-beijing",
+          "Tags": "[{\"Key\":\"tier\",\"Value\":\"baseline\"}]",
+          "TopicName": "baseline-topic"
+        }
+      }
+    }
+  },
+  "topic_modify_boolean_explicit_false": {
+    "action": "topic.modify",
+    "data": {
+      "request_preview": {
+        "body": {
+          "AutoSplit": false,
+          "TopicId": "topic-modify-false-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "PUT",
+        "path": "/ModifyTopic",
+        "query": {}
+      }
+    }
+  },
+  "topic_modify_boolean_explicit_true": {
+    "action": "topic.modify",
+    "data": {
+      "request_preview": {
+        "body": {
+          "AutoSplit": true,
+          "MaxSplitShard": 16,
+          "TopicId": "topic-modify-true-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "PUT",
+        "path": "/ModifyTopic",
+        "query": {}
+      }
+    }
+  },
+  "topic_modify_boolean_unset": {
+    "action": "topic.modify",
+    "data": {
+      "request_preview": {
+        "body": {
+          "Description": "boolean remains absent",
+          "TopicId": "topic-modify-unset-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "PUT",
+        "path": "/ModifyTopic",
+        "query": {}
+      }
+    }
+  }
+}

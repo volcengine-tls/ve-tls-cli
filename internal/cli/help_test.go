@@ -4,6 +4,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -391,20 +392,70 @@ func TestShortcutSubcommandHelpPrioritizesToolWorkflowNext(t *testing.T) {
 	}
 }
 
-func TestPublicV1DoesNotExposeAssistantOrMetricTopicProm(t *testing.T) {
+func TestPublicV1DoesNotExposeAssistant(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"assistant", "describe-session-answer"}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for hidden public entry, stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestMetricTopicPromRemainsUnavailable(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"metric-topic", "prom", "query", "--topic-id", "t", "--query", "up"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit=%d, want 1; stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr=%q, want empty", stderr.String())
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("stdout should be a structured failure envelope: %v stdout=%q", err, stdout.String())
+	}
+	errValue, _ := envelope["error"].(map[string]any)
+	if got, _ := errValue["message"].(string); got != "unknown metric-topic command: prom" {
+		t.Fatalf("error.message=%q, want exact unknown-command error; stdout=%q", got, stdout.String())
+	}
+	if got, _ := envelope["status"].(string); got != "failed" {
+		t.Fatalf("status=%q, want failed; stdout=%q", got, stdout.String())
+	}
+}
+
+func TestPublicV1DoesNotExposeUnroutedHostGroupOrCollectorCommands(t *testing.T) {
 	cases := []struct {
-		name string
-		args []string
+		name        string
+		args        []string
+		wantMessage string
 	}{
-		{name: "assistant group", args: []string{"assistant", "describe-session-answer"}},
-		{name: "metric-topic prom", args: []string{"metric-topic", "prom", "query", "--topic-id", "t", "--query", "up"}},
+		{name: "host group bind rules", args: []string{"host-group", "bind-rules"}, wantMessage: "unknown host-group command: bind-rules"},
+		{name: "host group unbind rules", args: []string{"host-group", "unbind-rules"}, wantMessage: "unknown host-group command: unbind-rules"},
+		{name: "host group delete host", args: []string{"host-group", "delete-host"}, wantMessage: "unknown host-group command: delete-host"},
+		{name: "collector bind host groups", args: []string{"collector", "bind-host-groups"}, wantMessage: "unknown collector command: bind-host-groups"},
+		{name: "collector unbind host groups", args: []string{"collector", "unbind-host-groups"}, wantMessage: "unknown collector command: unbind-host-groups"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			code := Run(tc.args, &stdout, &stderr)
-			if code == 0 {
-				t.Fatalf("expected non-zero exit for hidden public entry, stdout=%q stderr=%q", stdout.String(), stderr.String())
+			if code != 1 {
+				t.Fatalf("exit=%d, want 1; stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("stdout=%q, want empty", stdout.String())
+			}
+			var payload struct {
+				ErrorCode    string `json:"errorCode"`
+				ErrorMessage string `json:"errorMessage"`
+			}
+			if err := json.Unmarshal(stderr.Bytes(), &payload); err != nil {
+				t.Fatalf("stderr should be CLIError JSON: %v stderr=%q", err, stderr.String())
+			}
+			if payload.ErrorCode != "CLIError" {
+				t.Fatalf("errorCode=%q, want CLIError; stderr=%q", payload.ErrorCode, stderr.String())
+			}
+			if payload.ErrorMessage != tc.wantMessage {
+				t.Fatalf("errorMessage=%q, want %q; stderr=%q", payload.ErrorMessage, tc.wantMessage, stderr.String())
 			}
 		})
 	}

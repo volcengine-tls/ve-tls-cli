@@ -511,7 +511,7 @@ func TestProviderNilAndTypedNilSafety(t *testing.T) {
 		if err != nil {
 			t.Fatalf("New: %v", err)
 		}
-		//nolint:staticcheck
+		//lint:ignore SA1012 verifies Retrieve rejects a nil context
 		_, err = p.Retrieve(nil)
 		if err == nil {
 			t.Fatal("expected error for nil context")

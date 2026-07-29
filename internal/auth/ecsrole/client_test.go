@@ -556,7 +556,7 @@ func TestClientNilReceiverAndContextSafety(t *testing.T) {
 	})
 	t.Run("nil context", func(t *testing.T) {
 		c := newTestClient("http://127.0.0.1:1")
-		//nolint:staticcheck
+		//lint:ignore SA1012 verifies FetchCredentials rejects a nil context
 		_, err := c.FetchCredentials(nil, "r")
 		if err == nil {
 			t.Fatal("expected error for nil context")

@@ -4,7 +4,6 @@ package cli
 
 import (
 	"errors"
-	"sort"
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
@@ -228,31 +227,6 @@ func describeShortcutOutput(spec shortcutCommandSpec) (string, error) {
 	return string(b), nil
 }
 
-func rejectLegacyShortcutMeta(group, command string, args []string) error {
-	flag, ok := shortcutLegacyMetaFlag(args)
-	if !ok {
-		return nil
-	}
-	return removedLegacyCommandError(
-		strings.TrimSpace(group)+" "+strings.TrimSpace(command)+" "+flag,
-		legacyShortcutMetaHint(group, command),
-	)
-}
-
-func shortcutLegacyMetaFlag(args []string) (string, bool) {
-	for _, arg := range args {
-		switch {
-		case arg == "--describe":
-			return "--describe", true
-		case arg == "--print-request-template":
-			return "--print-request-template", true
-		case strings.HasPrefix(arg, "--print-request-template="):
-			return strings.TrimSpace(arg), true
-		}
-	}
-	return "", false
-}
-
 func shortcutRequestBodyMeta(spec shortcutCommandSpec) (*apiDescribeRequestBody, error) {
 	if strings.TrimSpace(spec.APIGroup) == "" || strings.TrimSpace(spec.APIAction) == "" {
 		return nil, nil
@@ -363,28 +337,6 @@ func shortcutRequestTemplateOutput(spec shortcutCommandSpec, mode string) (strin
 		return "", err
 	}
 	return string(b), nil
-}
-
-func legacyShortcutMetaHint(group, command string) string {
-	group = strings.TrimSpace(group)
-	command = strings.TrimSpace(command)
-	if wf, err := resolveWorkflowByIdentity(group, command); err == nil {
-		return "use 'volclog workflow describe " + strings.TrimSpace(wf.ID) + "' for workflow contract or run 'volclog " + group + " " + command + " -h'"
-	}
-	spec, ok := lookupShortcutSpec(group, command)
-	if !ok {
-		return "use 'volclog " + group + " " + command + " -h' for shortcut usage"
-	}
-	action := toolIdentityAction(spec.Action)
-	if action != "" {
-		if _, ok := loadToolByIdentity(spec.Group, action); ok {
-			return "use 'volclog tool describe " + strings.TrimSpace(spec.Action) + "' for public API contract or run 'volclog " + group + " " + command + " -h'"
-		}
-	}
-	if strings.TrimSpace(spec.APIGroup) != "" {
-		return "shortcut metadata flags were removed; use 'volclog tool list " + strings.TrimSpace(spec.APIGroup) + "' for public API discovery or run 'volclog " + group + " " + command + " -h'"
-	}
-	return "shortcut metadata flags were removed; run 'volclog " + group + " " + command + " -h'"
 }
 
 func lookupShortcutSpec(group, command string) (shortcutCommandSpec, bool) {
@@ -678,9 +630,8 @@ func shortcutSpecs() map[string]shortcutCommandSpec {
 				flagParam("AutoSplit", "--auto-split", "body", false, "boolean", "开启自动分裂"),
 				flagParam("request", "--request", "body", false, "json", "完整请求 JSON"),
 			},
-			APIGroup:         "metric-topic",
-			APIAction:        "CreateMetricTopic",
-			SupportsTemplate: true,
+			APIGroup:  "metric-topic",
+			APIAction: "CreateMetricTopic",
 		},
 		{
 			Group:         "metric-topic",
@@ -700,9 +651,8 @@ func shortcutSpecs() map[string]shortcutCommandSpec {
 				flagParam("AutoSplit", "--auto-split/--no-auto-split", "body", false, "boolean", "设置自动分裂"),
 				flagParam("request", "--request", "body", false, "json", "完整请求 JSON"),
 			},
-			APIGroup:         "metric-topic",
-			APIAction:        "ModifyMetricTopic",
-			SupportsTemplate: true,
+			APIGroup:  "metric-topic",
+			APIAction: "ModifyMetricTopic",
 		},
 		{
 			Group:         "metric-topic",
@@ -1219,18 +1169,5 @@ func shortcutSpecs() map[string]shortcutCommandSpec {
 	for _, spec := range specs {
 		out[normalizeToken(spec.Group)+"\x00"+normalizeToken(spec.Command)] = spec
 	}
-	return out
-}
-
-func sortedShortcutGroupsWithMeta() []string {
-	groups := map[string]struct{}{}
-	for _, spec := range shortcutSpecs() {
-		groups[spec.Group] = struct{}{}
-	}
-	out := make([]string, 0, len(groups))
-	for g := range groups {
-		out = append(out, g)
-	}
-	sort.Strings(out)
 	return out
 }

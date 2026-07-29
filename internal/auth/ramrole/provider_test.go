@@ -662,7 +662,7 @@ func TestRetrieveWithNilContextReturnsError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	//nolint:staticcheck // intentionally passing nil context to test fail-closed
+	//lint:ignore SA1012 verifies Retrieve fails closed for a nil context
 	_, err = p.Retrieve(nil)
 	if err == nil {
 		t.Fatal("expected error for nil context, got nil")
@@ -766,8 +766,6 @@ func (c *clockAdvancingSTSClient) AssumeRole(ctx context.Context, _ sts.AssumeRo
 	c.clock.Advance(c.advance)
 	return c.creds, nil
 }
-
-func (c *clockAdvancingSTSClient) callCount() int32 { return atomic.LoadInt32(&c.calls) }
 
 func TestClockReReadAfterResponseRejectsShortTTL(t *testing.T) {
 	start := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)

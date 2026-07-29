@@ -113,26 +113,6 @@ Exit Code:
 `)
 }
 
-func usageAPI() string {
-	return u(`Usage:
-  tlsctl api <legacy surface removed>
-
-Notes:
-  - This legacy surface is no longer routed from the main CLI entry.
-  - Use tlsctl tool ... / tlsctl raw ... instead.
-`)
-}
-
-func usageAPICall() string {
-	return u(`Usage:
-  tlsctl api call <legacy surface removed>
-
-Notes:
-  - This legacy surface is no longer routed from the main CLI entry.
-  - Use tlsctl raw --method <METHOD> --path <PATH> instead.
-`)
-}
-
 func usageRaw() string {
 	return u(`Usage:
   tlsctl raw --method <GET|POST|PUT|DELETE> --path <path> [--query k=v] [--header k=v] [--body <json|file://...|->|--input <json|file://...|->] [--request-format <json|jsonl>]

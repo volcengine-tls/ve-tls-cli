@@ -101,25 +101,3 @@ func cliGlobalFlags() []string {
 	}
 	return flags
 }
-
-func cliGlobalFlagsWithValue() []string {
-	specs := cliGlobalFlagSpecs()
-	flags := make([]string, 0, len(specs))
-	for _, spec := range specs {
-		if spec.TakesValue {
-			flags = append(flags, spec.Name)
-		}
-	}
-	return flags
-}
-
-func cliGlobalBareFlags() []string {
-	specs := cliGlobalFlagSpecs()
-	flags := make([]string, 0, len(specs))
-	for _, spec := range specs {
-		if !spec.TakesValue {
-			flags = append(flags, spec.Name)
-		}
-	}
-	return flags
-}

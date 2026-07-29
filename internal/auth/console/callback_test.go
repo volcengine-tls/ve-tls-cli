@@ -441,15 +441,6 @@ type fakeUDPAddr struct{}
 func (f fakeUDPAddr) Network() string { return "udp" }
 func (f fakeUDPAddr) String() string  { return "127.0.0.1:0" }
 
-// fakeListenerTypedNil is used to return a typed-nil net.Listener from a
-// factory: the interface is non-nil (it carries type *fakeListenerTypedNil)
-// but the pointer value is nil. Calling any method on it would panic.
-type fakeListenerTypedNil struct{}
-
-func (f *fakeListenerTypedNil) Accept() (net.Conn, error) { return nil, errors.New("not serving") }
-func (f *fakeListenerTypedNil) Close() error              { return nil }
-func (f *fakeListenerTypedNil) Addr() net.Addr            { return nil }
-
 func TestCallbackServerTypedNilListenerReturnsError(t *testing.T) {
 	// A factory returning a typed-nil listener (non-nil interface wrapping a
 	// nil pointer) must return an error, never panic. *net.TCPListener is
@@ -790,6 +781,7 @@ func TestCallbackShutdownNilContextReturnsError(t *testing.T) {
 		server:   &http.Server{},
 	}
 	// Shutdown(nil) must return an explicit error and never panic.
+	//lint:ignore SA1012 verifies Shutdown rejects a nil context without panicking
 	err := cs.Shutdown(nil)
 	if err == nil {
 		t.Fatal("expected error for nil context, got nil")

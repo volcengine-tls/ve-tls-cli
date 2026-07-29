@@ -10,19 +10,6 @@ import (
 
 const pageAllDefaultPageSize = 100
 
-func extractBoolFlag(args []string, flag string) ([]string, bool) {
-	out := make([]string, 0, len(args))
-	found := false
-	for _, arg := range args {
-		if arg == flag {
-			found = true
-			continue
-		}
-		out = append(out, arg)
-	}
-	return out, found
-}
-
 func listAllByPageNumber(ctx *Context, path string, baseQuery map[string]string, listField string) (map[string]any, error) {
 	query, pageSize, err := preparePageAllPageNumberQuery(baseQuery)
 	if err != nil {

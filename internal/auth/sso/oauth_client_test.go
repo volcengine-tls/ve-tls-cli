@@ -637,9 +637,11 @@ func TestOAuthNilReceiverAndContext(t *testing.T) {
 		return newResponse(http.StatusOK, `{}`, nil), nil
 	}), 1)
 
+	//lint:ignore SA1012 verifies RegisterClient rejects a nil context
 	if _, err := client.RegisterClient(nil, &RegisterClientRequest{ClientName: "n", ClientType: "public"}); err == nil {
 		t.Fatal("expected error for nil context")
 	}
+	//lint:ignore SA1012 verifies CreateToken rejects a nil context
 	if _, err := client.CreateToken(nil, &CreateTokenRequest{GrantType: GrantTypeDeviceCode, ClientID: "c", ClientSecret: "s", DeviceCode: "d"}); err == nil {
 		t.Fatal("expected error for nil context")
 	}

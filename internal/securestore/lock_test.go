@@ -143,7 +143,7 @@ func TestWithLockWaitCanBeCanceled(t *testing.T) {
 func TestWithLockReturnsCallbackError(t *testing.T) {
 	store := New(t.TempDir())
 	sentinel := errors.New("callback failed")
-	err := store.WithLock(nil, "sso", "key", func() error {
+	err := store.WithLock(context.Background(), "sso", "key", func() error {
 		return sentinel
 	})
 	if !errors.Is(err, sentinel) {
@@ -351,6 +351,7 @@ func TestWithLockContentionObserver(t *testing.T) {
 	})
 
 	t.Run("nil context follows existing behavior", func(t *testing.T) {
+		//lint:ignore SA1012 verifies the observer helper preserves nil-context fallback behavior
 		ctx := WithLockContentionObserver(nil, func() {})
 		if ctx == nil {
 			t.Fatal("WithLockContentionObserver(nil, ...) returned nil context")

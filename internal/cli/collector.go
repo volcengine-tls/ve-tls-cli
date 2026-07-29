@@ -198,30 +198,6 @@ func collectorDelete(ctx *Context, args []string) (any, error) {
 	return ctx.Do("DELETE", "/DeleteRule", nil, nil, body)
 }
 
-func collectorBindHostGroups(ctx *Context, args []string) (any, error) {
-	req, err := buildCollectorHostGroupBindingBody(args)
-	if err != nil {
-		return nil, err
-	}
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("PUT", "/ApplyRuleToHostGroups", nil, nil, body)
-}
-
-func collectorUnbindHostGroups(ctx *Context, args []string) (any, error) {
-	req, err := buildCollectorHostGroupBindingBody(args)
-	if err != nil {
-		return nil, err
-	}
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("PUT", "/DeleteRuleFromHostGroups", nil, nil, body)
-}
-
 func buildCollectorBody(args []string, modify bool) (map[string]any, error) {
 	var (
 		ruleID       string
@@ -333,60 +309,6 @@ func buildCollectorBody(args []string, modify bool) (map[string]any, error) {
 	}
 	if pauseSet {
 		req["Pause"] = pause
-	}
-	return req, nil
-}
-
-func buildCollectorHostGroupBindingBody(args []string) (map[string]any, error) {
-	var (
-		ruleID          string
-		hostGroupIDsArg string
-		requestArg      string
-	)
-	for len(args) > 0 {
-		switch args[0] {
-		case "--rule-id":
-			if len(args) < 2 {
-				return nil, errors.New("missing --rule-id value")
-			}
-			ruleID = args[1]
-			args = args[2:]
-		case "--host-group-ids":
-			if len(args) < 2 {
-				return nil, errors.New("missing --host-group-ids value")
-			}
-			hostGroupIDsArg = args[1]
-			args = args[2:]
-		case "--request":
-			if len(args) < 2 {
-				return nil, errors.New("missing --request value")
-			}
-			requestArg = args[1]
-			args = args[2:]
-		default:
-			return nil, errors.New("unknown flag: " + args[0])
-		}
-	}
-	req, err := readJSONObjectRequestArg(requestArg)
-	if err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(requestArg) == "" {
-		for _, pair := range []struct {
-			name  string
-			value string
-		}{
-			{"--rule-id", ruleID},
-			{"--host-group-ids", hostGroupIDsArg},
-		} {
-			if strings.TrimSpace(pair.value) == "" {
-				return nil, errors.New("missing " + pair.name)
-			}
-		}
-	}
-	maybeSetStringField(req, "RuleId", ruleID)
-	if err := maybeSetStringListField(req, "HostGroupIds", hostGroupIDsArg); err != nil {
-		return nil, err
 	}
 	return req, nil
 }

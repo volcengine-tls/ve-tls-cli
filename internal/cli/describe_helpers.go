@@ -69,11 +69,6 @@ func requiredFromText(s string) bool {
 	}
 }
 
-func isDocRequired(v string) bool {
-	s := strings.ToLower(strings.TrimSpace(v))
-	return s == "是" || s == "true" || s == "required" || s == "yes"
-}
-
 func sanitizeRequestParamsDocForOutput(params []apiCapDocParam) []apiCapDocParam {
 	if len(params) == 0 {
 		return nil

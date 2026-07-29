@@ -1335,16 +1335,16 @@ func TestConfirmPromptReadErrorRedactsCauseButPreservesChain(t *testing.T) {
 	}
 }
 
-// canaryWriterErr is the fixed canary-bearing error returned by canaryWriter.
+// errCanaryWriter is the fixed canary-bearing error returned by canaryWriter.
 // It is a package-level var so tests can assert errors.Is reaches it through
 // the safe wrapper.
-var canaryWriterErr = errors.New("writer-secret-canary /tmp/writer-leaked-path session-writer-canary")
+var errCanaryWriter = errors.New("writer-secret-canary /tmp/writer-leaked-path session-writer-canary")
 
 // canaryWriter always fails Write with a canary-bearing error.
 type canaryWriter struct{}
 
 func (canaryWriter) Write(_ []byte) (int, error) {
-	return 0, canaryWriterErr
+	return 0, errCanaryWriter
 }
 
 func TestConfirmPromptWriteErrorRedactsCauseButPreservesChain(t *testing.T) {
@@ -1367,7 +1367,7 @@ func TestConfirmPromptWriteErrorRedactsCauseButPreservesChain(t *testing.T) {
 	if !strings.Contains(err.Error(), "cannot write prompt") {
 		t.Fatalf("error should carry fixed description, got %q", err.Error())
 	}
-	if !errors.Is(err, canaryWriterErr) {
+	if !errors.Is(err, errCanaryWriter) {
 		t.Fatalf("errors.Is must reach the original cause, got %v", err)
 	}
 	var safeErr *safeCLIError

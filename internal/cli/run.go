@@ -738,15 +738,6 @@ func resolvedToolMigrationHint(group, action string) string {
 	return "use 'volclog tool list " + group + "' or 'volclog tool describe " + strings.TrimSpace(tool.ID) + "'"
 }
 
-func hasFlagWithValue(args []string, flag string) bool {
-	for i := 0; i < len(args); i++ {
-		if args[i] == flag {
-			return true
-		}
-	}
-	return false
-}
-
 func init() {
 	_ = os.Setenv("GODEBUG", os.Getenv("GODEBUG"))
 }

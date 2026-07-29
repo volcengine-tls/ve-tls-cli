@@ -551,7 +551,7 @@ func compactToolInputSchema(inputSchema map[string]any) map[string]any {
 }
 
 func compactToolPrefersFlatInputSchema(inputSchema, flatSchema map[string]any) bool {
-	if flatSchema == nil || len(flatSchema) == 0 {
+	if len(flatSchema) == 0 {
 		return false
 	}
 	sections := make([]string, 0, 4)
@@ -765,10 +765,6 @@ func filterToolSchemaToRequired(schema map[string]any, depth int) (map[string]an
 		out["properties"] = keptProps
 	}
 	return out, true
-}
-
-func compactToolFieldSchema(schema map[string]any) map[string]any {
-	return compactToolFieldSchemaAtDepth(schema, 0)
 }
 
 func compactToolFieldSchemaAtDepth(schema map[string]any, depth int) map[string]any {
@@ -1192,96 +1188,6 @@ func mergeToolFieldDoc(existing any, doc map[string]any) map[string]any {
 		field[key] = deepCloneToolValue(value)
 	}
 	return field
-}
-
-func buildToolInputExample(inputSchema map[string]any, requiredOnly bool) map[string]any {
-	sections := []string{"body", "query", "path", "header"}
-	out := map[string]any{}
-	for _, section := range sections {
-		raw, ok := inputSchema[section]
-		if !ok {
-			continue
-		}
-		sectionSchema, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		sectionExample := buildToolSchemaObjectExample(sectionSchema, requiredOnly)
-		if len(sectionExample) == 0 && requiredOnly {
-			continue
-		}
-		out[section] = sectionExample
-	}
-	return out
-}
-
-func buildToolSchemaObjectExample(schema map[string]any, requiredOnly bool) map[string]any {
-	props, _ := schema["properties"].(map[string]any)
-	keys := make([]string, 0, len(props))
-	required := toolRequiredFields(schema["required"])
-	requiredSet := map[string]struct{}{}
-	for _, name := range required {
-		requiredSet[name] = struct{}{}
-	}
-	for name := range props {
-		if requiredOnly {
-			if _, ok := requiredSet[name]; !ok {
-				continue
-			}
-		}
-		keys = append(keys, name)
-	}
-	if !requiredOnly && len(keys) == 0 {
-		for name := range props {
-			keys = append(keys, name)
-		}
-	}
-	sort.Strings(keys)
-	out := map[string]any{}
-	for _, name := range keys {
-		field, _ := props[name].(map[string]any)
-		out[name] = buildToolSchemaValueExample(field, requiredOnly)
-	}
-	return out
-}
-
-func buildToolSchemaValueExample(schema map[string]any, requiredOnly bool) any {
-	if len(schema) == 0 {
-		return "value"
-	}
-	if oneOf, ok := schema["oneOf"].([]any); ok && len(oneOf) > 0 {
-		if first, ok := oneOf[0].(map[string]any); ok {
-			return buildToolSchemaValueExample(first, requiredOnly)
-		}
-	}
-	switch strings.TrimSpace(strings.ToLower(toolAnyToString(schema["type"]))) {
-	case "string":
-		return "string"
-	case "integer":
-		return 1
-	case "number":
-		return 1
-	case "boolean":
-		return true
-	case "array":
-		itemSchema, _ := schema["items"].(map[string]any)
-		return []any{buildToolSchemaValueExample(itemSchema, requiredOnly)}
-	case "object":
-		child := buildToolSchemaObjectExample(schema, requiredOnly)
-		if len(child) == 0 {
-			return map[string]any{}
-		}
-		return child
-	default:
-		if _, ok := schema["properties"].(map[string]any); ok {
-			child := buildToolSchemaObjectExample(schema, requiredOnly)
-			if len(child) == 0 {
-				return map[string]any{}
-			}
-			return child
-		}
-		return "value"
-	}
 }
 
 func toolRequiredFields(raw any) []string {

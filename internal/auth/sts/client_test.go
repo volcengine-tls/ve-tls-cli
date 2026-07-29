@@ -604,7 +604,7 @@ func TestSTSParsesAndValidatesCredentialResponses(t *testing.T) {
 	t.Run("nil context fails closed", func(t *testing.T) {
 		rt := newRecordingTransport()
 		c := newTestClient(rt)
-		//nolint:staticcheck // intentionally passing nil context to test fail-closed
+		//lint:ignore SA1012 verifies AssumeRole fails closed for a nil context
 		if _, err := c.AssumeRole(nil, AssumeRoleInput{
 			Source:    SourceCredential{AccessKeyID: "A", SecretAccessKey: "B"},
 			Region:    "cn-beijing",

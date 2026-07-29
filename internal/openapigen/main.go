@@ -682,29 +682,6 @@ func applyPutLogsBodySchemaOverride(entry *toolEntry) {
 	}
 }
 
-func setBodyObjectField(inputSchema map[string]any, field string, schema map[string]any) {
-	if strings.TrimSpace(field) == "" || inputSchema == nil {
-		return
-	}
-	body, ok := inputSchema["body"].(map[string]any)
-	if !ok || body == nil {
-		body = map[string]any{
-			"type":       "object",
-			"properties": map[string]any{},
-		}
-		inputSchema["body"] = body
-	}
-	if t, ok := body["type"].(string); !ok || strings.TrimSpace(t) == "" {
-		body["type"] = "object"
-	}
-	props, ok := body["properties"].(map[string]any)
-	if !ok || props == nil {
-		props = map[string]any{}
-		body["properties"] = props
-	}
-	props[field] = schema
-}
-
 func overrideWeakBodyObjectField(inputSchema map[string]any, field string, schema map[string]any) {
 	if strings.TrimSpace(field) == "" || inputSchema == nil {
 		return
@@ -1187,29 +1164,6 @@ func mapDocArrayItemType(raw string) map[string]any {
 	default:
 		return map[string]any{"type": "string"}
 	}
-}
-
-func mergeDocBodyField(schema map[string]any, param capabilityDocParam) bool {
-	props, ok := schema["properties"].(map[string]any)
-	if !ok {
-		return false
-	}
-	candidates := []string{"body", "data", "input", "payload"}
-	for _, name := range candidates {
-		if v, ok := props[name]; ok {
-			if mergeDocFieldToObject(v, param) {
-				return true
-			}
-		}
-	}
-	if len(props) == 1 {
-		for _, v := range props {
-			if mergeDocFieldToObject(v, param) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func mergeDocFieldToObject(obj any, p capabilityDocParam) bool {
@@ -1711,122 +1665,6 @@ func stripMarkdownText(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-func buildTemplateMaps(doc swaggerDoc) (map[string]string, map[string]string) {
-	required := map[string]string{}
-	full := map[string]string{}
-	refs := usedBodyRefs(doc)
-	for _, ref := range refs {
-		requiredObj, ok := buildTemplateForRef(ref, doc.Definitions, "required", 0, map[string]int{})
-		if ok {
-			required[ref] = marshalPretty(requiredObj)
-		}
-		fullObj, ok := buildTemplateForRef(ref, doc.Definitions, "full", 0, map[string]int{})
-		if ok {
-			full[ref] = marshalPretty(fullObj)
-		}
-	}
-	return required, full
-}
-
-func usedBodyRefs(doc swaggerDoc) []string {
-	set := map[string]struct{}{}
-	for _, item := range doc.Paths {
-		ops := []*swaggerOp{item.Get, item.Post, item.Put, item.Delete, item.Patch, item.Head, item.Options}
-		for _, op := range ops {
-			if op == nil || op.Deprecated {
-				continue
-			}
-			params := mergeParams(item.Parameters, op.Parameters)
-			for _, p := range params {
-				if strings.EqualFold(strings.TrimSpace(p.In), "body") && p.Schema != nil {
-					ref := strings.TrimSpace(p.Schema.Ref)
-					if ref != "" {
-						set[ref] = struct{}{}
-					}
-				}
-			}
-		}
-	}
-	refs := make([]string, 0, len(set))
-	for ref := range set {
-		refs = append(refs, ref)
-	}
-	sort.Strings(refs)
-	return refs
-}
-
-func buildTemplateForRef(ref string, defs map[string]swaggerSchema, mode string, depth int, seen map[string]int) (any, bool) {
-	name := strings.TrimPrefix(strings.TrimSpace(ref), "#/definitions/")
-	s, ok := defs[name]
-	if !ok {
-		return nil, false
-	}
-	return buildTemplateValue(s, defs, mode, depth, seen), true
-}
-
-func buildTemplateValue(s swaggerSchema, defs map[string]swaggerSchema, mode string, depth int, seen map[string]int) any {
-	if depth > 4 {
-		return map[string]any{}
-	}
-	if strings.TrimSpace(s.Ref) != "" {
-		ref := strings.TrimSpace(s.Ref)
-		seen[ref]++
-		if seen[ref] > 1 {
-			return map[string]any{}
-		}
-		v, ok := buildTemplateForRef(ref, defs, mode, depth+1, seen)
-		if !ok {
-			return map[string]any{}
-		}
-		return v
-	}
-	t := strings.ToLower(strings.TrimSpace(s.Type))
-	switch t {
-	case "string":
-		return ""
-	case "integer", "number":
-		return 0
-	case "boolean":
-		return false
-	case "array":
-		if s.Items == nil {
-			return []any{}
-		}
-		return []any{buildTemplateValue(*s.Items, defs, mode, depth+1, seen)}
-	case "object", "":
-		if len(s.Properties) == 0 {
-			if child, ok := parseAdditionalProperties(s.AdditionalProperties); ok {
-				return map[string]any{"key": buildTemplateValue(child, defs, mode, depth+1, seen)}
-			}
-			return map[string]any{}
-		}
-		requiredSet := map[string]struct{}{}
-		for _, n := range s.Required {
-			requiredSet[n] = struct{}{}
-		}
-		keys := make([]string, 0, len(s.Properties))
-		for k := range s.Properties {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		if mode == "full" && len(keys) > 40 {
-			keys = keys[:40]
-		}
-		obj := map[string]any{}
-		for _, k := range keys {
-			if mode == "required" {
-				if _, ok := requiredSet[k]; !ok {
-					continue
-				}
-			}
-			obj[k] = buildTemplateValue(s.Properties[k], defs, mode, depth+1, seen)
-		}
-		return obj
-	default:
-		return ""
-	}
-}
-
 func parseAdditionalProperties(raw json.RawMessage) (swaggerSchema, bool) {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return swaggerSchema{}, false
@@ -2062,36 +1900,6 @@ func splitVerbNoun(summary string) (string, string) {
 	return "", summary
 }
 
-func nounMatchesGroup(noun, group string) bool {
-	n := normalizeWord(noun)
-	g := normalizeWord(group)
-	if n == "" || g == "" {
-		return false
-	}
-	if n == g {
-		return true
-	}
-	if strings.TrimSuffix(n, "s") == strings.TrimSuffix(g, "s") {
-		return true
-	}
-	return false
-}
-
-func isLikelyPlural(noun string) bool {
-	n := normalizeWord(noun)
-	return strings.HasSuffix(n, "s")
-}
-
-func normalizeWord(s string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(strings.TrimSpace(s)) {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-
 func disambiguateAction(action, path, method string, used map[string]string) string {
 	suffix := pathSuffix(path)
 	if suffix == "" {
@@ -2144,18 +1952,6 @@ func toKebab(s string) string {
 	return out
 }
 
-func marshalPretty(v any) string {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(v); err != nil {
-		return "{}"
-	}
-	b := bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
-	return string(b)
-}
-
 func writeCapabilitiesGo(path string, caps capabilityDoc) error {
 	b, err := json.Marshal(caps)
 	if err != nil {
@@ -2167,34 +1963,6 @@ func writeCapabilitiesGo(path string, caps capabilityDoc) error {
 	out.WriteString("const generatedCapabilitiesJSON = `")
 	out.Write(b)
 	out.WriteString("`\n")
-	return writeFile(path, out.Bytes())
-}
-
-func writeTemplatesGo(path string, required map[string]string, full map[string]string) error {
-	keysRequired := make([]string, 0, len(required))
-	for k := range required {
-		keysRequired = append(keysRequired, k)
-	}
-	sort.Strings(keysRequired)
-	keysFull := make([]string, 0, len(full))
-	for k := range full {
-		keysFull = append(keysFull, k)
-	}
-	sort.Strings(keysFull)
-
-	var out bytes.Buffer
-	out.WriteString("// Code generated by internal/openapigen; DO NOT EDIT.\n")
-	out.WriteString("package cli\n\n")
-	out.WriteString("var generatedRequestTemplates = map[string]string{\n")
-	for _, k := range keysRequired {
-		out.WriteString(fmt.Sprintf("\t%q: %q,\n", k, required[k]))
-	}
-	out.WriteString("}\n\n")
-	out.WriteString("var generatedRequestTemplatesFull = map[string]string{\n")
-	for _, k := range keysFull {
-		out.WriteString(fmt.Sprintf("\t%q: %q,\n", k, full[k]))
-	}
-	out.WriteString("}\n")
 	return writeFile(path, out.Bytes())
 }
 

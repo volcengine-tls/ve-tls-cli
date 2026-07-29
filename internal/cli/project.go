@@ -4,7 +4,6 @@ package cli
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
@@ -356,12 +355,4 @@ func projectDelete(ctx *Context, args []string) (any, error) {
 		return nil, err
 	}
 	return ctx.Do("DELETE", "/DeleteProject", nil, nil, body)
-}
-
-func atoiDefault(s string, d int) int {
-	i, err := strconv.Atoi(s)
-	if err != nil {
-		return d
-	}
-	return i
 }

@@ -163,7 +163,7 @@ func TestBuildToolCatalogMinimalFields(t *testing.T) {
 	if gotTool.Summary != "DescribeProject" {
 		t.Fatalf("summary=%q", gotTool.Summary)
 	}
-	if gotTool.InputSchema == nil || len(gotTool.InputSchema) == 0 {
+	if len(gotTool.InputSchema) == 0 {
 		t.Fatalf("missing input_schema")
 	}
 	if gotTool.ContextSchema == nil || gotTool.ExecutionSchema == nil {

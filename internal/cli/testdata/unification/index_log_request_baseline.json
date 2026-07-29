@@ -1,0 +1,282 @@
+{
+  "index_create_body": {
+    "action": "index.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "EnableAutoIndex": true,
+          "FullText": {
+            "CaseSensitive": false,
+            "Delimiter": " ,",
+            "IncludeChinese": true
+          },
+          "KeyValue": [],
+          "MaxTextLen": 2048,
+          "TopicId": "index-create-body-topic-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateIndex",
+        "query": {}
+      }
+    }
+  },
+  "index_create_body_then_request_last_wins": {
+    "action": "index.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "EnableAutoIndex": false,
+          "FullText": {
+            "CaseSensitive": true,
+            "Delimiter": "|",
+            "IncludeChinese": false
+          },
+          "KeyValue": [],
+          "MaxTextLen": 4096,
+          "TopicId": "index-create-body-then-request-topic-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateIndex",
+        "query": {}
+      }
+    }
+  },
+  "index_create_request": {
+    "action": "index.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "EnableAutoIndex": false,
+          "FullText": {
+            "CaseSensitive": true,
+            "Delimiter": "|",
+            "IncludeChinese": false
+          },
+          "KeyValue": [],
+          "MaxTextLen": 4096,
+          "TopicId": "index-create-request-topic-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateIndex",
+        "query": {}
+      }
+    }
+  },
+  "index_create_request_then_body_last_wins": {
+    "action": "index.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "EnableAutoIndex": true,
+          "FullText": {
+            "CaseSensitive": false,
+            "Delimiter": " ,",
+            "IncludeChinese": true
+          },
+          "KeyValue": [],
+          "MaxTextLen": 2048,
+          "TopicId": "index-create-request-then-body-topic-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateIndex",
+        "query": {}
+      }
+    }
+  },
+  "index_get": {
+    "action": "index.get",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeIndex",
+        "query": {
+          "TopicId": "index-get-topic-id"
+        }
+      }
+    }
+  },
+  "index_modify": {
+    "action": "index.modify",
+    "data": {
+      "request_preview": {
+        "body": {
+          "EnableAutoIndex": false,
+          "FullText": {
+            "CaseSensitive": true,
+            "Delimiter": "|",
+            "IncludeChinese": false
+          },
+          "KeyValue": [],
+          "MaxTextLen": 4096,
+          "TopicId": "index-modify-topic-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "PUT",
+        "path": "/ModifyIndex",
+        "query": {}
+      }
+    }
+  },
+  "log_search_analysis_query_fields": {
+    "action": "log.search",
+    "data": {
+      "request_preview": {
+        "body": {
+          "EndTime": 1710378000000,
+          "Query": "* | select count(*) as count limit 5",
+          "StartTime": 1710374400000,
+          "TopicId": "log-query-shape-topic-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/SearchLogs",
+        "query": {}
+      }
+    }
+  },
+  "log_search_flags_only_default_limit": {
+    "action": "log.search",
+    "data": {
+      "request_preview": {
+        "body": {
+          "EndTime": 1710378000000,
+          "Limit": 100,
+          "Query": "level:error",
+          "StartTime": 1710374400000,
+          "TopicId": "log-flags-topic-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/SearchLogs",
+        "query": {}
+      }
+    }
+  },
+  "log_search_flags_override_request": {
+    "action": "log.search",
+    "data": {
+      "request_preview": {
+        "body": {
+          "AccurateQuery": false,
+          "Context": "flag-context",
+          "EndTime": 1710378000000,
+          "Extra": "preserved",
+          "HighLight": true,
+          "Limit": 25,
+          "MustComplete": false,
+          "Offset": 3,
+          "Query": "flag-query",
+          "Sort": "asc",
+          "StartTime": 1710374400000,
+          "TopicId": "flag-topic-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/SearchLogs",
+        "query": {}
+      }
+    }
+  },
+  "log_search_plain_query_fields": {
+    "action": "log.search",
+    "data": {
+      "request_preview": {
+        "body": {
+          "EndTime": 1710378000000,
+          "Limit": 100,
+          "Query": "*",
+          "StartTime": 1710374400000,
+          "TopicId": "log-query-shape-topic-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/SearchLogs",
+        "query": {}
+      }
+    }
+  },
+  "log_search_request_only": {
+    "action": "log.search",
+    "data": {
+      "request_preview": {
+        "body": {
+          "AccurateQuery": false,
+          "Context": "request-context",
+          "EndTime": 1710378000000,
+          "HighLight": true,
+          "Limit": 7,
+          "MustComplete": true,
+          "Offset": 2,
+          "Query": "service:request",
+          "Sort": "desc",
+          "StartTime": 1710374400000,
+          "TopicId": "log-request-topic-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/SearchLogs",
+        "query": {}
+      }
+    }
+  },
+  "profile_region_injection_index_get": {
+    "action": "index.get",
+    "checks": {
+      "endpoint": "https://tls-cn-shanghai.volces.com",
+      "region": "cn-shanghai"
+    },
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeIndex",
+        "query": {
+          "TopicId": "profile-region-topic-id"
+        }
+      }
+    }
+  }
+}
