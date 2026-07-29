@@ -11,7 +11,7 @@ const rootPackage = require(path.join(repoRoot, 'package.json'));
 const humanPackage = require(path.join(repoRoot, 'npm', 'human-package', 'package.json'));
 
 test('release candidate metadata stays aligned across Go and npm packages', () => {
-  const version = '1.0.5-rc.1';
+  const version = '1.0.5-rc.2';
   const releaseTag = `volclog-v${version}`;
   const goVersion = fs.readFileSync(
     path.join(repoRoot, 'internal', 'version', 'version.go'),
@@ -44,6 +44,37 @@ test('GitHub release workflow marks release candidate tags as prereleases', () =
   assert.match(
     workflow,
     /make_latest:\s*\$\{\{\s*contains\(github\.ref_name, '-rc\.'\)\s*&&\s*'false'\s*\|\|\s*'legacy'\s*\}\}/,
+  );
+});
+
+test('GitHub release workflow publishes standalone installer assets', () => {
+  const workflow = fs.readFileSync(
+    path.join(repoRoot, '.github', 'workflows', 'release-volclog.yml'),
+    'utf8',
+  );
+  const releaseJob = workflow.match(/\n  release:\n([\s\S]*)$/);
+
+  assert.ok(releaseJob, 'release job should exist');
+  assert.match(releaseJob[1], /- uses: actions\/checkout@v4/);
+  assert.match(releaseJob[1], /^\s+scripts\/install-binary\.sh$/m);
+  assert.match(releaseJob[1], /^\s+scripts\/install\.ps1$/m);
+});
+
+test('PowerShell installer does not swallow checksum mismatches', () => {
+  const installer = fs.readFileSync(
+    path.join(repoRoot, 'scripts', 'install.ps1'),
+    'utf8',
+  );
+  const checksumCatch = installer.indexOf('catch {');
+  const mismatch = installer.indexOf('throw "sha256 mismatch"');
+  const extraction = installer.indexOf('Expand-Archive');
+
+  assert.notEqual(checksumCatch, -1, 'checksum download should remain optional');
+  assert.notEqual(mismatch, -1, 'checksum mismatch should fail closed');
+  assert.notEqual(extraction, -1, 'installer should extract the verified archive');
+  assert.ok(
+    checksumCatch < mismatch && mismatch < extraction,
+    'checksum mismatch must be checked after the optional-download catch and before extraction',
   );
 });
 

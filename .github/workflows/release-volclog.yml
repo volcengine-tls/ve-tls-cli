@@ -113,6 +113,7 @@ jobs:
     needs: [build]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -131,3 +132,5 @@ jobs:
             dist/volclog-human_*.tar.gz.sha256
             dist/volclog-human_*.zip
             dist/volclog-human_*.zip.sha256
+            scripts/install-binary.sh
+            scripts/install.ps1

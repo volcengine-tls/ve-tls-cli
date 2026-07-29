@@ -14,10 +14,10 @@
 
 ## 快速开始
 
-通过 npm 安装（无需克隆仓库）：
+通过 npm 安装当前候选版本（无需克隆仓库）：
 
 ```bash
-npm install -g @volcengine-tls/volclog
+npm install -g @volcengine-tls/volclog@rc --registry https://registry.npmjs.org/
 ```
 
 二进制和源码安装方式见[快速开始](docs/1-Getting-Started_zh.md)。

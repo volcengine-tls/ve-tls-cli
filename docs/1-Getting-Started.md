@@ -23,15 +23,15 @@ Prebuilt binaries are published for Linux, macOS, and Windows on amd64 and arm64
 
 ### 3.1 Install the binary
 
-The Unix installer requires `git`, `curl`, `tar`, and either `sha256sum` or `shasum`. The Windows installer requires Git and PowerShell.
+The Unix installer requires `curl`, `tar`, and either `sha256sum` or `shasum`. The Windows installer requires PowerShell.
 
-Clone and enter the repository root, then run the installer:
+Download the installer from the target release and run it from any directory:
 
 ```bash
-git clone https://github.com/volcengine-tls/ve-tls-cli.git
-cd ve-tls-cli
-VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-bash scripts/install-binary.sh
+tag=volclog-v1.0.5-rc.2
+base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
+curl -fsSLO "${base_url}/install-binary.sh"
+VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh
 ```
 
 The Unix installer writes the binary to `$HOME/.local/bin` by default. Ensure that directory is on your `PATH`:
@@ -43,18 +43,19 @@ export PATH="$HOME/.local/bin:$PATH"
 To install the human edition, add `--edition human`:
 
 ```bash
-git clone https://github.com/volcengine-tls/ve-tls-cli.git
-cd ve-tls-cli
-VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-bash scripts/install-binary.sh --edition human
+tag=volclog-v1.0.5-rc.2
+base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
+curl -fsSLO "${base_url}/install-binary.sh"
+VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh --edition human
 ```
 
-On Windows, use the PowerShell installer from the repository root:
+On Windows, download the PowerShell installer from the target release:
 
 ```powershell
-git clone https://github.com/volcengine-tls/ve-tls-cli.git
-cd ve-tls-cli
-.\scripts\install.ps1
+$tag = "volclog-v1.0.5-rc.2"
+$baseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/download/$tag"
+Invoke-WebRequest -Uri "$baseUrl/install.ps1" -OutFile install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -BaseUrl $baseUrl
 ```
 
 The Windows installer writes the binary to `$env:LOCALAPPDATA\Programs\volclog` by default. Add it to your `PATH`:
@@ -65,16 +66,16 @@ $env:PATH = "$env:LOCALAPPDATA\Programs\volclog;$env:PATH"
 
 ### 3.2 Install via npm
 
-Requires Node.js 18+.
+Requires Node.js 18+. Install this release candidate with the `rc` tag from the public npm registry:
 
 ```bash
-npm install -g @volcengine-tls/volclog
+npm install -g @volcengine-tls/volclog@rc --registry https://registry.npmjs.org/
 ```
 
 For the human edition:
 
 ```bash
-npm install -g @volcengine-tls/volclog-human
+npm install -g @volcengine-tls/volclog-human@rc --registry https://registry.npmjs.org/
 ```
 
 ### 3.3 Build from source

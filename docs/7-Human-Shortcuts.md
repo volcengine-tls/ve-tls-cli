@@ -44,13 +44,13 @@ Complex shortcut requests use `--request`; `tool exec` and `workflow exec` use `
 ```bash
 volclog-human --profile default --output table project list
 volclog-human --profile default --output table topic list \
-  --project-id <project-id> --all
+  --project-id 'YOUR_PROJECT_ID' --all
 volclog-human --profile default host-group list --all
 volclog-human --profile default collector list \
-  --project-id <project-id> --all
+  --project-id 'YOUR_PROJECT_ID' --all
 volclog-human --profile default host-group get \
-  --host-group-id <host-group-id>
-volclog-human --profile default collector get --rule-id <rule-id>
+  --host-group-id 'YOUR_HOST_GROUP_ID'
+volclog-human --profile default collector get --rule-id 'YOUR_RULE_ID'
 ```
 
 `--all` iterates every supported page. Do not combine it with `--page-number` or `--cursor`. `table` is limited to common list/get operations, `index get`, and `log search`; not every shortcut supports it.
@@ -65,21 +65,21 @@ The following shortcuts perform real writes. When you need a preview, switch to 
 volclog-human tool describe topic.create
 volclog-human tool describe index.create
 volclog-human --profile default --dry-run tool exec topic.create \
-  --input '{"ProjectId":"<project-id>","TopicName":"<topic-name>","Ttl":<ttl-days>,"ShardCount":<shard-count>}'
+  --input '{"ProjectId":"YOUR_PROJECT_ID","TopicName":"YOUR_TOPIC_NAME","Ttl":30,"ShardCount":1}'
 ```
 
 After confirming the request, use the shortcuts:
 
 ```bash
 volclog-human --profile default topic create \
-  --project-id <project-id> \
-  --topic-name <topic-name> \
-  --ttl <ttl-days> \
-  --shard-count <shard-count>
+  --project-id 'YOUR_PROJECT_ID' \
+  --topic-name 'YOUR_TOPIC_NAME' \
+  --ttl 30 \
+  --shard-count 1
 
 volclog-human index create --print-request-template=required > index-request.json
 volclog-human --profile default index create \
-  --topic-id <topic-id> \
+  --topic-id 'YOUR_TOPIC_ID' \
   --request file://index-request.json
 ```
 
@@ -91,20 +91,20 @@ Start with a small result, then export the same query and time range:
 
 ```bash
 volclog-human --profile default --output table log search \
-  --topic-id <topic-id> \
+  --topic-id 'YOUR_TOPIC_ID' \
   --query "error" \
-  --from <start-time-ms> \
-  --to <end-time-ms> \
+  --from 'START_TIME_MS' \
+  --to 'END_TIME_MS' \
   --limit 20
 
 volclog-human --profile default \
   --output jsonl --output-mode file --output-dir ./out \
   log export \
-  --topic-id <topic-id> \
+  --topic-id 'YOUR_TOPIC_ID' \
   --query "error" \
-  --from <start-time-ms> \
-  --to <end-time-ms> \
-  --max-pages <max-pages>
+  --from 'START_TIME_MS' \
+  --to 'END_TIME_MS' \
+  --max-pages 10
 ```
 
 Use `log export` for plain-search results and `log export-analysis` for SQL or analysis rows. See [Usage](4-Usage.md#7-output-and-delivery) and [Advanced](6-Advanced.md) for complete output, pagination, and incomplete-result semantics.

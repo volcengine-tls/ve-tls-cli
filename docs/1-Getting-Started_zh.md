@@ -23,15 +23,15 @@
 
 ### 3.1 安装二进制
 
-Unix 安装脚本需要 `git`、`curl`、`tar`，以及 `sha256sum` 或 `shasum` 之一。Windows 安装脚本需要 Git 和 PowerShell。
+Unix 安装脚本需要 `curl`、`tar`，以及 `sha256sum` 或 `shasum` 之一。Windows 安装脚本需要 PowerShell。
 
-先克隆并进入仓库根目录，然后运行安装脚本：
+从目标 Release 下载安装脚本，可在任意目录运行：
 
 ```bash
-git clone https://github.com/volcengine-tls/ve-tls-cli.git
-cd ve-tls-cli
-VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-bash scripts/install-binary.sh
+tag=volclog-v1.0.5-rc.2
+base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
+curl -fsSLO "${base_url}/install-binary.sh"
+VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh
 ```
 
 Unix 安装脚本默认将二进制写入 `$HOME/.local/bin`。请确保该目录在 `PATH` 中：
@@ -43,18 +43,19 @@ export PATH="$HOME/.local/bin:$PATH"
 如需安装人工交互版，加上 `--edition human`：
 
 ```bash
-git clone https://github.com/volcengine-tls/ve-tls-cli.git
-cd ve-tls-cli
-VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-bash scripts/install-binary.sh --edition human
+tag=volclog-v1.0.5-rc.2
+base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
+curl -fsSLO "${base_url}/install-binary.sh"
+VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh --edition human
 ```
 
-在 Windows 上，从仓库根目录使用 PowerShell 安装脚本：
+在 Windows 上，从目标 Release 下载 PowerShell 安装脚本：
 
 ```powershell
-git clone https://github.com/volcengine-tls/ve-tls-cli.git
-cd ve-tls-cli
-.\scripts\install.ps1
+$tag = "volclog-v1.0.5-rc.2"
+$baseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/download/$tag"
+Invoke-WebRequest -Uri "$baseUrl/install.ps1" -OutFile install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -BaseUrl $baseUrl
 ```
 
 Windows 安装脚本默认将二进制写入 `$env:LOCALAPPDATA\Programs\volclog`。请将其加入 `PATH`：
@@ -65,16 +66,16 @@ $env:PATH = "$env:LOCALAPPDATA\Programs\volclog;$env:PATH"
 
 ### 3.2 通过 npm 安装
 
-需要 Node.js 18+。
+需要 Node.js 18+。通过公开 npm registry 的 `rc` tag 安装当前候选版本：
 
 ```bash
-npm install -g @volcengine-tls/volclog
+npm install -g @volcengine-tls/volclog@rc --registry https://registry.npmjs.org/
 ```
 
 如需人工交互版：
 
 ```bash
-npm install -g @volcengine-tls/volclog-human
+npm install -g @volcengine-tls/volclog-human@rc --registry https://registry.npmjs.org/
 ```
 
 ### 3.3 从源码构建

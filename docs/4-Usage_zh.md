@@ -266,7 +266,7 @@ volclog --profile default doctor --online
 volclog-human project list --output table
 volclog-human topic create --describe
 volclog-human index create --print-request-template=required > index_req.json
-volclog-human index create --topic-id <topic-id> --request file://index_req.json
+volclog-human index create --topic-id 'YOUR_TOPIC_ID' --request file://index_req.json
 ```
 
 Human shortcut 的完整上手方式见 [Human Shortcuts](7-Human-Shortcuts_zh.md)。对于更长的自动化工作流，请参阅 [实用指南](5-Practical-Guide_zh.md)；对于高级主题，请参阅 [进阶](6-Advanced_zh.md)。

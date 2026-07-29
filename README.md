@@ -14,10 +14,10 @@ The official Volcengine TLS CLI. `volclog` is the default agent and automation e
 
 ## Quick start
 
-Install via npm (no repository checkout required):
+Install this release candidate via npm (no repository checkout required):
 
 ```bash
-npm install -g @volcengine-tls/volclog
+npm install -g @volcengine-tls/volclog@rc --registry https://registry.npmjs.org/
 ```
 
 For binary and source installation, see [Getting Started](docs/1-Getting-Started.md).

@@ -1,5 +1,12 @@
 # Changelog
 
+## volclog-v1.0.5-rc.2
+
+- Let ECS Role refresh use the caller's timeout budget so the documented retry policy can complete.
+- Restore the default SSO scopes when older configuration contains an empty scope list.
+- Normalize secure-store and documentation roots on macOS before enforcing path boundaries.
+- Publish the Unix and Windows binary installers with each GitHub Release, reject downloaded checksum mismatches on Windows, and document checkout-free installation.
+
 ## volclog-v1.0.5-rc.1
 
 - Add standalone SSO and Console Login (`mode=sso` / `mode=console-login`) with no runtime dependency on `ve`, `~/.volcengine`, or `volcengine-cli`.

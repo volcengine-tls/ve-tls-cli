@@ -44,13 +44,13 @@ Shortcut 的复杂请求使用 `--request`；`tool exec` 和 `workflow exec` 使
 ```bash
 volclog-human --profile default --output table project list
 volclog-human --profile default --output table topic list \
-  --project-id <project-id> --all
+  --project-id 'YOUR_PROJECT_ID' --all
 volclog-human --profile default host-group list --all
 volclog-human --profile default collector list \
-  --project-id <project-id> --all
+  --project-id 'YOUR_PROJECT_ID' --all
 volclog-human --profile default host-group get \
-  --host-group-id <host-group-id>
-volclog-human --profile default collector get --rule-id <rule-id>
+  --host-group-id 'YOUR_HOST_GROUP_ID'
+volclog-human --profile default collector get --rule-id 'YOUR_RULE_ID'
 ```
 
 `--all` 会自动翻完支持的分页，不要与 `--page-number` 或 `--cursor` 同时使用。`table` 仅支持常用的 list/get、`index get` 和 `log search`，并非所有 shortcut 都支持。
@@ -65,21 +65,21 @@ volclog-human --profile default collector get --rule-id <rule-id>
 volclog-human tool describe topic.create
 volclog-human tool describe index.create
 volclog-human --profile default --dry-run tool exec topic.create \
-  --input '{"ProjectId":"<project-id>","TopicName":"<topic-name>","Ttl":<ttl-days>,"ShardCount":<shard-count>}'
+  --input '{"ProjectId":"YOUR_PROJECT_ID","TopicName":"YOUR_TOPIC_NAME","Ttl":30,"ShardCount":1}'
 ```
 
 确认请求后，再使用 shortcut：
 
 ```bash
 volclog-human --profile default topic create \
-  --project-id <project-id> \
-  --topic-name <topic-name> \
-  --ttl <ttl-days> \
-  --shard-count <shard-count>
+  --project-id 'YOUR_PROJECT_ID' \
+  --topic-name 'YOUR_TOPIC_NAME' \
+  --ttl 30 \
+  --shard-count 1
 
 volclog-human index create --print-request-template=required > index-request.json
 volclog-human --profile default index create \
-  --topic-id <topic-id> \
+  --topic-id 'YOUR_TOPIC_ID' \
   --request file://index-request.json
 ```
 
@@ -91,20 +91,20 @@ Shortcut 本身不支持 `--dry-run`；需要预执行时应完成 `tool` / `wor
 
 ```bash
 volclog-human --profile default --output table log search \
-  --topic-id <topic-id> \
+  --topic-id 'YOUR_TOPIC_ID' \
   --query "error" \
-  --from <start-time-ms> \
-  --to <end-time-ms> \
+  --from 'START_TIME_MS' \
+  --to 'END_TIME_MS' \
   --limit 20
 
 volclog-human --profile default \
   --output jsonl --output-mode file --output-dir ./out \
   log export \
-  --topic-id <topic-id> \
+  --topic-id 'YOUR_TOPIC_ID' \
   --query "error" \
-  --from <start-time-ms> \
-  --to <end-time-ms> \
-  --max-pages <max-pages>
+  --from 'START_TIME_MS' \
+  --to 'END_TIME_MS' \
+  --max-pages 10
 ```
 
 普通检索结果使用 `log export`；SQL/分析结果改用 `log export-analysis`。完整的输出、分页和不完整结果语义见[使用](4-Usage_zh.md#7-输出与交付)和[进阶](6-Advanced_zh.md)。

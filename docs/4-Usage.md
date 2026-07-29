@@ -266,7 +266,7 @@ The `requestId` in the envelope (or `x-tls-requestid` response header) identifie
 volclog-human project list --output table
 volclog-human topic create --describe
 volclog-human index create --print-request-template=required > index_req.json
-volclog-human index create --topic-id <topic-id> --request file://index_req.json
+volclog-human index create --topic-id 'YOUR_TOPIC_ID' --request file://index_req.json
 ```
 
 For the complete human shortcut introduction, see [Human Shortcuts](7-Human-Shortcuts.md). For longer automation-oriented workflows, see the [Practical Guide](5-Practical-Guide.md); for advanced topics, see [Advanced](6-Advanced.md).
