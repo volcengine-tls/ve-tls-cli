@@ -791,6 +791,8 @@ Default state directory:
     └── cache/
 ```
 
+`volclog` manages this state independently. Do not manually copy or reuse authentication caches from other tools or state directories; cache file naming and lifecycle are internal to `volclog`.
+
 If `VOLCLOG_CONFIG` is set, the state root is the directory containing that configuration file.
 
 You can override the cache directories separately:

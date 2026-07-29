@@ -370,7 +370,13 @@ export function validateDocsTree(rootDir) {
   const diagnostics = [];
   const push = (file, rule) => diagnostics.push(`${file}: ${rule}`);
 
-  const root = resolve(rootDir);
+  const resolvedRoot = resolve(rootDir);
+  let root = resolvedRoot;
+  try {
+    root = realpathSync(resolvedRoot);
+  } catch {
+    // Preserve structured diagnostics for missing or unreadable roots.
+  }
 
   // --- Check 1 & 8: root README pair and retired filenames -----------------
   // Enumerate every entry by name regardless of type so symlinks/FIFOs/sockets

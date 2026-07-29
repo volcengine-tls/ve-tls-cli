@@ -47,6 +47,17 @@ func (f *fakeCredentialClient) FetchCredentials(ctx context.Context, roleName st
 
 func (f *fakeCredentialClient) callCount() int32 { return atomic.LoadInt32(&f.calls) }
 
+type noDeadlineCredentialClient struct {
+	creds Credentials
+}
+
+func (c *noDeadlineCredentialClient) FetchCredentials(ctx context.Context, _ string) (Credentials, error) {
+	if _, ok := ctx.Deadline(); ok {
+		return Credentials{}, errors.New("provider injected an unexpected refresh deadline")
+	}
+	return c.creds, nil
+}
+
 type fixedClock struct {
 	mu  sync.Mutex
 	now time.Time
@@ -380,30 +391,17 @@ func TestProviderNonECSFailurePreventsFallback(t *testing.T) {
 	// No fallback: the provider returns the error, not some other credential.
 }
 
-func TestProviderCompleteRefreshStopsAtFiveSecondBudget(t *testing.T) {
+func TestProviderRefreshDoesNotInjectDeadline(t *testing.T) {
 	start := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
-	// Client blocks forever; the budget must cancel it.
-	client := &fakeCredentialClient{block: make(chan struct{})}
+	client := &noDeadlineCredentialClient{creds: okCreds(start, 2*time.Hour)}
 	clock := newFixedClock(start)
 	p, err := New(Config{RoleName: "r", Client: client, Clock: clock.Now})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	// Shorten the budget for a fast, deterministic test.
-	p.budget = 100 * time.Millisecond
 
-	done := make(chan error, 1)
-	go func() {
-		_, err := p.Retrieve(context.Background())
-		done <- err
-	}()
-	select {
-	case err := <-done:
-		if err == nil {
-			t.Fatal("expected error when budget expires")
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("Retrieve did not stop at budget deadline")
+	if _, err := p.Retrieve(context.Background()); err != nil {
+		t.Fatalf("Retrieve inherited an unexpected provider deadline: %v", err)
 	}
 }
 
@@ -718,9 +716,9 @@ func (*nilContext) Done() <-chan struct{}       { panic("nilContext.Done") }
 func (*nilContext) Err() error                  { panic("nilContext.Err") }
 func (*nilContext) Value(_ any) any             { panic("nilContext.Value") }
 
-// TestProviderNonECSHostFailsWithinBudget uses a blocking CredentialClient with
-// a short budget to prove the refresh stops within the budget.
-func TestProviderNonECSHostFailsWithinBudget(t *testing.T) {
+// TestProviderRefreshHonorsCallerDeadline proves that removing the provider's
+// fixed refresh deadline does not weaken caller cancellation.
+func TestProviderRefreshHonorsCallerDeadline(t *testing.T) {
 	start := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
 	client := &fakeCredentialClient{block: make(chan struct{})}
 	clock := newFixedClock(start)
@@ -728,19 +726,11 @@ func TestProviderNonECSHostFailsWithinBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	p.budget = 100 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
 
-	done := make(chan error, 1)
-	go func() {
-		_, err := p.Retrieve(context.Background())
-		done <- err
-	}()
-	select {
-	case err := <-done:
-		if err == nil {
-			t.Fatal("expected error when budget expires")
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("Retrieve did not stop at budget deadline")
+	_, err = p.Retrieve(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Retrieve error=%v, want context.DeadlineExceeded", err)
 	}
 }

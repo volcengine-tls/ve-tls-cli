@@ -74,7 +74,7 @@ func TestStoreCanonicalizesExistingAncestorAtConstruction(t *testing.T) {
 	}
 
 	store := New(filepath.Join(aliasParent, "future", "store"))
-	wantRoot := filepath.Join(realParent, "future", "store")
+	wantRoot := canonicalTestPath(t, realParent, "future", "store")
 	if store.root != wantRoot {
 		t.Fatalf("store root=%q, want canonical frozen root %q", store.root, wantRoot)
 	}

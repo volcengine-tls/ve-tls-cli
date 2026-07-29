@@ -391,6 +391,62 @@ func TestConfigureSSOSessionDefaultsScopes(t *testing.T) {
 	}
 }
 
+func TestConfigureSSOSessionExistingEmptyScopesDefaultsWhenOmitted(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		scopes []string
+	}{
+		{name: "nil", scopes: nil},
+		{name: "empty", scopes: []string{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.SSOSessions["corp"] = config.SSOSession{
+				Name:               "corp",
+				StartURL:           "https://old.example.com/userportal",
+				Region:             "cn-shanghai",
+				RegistrationScopes: tc.scopes,
+			}
+			ctx, _ := newSSOTestContext(t, cfg)
+
+			out, err := runConfigureSSOSession(ctx, []string{
+				"--name", "corp",
+				"--start-url", "https://new.example.com/userportal",
+				"--region", "cn-beijing",
+			})
+			if err != nil {
+				t.Fatalf("runConfigureSSOSession: %v", err)
+			}
+
+			want := []string{sso.ScopeAccountAccess, sso.ScopeOfflineAccess}
+			saved, _, err := config.Load()
+			if err != nil {
+				t.Fatalf("config.Load: %v", err)
+			}
+			if got := saved.SSOSessions["corp"].RegistrationScopes; !equalStringSlice(got, want) {
+				t.Fatalf("saved scopes=%v, want defaults %v", got, want)
+			}
+			result := out.(map[string]any)
+			if got, _ := result["registration_scopes"].([]string); !equalStringSlice(got, want) {
+				t.Fatalf("result scopes=%v, want defaults %v", got, want)
+			}
+		})
+	}
+}
+
+func TestSSOScopesOrDefaultCopiesDefaultsForLegacyEmptyScopes(t *testing.T) {
+	got := ssoScopesOrDefault(nil)
+	want := []string{sso.ScopeAccountAccess, sso.ScopeOfflineAccess}
+	if !equalStringSlice(got, want) {
+		t.Fatalf("scopes=%v, want defaults %v", got, want)
+	}
+
+	got[0] = "mutated"
+	if defaultSSOScopes[0] != sso.ScopeAccountAccess {
+		t.Fatalf("default scopes were aliased and mutated: %v", defaultSSOScopes)
+	}
+}
+
 func TestConfigureSSOSessionRejectsUnknownScope(t *testing.T) {
 	ctx, _ := newSSOTestContext(t, config.DefaultConfig())
 	_, err := runConfigureSSOSession(ctx, []string{

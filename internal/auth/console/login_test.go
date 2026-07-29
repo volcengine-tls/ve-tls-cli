@@ -1574,7 +1574,7 @@ func TestFileCacheRelativeRootFrozenAfterChdir(t *testing.T) {
 	if !filepath.IsAbs(cache.dir) {
 		t.Fatalf("cache.dir=%q, want absolute path", cache.dir)
 	}
-	wantRoot := filepath.Join(base, "cache")
+	wantRoot := canonicalConsoleTestPath(t, base, "cache")
 	if cache.dir != wantRoot {
 		t.Fatalf("cache.dir=%q, want %q", cache.dir, wantRoot)
 	}
@@ -1632,7 +1632,7 @@ func TestFileCacheCanonicalizesAncestorSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFileCache error: %v", err)
 	}
-	wantRoot := filepath.Join(realParent, "store")
+	wantRoot := canonicalConsoleTestPath(t, realParent, "store")
 	if cache.dir != wantRoot {
 		t.Fatalf("cache.dir=%q, want canonical %q", cache.dir, wantRoot)
 	}
@@ -1645,6 +1645,15 @@ func TestFileCacheCanonicalizesAncestorSymlink(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(wantRoot)); err != nil {
 		t.Fatalf("canonical root was not used: %v", err)
 	}
+}
+
+func canonicalConsoleTestPath(t *testing.T, existingAncestor string, missingSuffix ...string) string {
+	t.Helper()
+	canonicalAncestor, err := filepath.EvalSymlinks(existingAncestor)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q): %v", existingAncestor, err)
+	}
+	return filepath.Join(append([]string{canonicalAncestor}, missingSuffix...)...)
 }
 
 // TestFileCacheRejectsInvalidRootAtConstruction verifies that an invalid or

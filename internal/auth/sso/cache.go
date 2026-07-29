@@ -34,11 +34,13 @@ func isNilInterface(v interface{}) bool {
 }
 
 // TokenCache is the persisted OAuth token cache for an SSO session. Its JSON
-// field names match the upstream volcengine-cli SsoTokenCache so that caches
-// written by either tool are mutually readable. The ClientID/ClientSecret
-// snapshot stored here is the sole authority for ordinary business refresh once
-// a token cache exists; the client-* registration cache is only consulted
-// during explicit login before any token cache exists.
+// field names match the upstream SSO token-cache schema, but compatibility is
+// limited to the serialized JSON fields. volclog independently manages its
+// cache directory, file naming, locking, and lifecycle; directly copying or
+// reusing caches written by another tool is not supported. The ClientID/
+// ClientSecret snapshot stored here is the sole authority for ordinary business
+// refresh once a token cache exists; the client-* registration cache is only
+// consulted during explicit login before any token cache exists.
 type TokenCache struct {
 	StartURL              string `json:"start_url"`
 	SessionName           string `json:"session_name"`

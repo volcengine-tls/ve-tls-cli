@@ -791,6 +791,8 @@ Console Login、SSO、RAM Role ARN、OIDC 和 ECS Role 的硬过期值由签发�
     └── cache/
 ```
 
+`volclog` 独立管理这些状态。不要从其他工具或状态目录手工复制或复用鉴权缓存；缓存文件命名和生命周期属于 `volclog` 的内部实现。
+
 如果设置了 `VOLCLOG_CONFIG`，state root 为该配置文件所在目录。
 
 可以分别覆盖缓存目录：

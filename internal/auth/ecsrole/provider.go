@@ -15,10 +15,6 @@ import (
 // to refresh, matching the upstream five-minute safety boundary.
 const refreshWindow = 5 * time.Minute
 
-// refreshBudget is the fixed total time allowed for a complete token-plus-
-// credential refresh. It is instance-private and not configurable.
-const refreshBudget = 5 * time.Second
-
 // ProviderName identifies this provider in auth.Value.ProviderName.
 const ProviderName = "ecsrole"
 
@@ -42,7 +38,6 @@ type Provider struct {
 	roleName string
 	client   CredentialClient
 	clock    func() time.Time
-	budget   time.Duration
 }
 
 // New validates the configuration and returns a ready-to-use Provider. It does
@@ -61,7 +56,6 @@ func New(cfg Config) (*Provider, error) {
 		roleName: cfg.RoleName,
 		client:   cfg.Client,
 		clock:    cfg.Clock,
-		budget:   refreshBudget,
 		gate:     make(chan struct{}, 1),
 	}, nil
 }
@@ -118,18 +112,10 @@ func (p *Provider) Retrieve(ctx context.Context) (auth.Value, error) {
 	}
 	p.mu.Unlock()
 
-	// The complete refresh runs within the fixed budget. A caller deadline that
-	// is shorter still takes precedence.
-	budget := p.budget
-	if deadline, ok := ctx.Deadline(); ok {
-		if remaining := time.Until(deadline); remaining < budget {
-			budget = remaining
-		}
-	}
-	refreshCtx, cancel := context.WithTimeout(ctx, budget)
-	defer cancel()
-
-	creds, err := p.client.FetchCredentials(refreshCtx, p.roleName)
+	// The client owns its bounded per-attempt timeout and retry policy. Preserve
+	// the caller context unchanged so a provider-level deadline cannot truncate
+	// the complete token-plus-credential retry sequence.
+	creds, err := p.client.FetchCredentials(ctx, p.roleName)
 	if err != nil {
 		// Fail closed: do not return the stale cached value. Wrap the error so
 		// any sensitive content from a non-auth.Error is hidden in Cause.

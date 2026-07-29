@@ -311,10 +311,7 @@ func TestStoreCanonicalRootReturnsValidatedRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CanonicalRoot error: %v", err)
 	}
-	want, err := filepath.Abs(filepath.Clean(root))
-	if err != nil {
-		t.Fatalf("Abs: %v", err)
-	}
+	want := canonicalTestPath(t, filepath.Dir(root), filepath.Base(root))
 	if got != want {
 		t.Errorf("CanonicalRoot=%q, want %q", got, want)
 	}
@@ -332,4 +329,13 @@ func TestStoreCanonicalRootNilStore(t *testing.T) {
 	if _, err := store.CanonicalRoot(); err == nil {
 		t.Fatal("expected error from CanonicalRoot for nil store")
 	}
+}
+
+func canonicalTestPath(t *testing.T, existingAncestor string, missingSuffix ...string) string {
+	t.Helper()
+	canonicalAncestor, err := filepath.EvalSymlinks(existingAncestor)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q): %v", existingAncestor, err)
+	}
+	return filepath.Join(append([]string{canonicalAncestor}, missingSuffix...)...)
 }

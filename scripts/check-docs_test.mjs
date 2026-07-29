@@ -717,6 +717,39 @@ test('path escaping repo root is rejected', () => {
   }
 });
 
+test('valid tree passes when repository root has a symlinked ancestor', () => {
+  const realParent = mkdtempSync(join(tmpdir(), 'check-docs-real-parent-'));
+  const realRoot = join(realParent, 'repo');
+  const aliasParent = `${realParent}-alias`;
+  mkdirSync(realRoot);
+  for (const [relPath, content] of Object.entries(validTree())) {
+    const full = join(realRoot, relPath);
+    mkdirSync(join(full, '..'), { recursive: true });
+    writeFileSync(full, content, 'utf8');
+  }
+  symlinkSync(realParent, aliasParent, 'dir');
+
+  try {
+    const diags = validateDocsTree(join(aliasParent, 'repo'));
+    assert.deepEqual(diags, [], `symlinked root ancestor should pass, got: ${diags.join('\n')}`);
+  } finally {
+    rmSync(aliasParent, { force: true });
+    cleanup(realParent);
+  }
+});
+
+test('missing repository root returns structured diagnostics without throwing', () => {
+  const parent = mkdtempSync(join(tmpdir(), 'check-docs-missing-root-'));
+  try {
+    const diags = validateDocsTree(join(parent, 'missing'));
+    assert.ok(Array.isArray(diags), 'should return diagnostics, not throw');
+    assert.ok(diags.some((d) => d.includes('README.md')), `expected README diagnostic, got: ${diags.join('\n')}`);
+    assert.ok(diags.some((d) => d.includes('docs/')), `expected docs diagnostic, got: ${diags.join('\n')}`);
+  } finally {
+    cleanup(parent);
+  }
+});
+
 test('escaping symlink is rejected', () => {
   const dir = makeTree(validTree());
   const outsideTarget = join(tmpdir(), `escape-target-${Date.now()}.md`);

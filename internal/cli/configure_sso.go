@@ -30,6 +30,16 @@ var allowedSSOScopes = map[string]struct{}{
 // for a brand-new session.
 var defaultSSOScopes = []string{sso.ScopeAccountAccess, sso.ScopeOfflineAccess}
 
+// ssoScopesOrDefault returns an independent scope slice. Legacy sessions with
+// no configured scopes recover the frozen defaults; non-empty scopes keep their
+// existing values.
+func ssoScopesOrDefault(scopes []string) []string {
+	if len(scopes) == 0 {
+		scopes = defaultSSOScopes
+	}
+	return append([]string(nil), scopes...)
+}
+
 // ssoSessionOpts holds the parsed flags for configure sso-session.
 type ssoSessionOpts struct {
 	Name               string
@@ -349,6 +359,8 @@ func runConfigureSSOSession(ctx *Context, args []string) (any, error) {
 			existing.Region = opts.Region
 			if opts.scopesExplicit {
 				existing.RegistrationScopes = scopes
+			} else if len(existing.RegistrationScopes) == 0 {
+				existing.RegistrationScopes = ssoScopesOrDefault(nil)
 			}
 			latest.SSOSessions[opts.Name] = existing
 			saved = existing
@@ -360,7 +372,7 @@ func runConfigureSSOSession(ctx *Context, args []string) (any, error) {
 				RegistrationScopes: scopes,
 			}
 			if !opts.scopesExplicit {
-				session.RegistrationScopes = defaultSSOScopes
+				session.RegistrationScopes = ssoScopesOrDefault(nil)
 			}
 			if latest.SSOSessions == nil {
 				latest.SSOSessions = map[string]config.SSOSession{}
@@ -912,7 +924,7 @@ func newProductionSSOAdapter(ctx *Context) (*ssoAdapter, error) {
 				StartURL:    session.StartURL,
 				SessionName: session.Name,
 				Region:      session.Region,
-				Scopes:      session.RegistrationScopes,
+				Scopes:      ssoScopesOrDefault(session.RegistrationScopes),
 			}), nil
 		},
 		bindingFn: func(session config.SSOSession) (ssoBindingService, error) {
