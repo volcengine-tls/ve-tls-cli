@@ -14,13 +14,35 @@
 
 ## 快速开始
 
-通过 npm 安装当前候选版本（无需克隆仓库）：
+从 GitHub Release 安装当前候选版本的二进制。
+
+Unix：
+
+```bash
+tag=volclog-v1.0.5-rc.2
+base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
+curl -fsSLO "${base_url}/install-binary.sh"
+VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Windows PowerShell：
+
+```powershell
+$tag = "volclog-v1.0.5-rc.2"
+$baseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/download/$tag"
+Invoke-WebRequest -Uri "$baseUrl/install.ps1" -OutFile install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -BaseUrl $baseUrl
+$env:Path = "$env:LOCALAPPDATA\Programs\volclog;$env:Path"
+```
+
+也可以通过 npm 安装（无需克隆仓库）：
 
 ```bash
 npm install -g @volcengine-tls/volclog@rc --registry https://registry.npmjs.org/
 ```
 
-二进制和源码安装方式见[快速开始](docs/1-Getting-Started_zh.md)。
+人工交互版和源码安装方式见[快速开始](docs/1-Getting-Started_zh.md)。
 
 配置静态 AK/SK profile 并用 `doctor` 验证：
 

@@ -14,13 +14,35 @@ The official Volcengine TLS CLI. `volclog` is the default agent and automation e
 
 ## Quick start
 
-Install this release candidate via npm (no repository checkout required):
+Install the current release candidate binary from GitHub Release.
+
+On Unix:
+
+```bash
+tag=volclog-v1.0.5-rc.2
+base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
+curl -fsSLO "${base_url}/install-binary.sh"
+VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+On Windows PowerShell:
+
+```powershell
+$tag = "volclog-v1.0.5-rc.2"
+$baseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/download/$tag"
+Invoke-WebRequest -Uri "$baseUrl/install.ps1" -OutFile install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -BaseUrl $baseUrl
+$env:Path = "$env:LOCALAPPDATA\Programs\volclog;$env:Path"
+```
+
+Alternatively, install via npm (no repository checkout required):
 
 ```bash
 npm install -g @volcengine-tls/volclog@rc --registry https://registry.npmjs.org/
 ```
 
-For binary and source installation, see [Getting Started](docs/1-Getting-Started.md).
+For the human edition and source installation, see [Getting Started](docs/1-Getting-Started.md).
 
 Configure a static AK/SK profile and verify with `doctor`:
 
