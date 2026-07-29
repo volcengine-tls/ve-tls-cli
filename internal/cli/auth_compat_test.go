@@ -577,8 +577,8 @@ func TestAllAuthModesPreserveIdentityAndFallbackContract(t *testing.T) {
 				if !errors.As(err, &dae) {
 					t.Fatalf("expected *dynamicAuthError, got %T", err)
 				}
-				if dae.mode != tc.mode {
-					t.Fatalf("dynamicAuthError mode=%q, want %q", dae.mode, tc.mode)
+				if dae.AuthMode() != tc.mode {
+					t.Fatalf("dynamicAuthError mode=%q, want %q", dae.AuthMode(), tc.mode)
 				}
 				if atomic.LoadInt32(count) != 0 {
 					t.Fatalf("TLS requests=%d, want 0 on provider failure", atomic.LoadInt32(count))

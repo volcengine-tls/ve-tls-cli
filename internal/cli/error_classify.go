@@ -1,62 +1,14 @@
 package cli
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
-	"io"
 	"os"
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth"
 	"github.com/volcengine-tls/ve-tls-cli/internal/config"
-	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
-
-type errPayload struct {
-	ErrorCode    string `json:"errorCode"`
-	ErrorMessage string `json:"errorMessage"`
-	RequestID    string `json:"requestId,omitempty"`
-	StatusCode   int    `json:"statusCode,omitempty"`
-	Kind         string `json:"kind,omitempty"`
-	Hint         string `json:"hint,omitempty"`
-}
-
-type removedCommandError struct {
-	Command string
-	Hint    string
-}
-
-func (e *removedCommandError) Error() string {
-	return "legacy command removed: " + strings.TrimSpace(e.Command)
-}
-
-func removedLegacyCommandError(command string, hint string) error {
-	return &removedCommandError{
-		Command: strings.TrimSpace(command),
-		Hint:    strings.TrimSpace(hint),
-	}
-}
-
-func writeCLIError(w io.Writer, err error, requestID string, statusCode int, kind string, hint string) {
-	p := errPayload{
-		ErrorCode:    "CLIError",
-		ErrorMessage: err.Error(),
-		RequestID:    requestID,
-		StatusCode:   statusCode,
-		Kind:         kind,
-		Hint:         hint,
-	}
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if e := enc.Encode(p); e != nil {
-		_, _ = w.Write([]byte(err.Error() + "\n"))
-		return
-	}
-	_, _ = w.Write(buf.Bytes())
-}
 
 func classifyError(err error, requestID string, statusCode int, group string) (errPayload, int) {
 	msg := strings.TrimSpace(err.Error())
@@ -126,15 +78,15 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 			Hint:       "console login cache deleted but profile binding could not be cleared; rerun logout to retry, or inspect config with 'volclog configure show --profile <name>'",
 		}, 2
 	}
-	// Dynamic auth errors carry the profile mode via *dynamicAuthError so the
-	// re-login hint is exact and mode-aware, never guessed from free text.
-	var dae *dynamicAuthError
+	// Dynamic auth errors expose the profile mode through a narrow interface so
+	// classification does not depend on the runtime package's concrete type.
+	var dae interface{ AuthMode() string }
 	if errors.As(err, &dae) {
 		return errPayload{
 			RequestID:  requestID,
 			StatusCode: statusCode,
 			Kind:       "auth",
-			Hint:       dynamicReauthHint(dae.mode),
+			Hint:       dynamicReauthHint(dae.AuthMode()),
 		}, 2
 	}
 	// Plain auth.Error (not wrapped with a mode) is still classified as
@@ -417,19 +369,6 @@ func globalFlagPositionHint(flag string, group string) string {
 	return "flag " + flag + " is global and position-sensitive; move it before the group, e.g. '" + example + " <group> ...'"
 }
 
-func writeStructuredError(stdout, stderr io.Writer, err error, requestID string, statusCode int, group string, env map[string]any) int {
-	payload, code := classifyError(err, requestID, statusCode, group)
-	if env != nil {
-		if err2 := output.Write(stdout, env, output.FormatJSON); err2 != nil {
-			writeCLIError(stderr, err2, payload.RequestID, payload.StatusCode, "decode", "output write failed")
-			return 3
-		}
-		return code
-	}
-	writeCLIError(stderr, err, payload.RequestID, payload.StatusCode, payload.Kind, payload.Hint)
-	return code
-}
-
 func isGlobalFlagName(flag string) bool {
 	flag = strings.TrimSpace(flag)
 	if flag == "" {
@@ -444,19 +383,4 @@ func isGlobalFlagName(flag string) bool {
 		}
 	}
 	return false
-}
-
-type usageError struct {
-	Text     string
-	ExitCode int
-}
-
-func (e *usageError) Error() string { return "usage" }
-
-func asUsageError(err error) (*usageError, bool) {
-	var ue *usageError
-	if errors.As(err, &ue) {
-		return ue, true
-	}
-	return nil, false
 }

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
@@ -42,11 +43,16 @@ func logSearch(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("POST", "/SearchLogs", nil, nil, body)
+	return executeSearchLogsShortcut(ctx, req)
+}
+
+func executeSearchLogsShortcut(ctx *Context, req map[string]any) (any, error) {
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "log.search",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(req),
+		},
+	})
 }
 
 func logHistogram(ctx *Context, args []string) (any, error) {
@@ -54,11 +60,12 @@ func logHistogram(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("POST", "/DescribeHistogramV1", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "log.describe-histogram-v1",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(req),
+		},
+	})
 }
 
 func logContext(ctx *Context, args []string) (any, error) {
@@ -66,11 +73,12 @@ func logContext(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("POST", "/DescribeLogContext", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "log.describe-log-context",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(req),
+		},
+	})
 }
 
 func logPut(ctx *Context, args []string) (any, error) {

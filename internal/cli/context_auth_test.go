@@ -12,6 +12,7 @@ import (
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth"
 	"github.com/volcengine-tls/ve-tls-cli/internal/config"
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 )
 
 // capturedRequest records the Authorization header, X-Security-Token, and
@@ -216,12 +217,10 @@ func TestDynamicFailureDoesNotSendOrFallback(t *testing.T) {
 	}
 }
 
-// TestPaginationRefreshUsesNewTokenOnNextRequest proves that the real
-// listAllByPageNumber pagination helper re-invokes Retrieve on every page, so
-// a refreshed token is picked up on the next page request. The first page is
-// signed with token A; after the provider rotates to token B, the second page
-// is signed with token B. This exercises the actual pagination loop rather than
-// two manual DoRaw calls.
+// TestPaginationRefreshUsesNewTokenOnNextRequest proves that the unified
+// shortcut executor re-invokes Retrieve on every page, so a refreshed token is
+// picked up on the next page request. The first page is signed with token A;
+// after the provider rotates to token B, the second page is signed with token B.
 func TestPaginationRefreshUsesNewTokenOnNextRequest(t *testing.T) {
 	clearAuthTestEnv(t)
 
@@ -281,9 +280,38 @@ func TestPaginationRefreshUsesNewTokenOnNextRequest(t *testing.T) {
 	ctx.Profile = "sso"
 	ctx.authFactory = factory
 
-	out, err := listAllByPageNumber(ctx, "/DescribeProjects", map[string]string{"PageSize": "1"}, "Projects")
+	operation, ok := loadToolOperation("project.describe-projects")
+	if !ok {
+		t.Fatal("project.describe-projects operation is unavailable")
+	}
+	codecs, err := newToolExecutionCodecRegistry(ctx)
 	if err != nil {
-		t.Fatalf("listAllByPageNumber: %v", err)
+		t.Fatalf("create execution codecs: %v", err)
+	}
+	result, err := execution.NewExecutor(
+		newContextExecutionTransport(ctx),
+		codecs,
+	).Execute(context.Background(), execution.Invocation{
+		Operation: operation,
+		Input: execution.Input{
+			Query: map[string]any{"PageSize": "1"},
+			Body: execution.Payload{
+				JSON:    map[string]any{},
+				Format:  execution.BodyFormatJSON,
+				Present: true,
+			},
+		},
+		Options: execution.Options{
+			PageAll:          true,
+			ValidationPolicy: execution.ValidationCallerLegacy,
+		},
+	})
+	if err != nil {
+		t.Fatalf("execute project.describe-projects page-all: %v", err)
+	}
+	out, ok := result.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("page-all result has type %T, want object", result.Data)
 	}
 	projects, _ := out["Projects"].([]any)
 	if len(projects) != 2 {

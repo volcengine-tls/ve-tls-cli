@@ -1,44 +1,14 @@
 package cli
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
 )
-
-type toolContractCatalog struct {
-	Version string        `json:"version"`
-	Tools   []toolCatalog `json:"tools"`
-}
-
-type toolCatalog struct {
-	ID              string         `json:"id"`
-	Group           string         `json:"group"`
-	Action          string         `json:"action"`
-	Resource        string         `json:"resource"`
-	Verb            string         `json:"verb"`
-	Family          string         `json:"family"`
-	Method          string         `json:"method"`
-	Path            string         `json:"path"`
-	Visibility      string         `json:"visibility"`
-	Summary         string         `json:"summary"`
-	InputSchema     map[string]any `json:"input_schema"`
-	ContextSchema   map[string]any `json:"context_schema"`
-	ExecutionSchema map[string]any `json:"execution_schema"`
-	OutputPolicy    string         `json:"output_policy"`
-	ErrorRecovery   string         `json:"error_recovery"`
-	DocSource       string         `json:"doc_source"`
-	UsageConstraint string         `json:"usage_constraints"`
-	RiskLevel       string         `json:"risk_level"`
-	SupportsDryRun  bool           `json:"supports_dry_run"`
-	SupportsAll     bool           `json:"supports_all"`
-	IsEnvelopeOut   bool           `json:"is_envelope_output"`
-}
 
 type toolDescribeView string
 
@@ -48,86 +18,94 @@ const (
 )
 
 var (
-	toolCatalogOnce      sync.Once
-	cachedToolCatalog    toolContractCatalog
-	cachedToolCatalogErr error
+	operationCatalogOnce sync.Once
+	cachedCatalog        contract.Catalog
+	cachedOperations     map[string]contract.Operation
+	cachedCatalogErr     error
 )
 
-func loadToolCatalog() (toolContractCatalog, error) {
-	toolCatalogOnce.Do(func() {
-		var catalog toolContractCatalog
-		if err := json.Unmarshal([]byte(generatedToolCatalogJSON), &catalog); err != nil {
-			cachedToolCatalogErr = err
+func loadOperationCatalog() (contract.Catalog, error) {
+	operationCatalogOnce.Do(func() {
+		catalog, err := contract.LoadEmbedded()
+		if err != nil {
+			cachedCatalogErr = err
 			return
 		}
-		sort.Slice(catalog.Tools, func(i, j int) bool {
-			if normalizeToken(catalog.Tools[i].Group) == normalizeToken(catalog.Tools[j].Group) {
-				return normalizeToken(catalog.Tools[i].Action) < normalizeToken(catalog.Tools[j].Action)
-			}
-			return normalizeToken(catalog.Tools[i].Group) < normalizeToken(catalog.Tools[j].Group)
-		})
-		cachedToolCatalog = catalog
+		operations := make(map[string]contract.Operation, len(catalog.Operations))
+		for _, operation := range catalog.Operations {
+			operations[string(operation.ID)] = operation
+		}
+		cachedOperations = operations
+		cachedCatalog = catalog
 	})
-	return cachedToolCatalog, cachedToolCatalogErr
+	return cachedCatalog, cachedCatalogErr
 }
 
-func loadToolByIdentity(group, action string) (toolCatalog, bool) {
+func loadToolOperation(id string) (contract.Operation, bool) {
+	if _, err := loadOperationCatalog(); err != nil {
+		return contract.Operation{}, false
+	}
+	operation, ok := cachedOperations[strings.TrimSpace(id)]
+	return operation, ok
+}
+
+func loadToolByIdentity(group, action string) (contract.Operation, bool) {
 	tool, err := resolveToolByIdentity(group, action)
 	if err != nil {
-		return toolCatalog{}, false
+		return contract.Operation{}, false
 	}
 	return tool, true
 }
 
-func resolveToolByIdentity(group, action string) (toolCatalog, error) {
-	catalog, err := loadToolCatalog()
+func resolveToolByIdentity(group, action string) (contract.Operation, error) {
+	catalog, err := loadOperationCatalog()
 	if err != nil {
-		return toolCatalog{}, err
+		return contract.Operation{}, err
 	}
 	g := normalizeToken(group)
 	a := normalizeToken(action)
 	if g == "" || a == "" {
-		return toolCatalog{}, fmt.Errorf("unknown tool: %s.%s", strings.TrimSpace(group), strings.TrimSpace(action))
+		return contract.Operation{}, fmt.Errorf("unknown tool: %s.%s", strings.TrimSpace(group), strings.TrimSpace(action))
 	}
-	exact := make([]toolCatalog, 0, 1)
-	verbAliases := make([]toolCatalog, 0, 2)
-	for _, tool := range catalog.Tools {
-		if normalizeToken(tool.Group) != g {
+	exact := make([]contract.Operation, 0, 1)
+	verbAliases := make([]contract.Operation, 0, 2)
+	for _, operation := range catalog.Operations {
+		if operation.Visibility != "public" || normalizeToken(operation.Group) != g {
 			continue
 		}
-		if toolIdentityMatchesAlias(tool, a) {
-			exact = append(exact, tool)
+		if toolIdentityMatchesAlias(operation, a) {
+			exact = append(exact, operation)
 			continue
 		}
-		if normalizeToken(tool.Verb) == a {
-			verbAliases = append(verbAliases, tool)
+		if normalizeToken(operation.Verb) == a {
+			verbAliases = append(verbAliases, operation)
 		}
 	}
 	if len(exact) == 1 {
 		return exact[0], nil
 	}
 	if len(exact) > 1 {
-		return toolCatalog{}, ambiguousToolIdentityError(group, action, exact)
+		return contract.Operation{}, ambiguousToolIdentityError(group, action, exact)
 	}
 	if len(verbAliases) == 1 {
 		return verbAliases[0], nil
 	}
 	if len(verbAliases) > 1 {
-		return toolCatalog{}, ambiguousToolIdentityError(group, action, verbAliases)
+		return contract.Operation{}, ambiguousToolIdentityError(group, action, verbAliases)
 	}
-	return toolCatalog{}, fmt.Errorf("unknown tool: %s.%s", strings.TrimSpace(group), strings.TrimSpace(action))
+	return contract.Operation{}, fmt.Errorf("unknown tool: %s.%s", strings.TrimSpace(group), strings.TrimSpace(action))
 }
 
-func toolIdentityMatchesAlias(tool toolCatalog, actionToken string) bool {
-	idAction := toolIdentityAction(tool.ID)
+func toolIdentityMatchesAlias(operation contract.Operation, actionToken string) bool {
+	idAction := toolIdentityAction(string(operation.ID))
 	if normalizeToken(idAction) == actionToken {
 		return true
 	}
-	legacyLongAction := toKebab(strings.TrimSpace(tool.Action))
+	legacyLongAction := toKebab(strings.TrimSpace(operation.Action))
 	if normalizeToken(legacyLongAction) == actionToken {
 		return true
 	}
-	if normalizeToken(tool.Action) == actionToken {
+	if normalizeToken(operation.Action) == actionToken {
 		return true
 	}
 	return false
@@ -138,11 +116,11 @@ func toolIdentityAction(identity string) string {
 	return strings.TrimSpace(parts[len(parts)-1])
 }
 
-func ambiguousToolIdentityError(group, action string, matches []toolCatalog) error {
+func ambiguousToolIdentityError(group, action string, matches []contract.Operation) error {
 	ids := make([]string, 0, len(matches))
 	seen := map[string]struct{}{}
-	for _, tool := range matches {
-		id := strings.TrimSpace(tool.ID)
+	for _, operation := range matches {
+		id := strings.TrimSpace(string(operation.ID))
 		if id == "" {
 			continue
 		}
@@ -161,26 +139,29 @@ func ambiguousToolIdentityError(group, action string, matches []toolCatalog) err
 	)
 }
 
-func loadToolCatalogEntries(group, verb, family string) []toolCatalog {
-	catalog, err := loadToolCatalog()
+func loadToolOperations(group, verb, family string) []contract.Operation {
+	catalog, err := loadOperationCatalog()
 	if err != nil {
 		return nil
 	}
 	g := normalizeToken(group)
 	v := normalizeToken(verb)
 	f := normalizeToken(family)
-	out := make([]toolCatalog, 0, len(catalog.Tools))
-	for _, tool := range catalog.Tools {
-		if g != "" && normalizeToken(tool.Group) != g {
+	out := make([]contract.Operation, 0, len(catalog.Operations))
+	for _, operation := range catalog.Operations {
+		if operation.Visibility != "public" {
 			continue
 		}
-		if v != "" && !toolVerbMatches(tool, v) {
+		if g != "" && normalizeToken(operation.Group) != g {
 			continue
 		}
-		if f != "" && normalizeToken(tool.Family) != f {
+		if v != "" && !toolVerbMatches(operation, v) {
 			continue
 		}
-		out = append(out, tool)
+		if f != "" && normalizeToken(operation.Family) != f {
+			continue
+		}
+		out = append(out, operation)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if normalizeToken(out[i].Group) == normalizeToken(out[j].Group) {
@@ -192,7 +173,7 @@ func loadToolCatalogEntries(group, verb, family string) []toolCatalog {
 }
 
 func toolGroupExists(group string) bool {
-	catalog, err := loadToolCatalog()
+	catalog, err := loadOperationCatalog()
 	if err != nil {
 		return false
 	}
@@ -200,20 +181,20 @@ func toolGroupExists(group string) bool {
 	if want == "" {
 		return false
 	}
-	for _, tool := range catalog.Tools {
-		if normalizeToken(tool.Group) == want {
+	for _, operation := range catalog.Operations {
+		if operation.Visibility == "public" && normalizeToken(operation.Group) == want {
 			return true
 		}
 	}
 	return false
 }
 
-func toolVerbMatches(tool toolCatalog, want string) bool {
+func toolVerbMatches(operation contract.Operation, want string) bool {
 	target := normalizeToken(want)
 	if target == "" {
 		return true
 	}
-	for _, candidate := range toolVerbAliases(tool) {
+	for _, candidate := range toolVerbAliases(operation) {
 		if normalizeToken(candidate) == target {
 			return true
 		}
@@ -221,10 +202,10 @@ func toolVerbMatches(tool toolCatalog, want string) bool {
 	return false
 }
 
-func toolVerbAliases(tool toolCatalog) []string {
+func toolVerbAliases(operation contract.Operation) []string {
 	seen := map[string]struct{}{}
 	aliases := make([]string, 0, 2)
-	for _, candidate := range []string{strings.TrimSpace(tool.Verb), semanticToolVerb(tool)} {
+	for _, candidate := range []string{strings.TrimSpace(operation.Verb), semanticToolVerb(operation)} {
 		key := normalizeToken(candidate)
 		if key == "" {
 			continue
@@ -238,17 +219,17 @@ func toolVerbAliases(tool toolCatalog) []string {
 	return aliases
 }
 
-func semanticToolVerb(tool toolCatalog) string {
-	raw := strings.TrimSpace(tool.Verb)
+func semanticToolVerb(operation contract.Operation) string {
+	raw := strings.TrimSpace(operation.Verb)
 	if !strings.EqualFold(raw, "describe") {
 		return raw
 	}
-	switch strings.ToUpper(strings.TrimSpace(tool.Method)) {
+	switch strings.ToUpper(strings.TrimSpace(operation.Wire.Method)) {
 	case "GET", "HEAD", "OPTIONS":
 	default:
 		return raw
 	}
-	action := strings.TrimSpace(tool.Action)
+	action := strings.TrimSpace(operation.Action)
 	noun := ""
 	if strings.HasPrefix(action, "Describe") {
 		noun = strings.TrimSpace(strings.TrimPrefix(action, "Describe"))
@@ -299,7 +280,7 @@ func trimToolVersionSuffix(noun string) string {
 	return strings.TrimSpace(out)
 }
 
-func summarizeTools(tools []toolCatalog) string {
+func summarizeTools(tools []contract.Operation) string {
 	if len(tools) == 0 {
 		return "No tools matched.\n"
 	}
@@ -324,14 +305,14 @@ func summarizeTools(tools []toolCatalog) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-func summarizeToolsForGroup(tools []toolCatalog, group string) string {
+func summarizeToolsForGroup(tools []contract.Operation, group string) string {
 	if strings.TrimSpace(group) == "" {
 		return "No tools matched.\n"
 	}
 	matching := make([]string, 0, len(tools))
 	seen := map[string]struct{}{}
 	for _, tool := range tools {
-		id := strings.TrimSpace(tool.ID)
+		id := strings.TrimSpace(string(tool.ID))
 		if normalizeToken(id) == "" {
 			continue
 		}
@@ -374,30 +355,43 @@ type toolDescribeCommon struct {
 	contractCache    map[string]any
 }
 
-func buildToolDescribeOutput(contract toolCatalog, view toolDescribeView) map[string]any {
-	common := buildToolDescribeCommon(contract)
+func buildToolDescribeOutput(operation contract.Operation, view toolDescribeView) (map[string]any, error) {
+	common, err := buildToolDescribeCommon(operation)
+	if err != nil {
+		return nil, err
+	}
 	switch view {
 	case toolDescribeViewCompact:
-		return buildToolDescribeCompactOutput(contract, common)
+		return buildToolDescribeCompactOutput(operation, common), nil
 	default:
-		return buildToolDescribeFullOutput(contract, common)
+		return buildToolDescribeFullOutput(operation, common), nil
 	}
 }
 
-func buildToolDescribeCommon(contract toolCatalog) toolDescribeCommon {
-	inputSchema := cloneToolSchema(contract.InputSchema)
-	executionSchema := enrichToolExecutionSchema(contract.ExecutionSchema, contract.SupportsAll)
-	contextSchema := enrichToolContextSchema(contract.ContextSchema, executionSchema, contract.SupportsAll)
+func buildToolDescribeCommon(operation contract.Operation) (toolDescribeCommon, error) {
+	catalog, err := loadOperationCatalog()
+	if err != nil {
+		return toolDescribeCommon{}, err
+	}
+	expandedContextSchema, err := contract.ExpandContextSchema(catalog.ContextSchema, catalog.ExecutionSchema)
+	if err != nil {
+		return toolDescribeCommon{}, err
+	}
+	supportsAll := operation.Pagination != nil
+	supportsDryRun := operation.Runtime.SupportsDryRun
+	inputSchema := cloneToolSchema(map[string]any(operation.InputSchema))
+	executionSchema := enrichToolExecutionSchema(map[string]any(catalog.ExecutionSchema), supportsAll)
+	contextSchema := enrichToolContextSchema(map[string]any(expandedContextSchema), executionSchema, supportsAll)
 	execution := cloneToolSchema(executionSchema)
-	execution["supports_all"] = contract.SupportsAll
-	execution["supports_dry_run"] = contract.SupportsDryRun
-	digestValue := strings.ToLower(toolContractForDigest(contract))
-	verb := semanticToolVerb(contract)
+	execution["supports_all"] = supportsAll
+	execution["supports_dry_run"] = supportsDryRun
+	digestValue := strings.ToLower(toolContractForDigest(operation))
+	verb := semanticToolVerb(operation)
 	usageNotes := []any{}
-	if contract.SupportsAll {
+	if supportsAll {
 		usageNotes = append(usageNotes, "execution.page.all increases completeness and may increase payload size; pair it with execution.artifact or execution.projection for large results.")
 	}
-	usageNotes = append(usageNotes, toolSpecificUsageNotes(contract)...)
+	usageNotes = append(usageNotes, toolSpecificUsageNotes(operation)...)
 	return toolDescribeCommon{
 		inputSchema:     inputSchema,
 		inputFlatSchema: buildToolFlatInputSchema(inputSchema),
@@ -406,29 +400,29 @@ func buildToolDescribeCommon(contract toolCatalog) toolDescribeCommon {
 		executionSchema: executionSchema,
 		execution:       execution,
 		identity: map[string]any{
-			"id":         strings.TrimSpace(contract.ID),
-			"group":      strings.TrimSpace(contract.Group),
-			"action":     strings.TrimSpace(contract.Action),
-			"resource":   strings.TrimSpace(contract.Resource),
+			"id":         strings.TrimSpace(string(operation.ID)),
+			"group":      strings.TrimSpace(operation.Group),
+			"action":     strings.TrimSpace(operation.Action),
+			"resource":   strings.TrimSpace(operation.Resource),
 			"verb":       verb,
-			"family":     strings.TrimSpace(contract.Family),
-			"method":     strings.ToUpper(strings.TrimSpace(contract.Method)),
-			"path":       strings.TrimSpace(contract.Path),
-			"visibility": strings.TrimSpace(contract.Visibility),
-			"summary":    strings.TrimSpace(contract.Summary),
+			"family":     strings.TrimSpace(operation.Family),
+			"method":     strings.ToUpper(strings.TrimSpace(operation.Wire.Method)),
+			"path":       strings.TrimSpace(operation.Wire.Path),
+			"visibility": strings.TrimSpace(operation.Visibility),
+			"summary":    strings.TrimSpace(operation.Docs.Summary),
 		},
 		usageNotes:       usageNotes,
-		usageConstraints: strings.TrimSpace(contract.UsageConstraint),
+		usageConstraints: strings.TrimSpace(operation.Docs.UsageConstraints),
 		behavior: map[string]any{
 			"execution_embedded_at": "context.execution",
 			"verb":                  verb,
-			"supports_dry_run":      contract.SupportsDryRun,
-			"supports_all":          contract.SupportsAll,
-			"is_envelope_output":    contract.IsEnvelopeOut,
+			"supports_dry_run":      supportsDryRun,
+			"supports_all":          supportsAll,
+			"is_envelope_output":    operation.Output.IsEnvelopeOutput,
 		},
 		output: map[string]any{
-			"policy":      strings.TrimSpace(contract.OutputPolicy),
-			"is_envelope": contract.IsEnvelopeOut,
+			"policy":      strings.TrimSpace(operation.Output.Policy),
+			"is_envelope": operation.Output.IsEnvelopeOutput,
 		},
 		contractDigest: map[string]any{
 			"value":   digestValue,
@@ -443,11 +437,11 @@ func buildToolDescribeCommon(contract toolCatalog) toolDescribeCommon {
 				"execution returns unknown field, contract mismatch, or nearby usage errors for this action",
 			},
 		},
-	}
+	}, nil
 }
 
-func toolSpecificUsageNotes(contract toolCatalog) []any {
-	switch strings.TrimSpace(contract.ID) {
+func toolSpecificUsageNotes(operation contract.Operation) []any {
+	switch strings.TrimSpace(string(operation.ID)) {
 	case "log.search":
 		return []any{
 			"SearchLogs Query supports both plain search syntax and SQL/analysis syntax such as '* | select ...'.",
@@ -471,7 +465,7 @@ func toolSpecificUsageNotes(contract toolCatalog) []any {
 	}
 }
 
-func buildToolDescribeFullOutput(contract toolCatalog, common toolDescribeCommon) map[string]any {
+func buildToolDescribeFullOutput(operation contract.Operation, common toolDescribeCommon) map[string]any {
 	target := map[string]any{
 		"identity":            common.identity,
 		"input":               common.inputSchema,
@@ -484,10 +478,10 @@ func buildToolDescribeFullOutput(contract toolCatalog, common toolDescribeCommon
 		"usage_constraints":   common.usageConstraints,
 		"behavior":            common.behavior,
 		"output":              common.output,
-		"output_policy":       strings.TrimSpace(contract.OutputPolicy),
-		"risk":                strings.TrimSpace(contract.RiskLevel),
-		"recovery":            strings.TrimSpace(contract.ErrorRecovery),
-		"source":              strings.TrimSpace(contract.DocSource),
+		"output_policy":       strings.TrimSpace(operation.Output.Policy),
+		"risk":                strings.TrimSpace(operation.Risk.Level),
+		"recovery":            strings.TrimSpace(operation.Risk.ErrorRecovery),
+		"source":              strings.TrimSpace(operation.Docs.Source),
 		"contract_digest":     common.contractDigest,
 		"contract_cache_hint": common.contractCache,
 	}
@@ -500,7 +494,7 @@ func buildToolDescribeFullOutput(contract toolCatalog, common toolDescribeCommon
 	return target
 }
 
-func buildToolDescribeCompactOutput(contract toolCatalog, common toolDescribeCommon) map[string]any {
+func buildToolDescribeCompactOutput(operation contract.Operation, common toolDescribeCommon) map[string]any {
 	compactInputSchema := compactToolInputSchema(common.inputSchema)
 	target := map[string]any{
 		"identity": map[string]any{
@@ -515,10 +509,10 @@ func buildToolDescribeCompactOutput(contract toolCatalog, common toolDescribeCom
 		"usage_notes":         common.usageNotes,
 		"usage_constraints":   common.usageConstraints,
 		"behavior":            common.behavior,
-		"risk":                strings.TrimSpace(contract.RiskLevel),
-		"recovery":            strings.TrimSpace(contract.ErrorRecovery),
-		"output_policy":       strings.TrimSpace(contract.OutputPolicy),
-		"source":              strings.TrimSpace(contract.DocSource),
+		"risk":                strings.TrimSpace(operation.Risk.Level),
+		"recovery":            strings.TrimSpace(operation.Risk.ErrorRecovery),
+		"output_policy":       strings.TrimSpace(operation.Output.Policy),
+		"source":              strings.TrimSpace(operation.Docs.Source),
 		"contract_digest":     common.contractDigest,
 		"contract_cache_hint": common.contractCache,
 	}
@@ -1221,11 +1215,14 @@ func toolAnyToString(v any) string {
 	return s
 }
 
-func toolContractForDigest(tool toolCatalog) string {
-	b, err := json.Marshal(tool)
+func toolContractForDigest(operation contract.Operation) string {
+	catalog, err := loadOperationCatalog()
 	if err != nil {
 		return ""
 	}
-	sum := sha256.Sum256(b)
-	return hex.EncodeToString(sum[:])
+	legacy, err := contract.RebuildLegacyToolV1(catalog, operation)
+	if err != nil {
+		return ""
+	}
+	return contract.LegacyToolDigestV1(legacy)
 }

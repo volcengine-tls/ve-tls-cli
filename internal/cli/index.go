@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
@@ -46,19 +48,24 @@ func indexGet(ctx *Context, args []string) (any, error) {
 	if topicID == "" {
 		return nil, errors.New("missing --topic-id")
 	}
-	body, _ := util.MustJSON(map[string]any{})
-	return ctx.Do("GET", "/DescribeIndex", map[string]string{"TopicId": topicID}, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "index.describe",
+		Input: execution.Input{
+			Query: shortcutQueryInput(map[string]string{"TopicId": topicID}),
+			Body:  shortcutEmptyJSONBodyInput(),
+		},
+	})
 }
 
 func indexCreate(ctx *Context, args []string) (any, error) {
-	return indexUpsert(ctx, "/CreateIndex", args)
+	return indexUpsert(ctx, "index.create", "/CreateIndex", args)
 }
 
 func indexModify(ctx *Context, args []string) (any, error) {
-	return indexUpsert(ctx, "/ModifyIndex", args)
+	return indexUpsert(ctx, "index.modify", "/ModifyIndex", args)
 }
 
-func indexUpsert(ctx *Context, path string, args []string) (any, error) {
+func indexUpsert(ctx *Context, operationID contract.OperationID, path string, args []string) (any, error) {
 	var (
 		topicID string
 		bodyArg string
@@ -110,13 +117,10 @@ func indexUpsert(ctx *Context, path string, args []string) (any, error) {
 	if err := validateIndexBody(path, m); err != nil {
 		return nil, err
 	}
-	body, err := util.MustJSON(m)
-	if err != nil {
-		return nil, err
-	}
-	method := "POST"
-	if path == "/ModifyIndex" {
-		method = "PUT"
-	}
-	return ctx.Do(method, path, nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: operationID,
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(m),
+		},
+	})
 }

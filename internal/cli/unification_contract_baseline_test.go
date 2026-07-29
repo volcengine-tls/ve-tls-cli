@@ -11,25 +11,23 @@ import (
 )
 
 func TestUnificationBaselineAllToolDigests(t *testing.T) {
-	catalog, err := loadToolCatalog()
-	if err != nil {
-		t.Fatalf("load tool catalog: %v", err)
-	}
-	if got, want := len(catalog.Tools), 125; got != want {
+	operations := loadToolOperations("", "", "")
+	if got, want := len(operations), 125; got != want {
 		t.Fatalf("tool catalog count: got %d, want %d", got, want)
 	}
 
 	digestPattern := regexp.MustCompile(`^[0-9a-f]{64}$`)
-	got := make(map[string]string, len(catalog.Tools))
-	for _, tool := range catalog.Tools {
-		if _, exists := got[tool.ID]; exists {
+	got := make(map[string]string, len(operations))
+	for _, tool := range operations {
+		id := string(tool.ID)
+		if _, exists := got[id]; exists {
 			t.Fatalf("duplicate tool ID %q", tool.ID)
 		}
 		digest := toolContractForDigest(tool)
 		if !digestPattern.MatchString(digest) {
 			t.Fatalf("tool %q digest %q is not 64-character lowercase hexadecimal", tool.ID, digest)
 		}
-		got[tool.ID] = digest
+		got[id] = digest
 	}
 
 	goldenPath := filepath.Join("testdata", "unification", "tool_contract_digests.json")

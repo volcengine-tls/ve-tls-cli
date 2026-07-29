@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
@@ -114,10 +115,26 @@ func projectList(ctx *Context, args []string) (any, error) {
 		}
 	}
 	if all {
-		return listAllByPageNumber(ctx, "/DescribeProjects", query, "Projects")
+		return executeShortcutOperation(ctx, shortcutExecutionRequest{
+			OperationID: "project.describe-projects",
+			Input: execution.Input{
+				Query: shortcutQueryInput(query),
+				Body:  shortcutEmptyJSONBodyInput(),
+			},
+			PageAll: true,
+			LegacyPageAll: &legacyPageAllPolicy{
+				ListField:  "Projects",
+				ForceTotal: true,
+			},
+		})
 	}
-	body, _ := util.MustJSON(map[string]any{})
-	return ctx.Do("GET", "/DescribeProjects", query, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "project.describe-projects",
+		Input: execution.Input{
+			Query: shortcutQueryInput(query),
+			Body:  shortcutEmptyJSONBodyInput(),
+		},
+	})
 }
 
 func projectGet(ctx *Context, args []string) (any, error) {
@@ -145,12 +162,17 @@ func projectGet(ctx *Context, args []string) (any, error) {
 	if projectID == "" {
 		return nil, errors.New("missing --project-id")
 	}
-	body, _ := util.MustJSON(map[string]any{})
 	query := map[string]string{"ProjectId": projectID}
 	if strings.TrimSpace(topicTypes) != "" {
 		query["TopicTypes"] = topicTypes
 	}
-	return ctx.Do("GET", "/DescribeProject", query, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "project.describe-project",
+		Input: execution.Input{
+			Query: shortcutQueryInput(query),
+			Body:  shortcutEmptyJSONBodyInput(),
+		},
+	})
 }
 
 func projectCreate(ctx *Context, args []string) (any, error) {
@@ -247,11 +269,12 @@ func projectCreate(ctx *Context, args []string) (any, error) {
 		req["Tags"] = a
 	}
 
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("POST", "/CreateProject", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "project.create",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(req),
+		},
+	})
 }
 
 func projectModify(ctx *Context, args []string) (any, error) {
@@ -325,11 +348,12 @@ func projectModify(ctx *Context, args []string) (any, error) {
 	if favSet {
 		req["Favourite"] = fav
 	}
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("PUT", "/ModifyProject", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "project.modify",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(req),
+		},
+	})
 }
 
 func projectDelete(ctx *Context, args []string) (any, error) {
@@ -350,9 +374,10 @@ func projectDelete(ctx *Context, args []string) (any, error) {
 	if projectID == "" {
 		return nil, errors.New("missing --project-id")
 	}
-	body, err := util.MustJSON(map[string]any{"ProjectId": projectID})
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("DELETE", "/DeleteProject", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "project.delete",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(map[string]any{"ProjectId": projectID}),
+		},
+	})
 }

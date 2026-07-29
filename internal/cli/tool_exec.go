@@ -1,12 +1,12 @@
 package cli
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
-	"fmt"
-	"sort"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
@@ -51,11 +51,11 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 		}
 	}
 
-	contract, err := resolveToolByIdentity(group, action)
+	operation, err := resolveToolByIdentity(group, action)
 	if err != nil {
 		return nil, err
 	}
-	ctx.Action = "tool." + strings.TrimSpace(contract.ID)
+	ctx.Action = "tool." + strings.TrimSpace(string(operation.ID))
 	ctxCfg := toolExecContext{Execution: map[string]any{}}
 	if strings.TrimSpace(contextArg) != "" {
 		ctxCfg, err = loadToolExecContext(contextArg)
@@ -63,18 +63,18 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 			return nil, err
 		}
 	}
-	input := map[string]any{}
+	rawInput := map[string]any{}
 	if strings.TrimSpace(inputArg) != "" {
-		input, err = readToolJSONObjectFlag("--input", inputArg)
+		rawInput, err = readToolJSONObjectFlag("--input", inputArg)
 		if err != nil {
 			return nil, err
 		}
 	}
-	input, err = normalizeToolExecInput(contract, input)
+	input, err := execution.NormalizeInput(operation, rawInput)
 	if err != nil {
 		return nil, err
 	}
-	if err := validateToolExecInput(contract, input); err != nil {
+	if err := execution.ValidateInput(operation, input); err != nil {
 		return nil, err
 	}
 	if err := applyToolExecContext(ctx, ctxCfg); err != nil {
@@ -91,6 +91,7 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 	if options.DryRun {
 		ctx.DryRun = true
 	}
+	options.DryRun = ctx.DryRun
 	if options.Artifact {
 		if strings.TrimSpace(ctx.Filter) != "" {
 			return nil, errors.New("--jmes-filter cannot be combined with file delivery for tool exec")
@@ -104,25 +105,41 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 		}
 	}
 
-	method, path, query, header, body, err := buildToolExecRequest(contract, input)
+	runtime := execution.RuntimeView{}
+	if options.DryRun {
+		runtime = buildToolExecutionRuntimeView(ctx)
+	}
+	codecs, err := newToolExecutionCodecRegistry(ctx)
 	if err != nil {
 		return nil, err
 	}
-	ctx.apiIOMeta = apiIOMeta{
-		Group:         group,
-		Action:        normalizeActionToken(contract.Action),
-		Method:        method,
-		Path:          path,
-		RequestFormat: requestFormatJSON,
-		OutputFormat:  ctx.Format,
-		OutputMode:    ctx.OutputMode,
+	executor := execution.NewExecutor(
+		newContextExecutionTransport(ctx),
+		codecs,
+	)
+	executionResult, err := executor.Execute(context.Background(), execution.Invocation{
+		Operation: operation,
+		Input:     input,
+		Options: execution.Options{
+			DryRun:  options.DryRun,
+			PageAll: options.PageAll,
+		},
+		Runtime: runtime,
+	})
+	applyToolExecutionResult(ctx, executionResult)
+	if err != nil {
+		return nil, adaptToolExecutionError(err)
+	}
+	result := executionResult.Data
+	if executionResult.Plan != nil {
+		ctx.traceToolExecutionPlan(executionResult.Plan)
+		result, err = toolExecutionPlanValue(executionResult.Plan)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	warnings := toolDigestWarnings(contract, ctxCfg.ContractDigest)
-	result, err := runToolExecAction(ctx, contract, method, path, query, header, body, options)
-	if err != nil {
-		return nil, err
-	}
+	warnings := toolDigestWarnings(operation, ctxCfg.ContractDigest)
 	filteredResult, err := applyToolExecFilters(result, options.Projection)
 	if err != nil {
 		return nil, err
@@ -137,51 +154,11 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 		return nil, err
 	}
 	env["action"] = ctx.Action
-	env["contract_digest"] = buildToolContractDigestStatus(contract, ctxCfg.ContractDigest)
+	env["contract_digest"] = buildToolContractDigestStatus(operation, ctxCfg.ContractDigest)
 	if len(warnings) > 0 {
 		env["warnings"] = warnings
 	}
 	return env, nil
-}
-
-func runToolExecAction(ctx *Context, contract toolCatalog, method, path string, query, header map[string]string, body []byte, options toolExecutionOptions) (any, error) {
-	if options.PageAll {
-		toolID := strings.TrimSpace(contract.ID)
-		if !contract.SupportsAll {
-			return nil, fmt.Errorf("execution.page.all is not supported for tool: %s", toolID)
-		}
-		if generatedPaginationModeForContract(contract, method) == "page-number" {
-			preparedQuery, pageSize, err := preparePageAllPageNumberQuery(query)
-			if err != nil {
-				return nil, err
-			}
-			query = preparedQuery
-			if ctx.DryRun {
-				out, err := ctx.Do(method, path, query, header, body)
-				if err != nil {
-					return nil, err
-				}
-				return annotateToolDryRunPageAll(out, pageSize), nil
-			}
-		}
-		if ctx.DryRun {
-			out, err := ctx.Do(method, path, query, header, body)
-			if err != nil {
-				return nil, err
-			}
-			return annotateToolDryRunPageAll(out, 0), nil
-		}
-		ops, ok := loadToolAPIOps(contract)
-		if !ok || len(ops) == 0 {
-			return nil, fmt.Errorf("tool %s declares page.all support but runtime pagination metadata is unavailable", toolID)
-		}
-		selected, ok := selectOpByMethod(ops, method)
-		if !ok || !supportsGeneratedActionAll(selected) {
-			return nil, fmt.Errorf("tool %s declares page.all support but runtime pagination execution is unavailable", toolID)
-		}
-		return runGeneratedActionAll(ctx, selected, contract.Action, path, query, header, body)
-	}
-	return ctx.Do(method, path, query, header, body)
 }
 
 func applyToolExecFilters(result any, expressions ...string) (any, error) {
@@ -248,330 +225,12 @@ func extractToolProjectionMetadata(raw any) map[string]any {
 	return out
 }
 
-func annotateToolDryRunPageAll(result any, pageSize int) any {
-	plan, ok := result.(map[string]any)
-	if !ok {
-		return result
-	}
-	meta := map[string]any{
-		"requested": true,
-		"mode":      "dry_run",
-		"note":      "dry-run validates the first request shape; real execution will iterate all supported pages",
-	}
-	if pageSize > 0 {
-		meta["page_size"] = pageSize
-	}
-	plan["page_all"] = meta
-	return plan
-}
-
-func generatedPaginationModeForContract(contract toolCatalog, method string) string {
-	ops, ok := loadToolAPIOps(contract)
-	if !ok || len(ops) == 0 {
-		return ""
-	}
-	selected, ok := selectOpByMethod(ops, method)
-	if !ok {
-		return ""
-	}
-	return generatedPaginationMode(selected)
-}
-
-func loadToolAPIOps(contract toolCatalog) ([]apiActionOp, bool) {
-	doc, err := loadAPICapabilities()
-	if err != nil {
-		return nil, false
-	}
-	index := buildAPIIndex(doc)
-	group := normalizeToken(contract.Group)
-	action := normalizeActionToken(contract.Action)
-	actions, ok := index[group]
-	if !ok {
-		return nil, false
-	}
-	ops := actions[action]
-	if len(ops) == 0 {
-		return nil, false
-	}
-	return ops, true
-}
-
-func buildToolExecRequest(contract toolCatalog, input map[string]any) (string, string, map[string]string, map[string]string, []byte, error) {
-	method := strings.ToUpper(strings.TrimSpace(contract.Method))
-	if method == "" {
-		method = "GET"
-	}
-	path := strings.TrimSpace(contract.Path)
-	query := sectionStringMap(input["query"])
-	header := sectionStringMap(input["header"])
-	pathValues := sectionStringMap(input["path"])
-
-	bodyValue, bodyExists := input["body"]
-	if !bodyExists && !hasToolInputSections(input) {
-		bodyValue = input
-		bodyExists = len(input) > 0
-	}
-	body := []byte("{}")
-	if bodyExists {
-		raw, err := json.Marshal(bodyValue)
-		if err != nil {
-			return "", "", nil, nil, nil, err
-		}
-		body = raw
-	}
-	for key, value := range pathValues {
-		path = strings.ReplaceAll(path, "{"+key+"}", value)
-	}
-	if strings.Contains(path, "{") && strings.Contains(path, "}") {
-		return "", "", nil, nil, nil, errors.New("path still contains unresolved params")
-	}
-	return method, path, query, header, body, nil
-}
-
-func normalizeToolExecInput(contract toolCatalog, input map[string]any) (map[string]any, error) {
-	if len(input) == 0 {
-		return input, nil
-	}
-	if reserved := reservedToolExecInputKeys(input); len(reserved) > 0 {
-		return nil, fmt.Errorf("tool exec input contains reserved context/runtime fields: %s; move them to --context", strings.Join(reserved, ", "))
-	}
-	if hasToolInputSections(input) || len(contract.InputSchema) == 0 {
-		return input, nil
-	}
-
-	sectionOrder := []string{"path", "query", "header", "body"}
-	presentSections := make([]string, 0, len(sectionOrder))
-	sectionProps := map[string]map[string]any{}
-	hasBody := false
-	bodyAllowsLooseFields := false
-	for _, section := range sectionOrder {
-		raw, ok := contract.InputSchema[section].(map[string]any)
-		if !ok || len(raw) == 0 {
-			continue
-		}
-		presentSections = append(presentSections, section)
-		props, _ := raw["properties"].(map[string]any)
-		sectionProps[section] = props
-		if section == "body" {
-			hasBody = true
-			bodyAllowsLooseFields = toolSchemaAllowsLooseFields(raw)
-		}
-	}
-	if len(presentSections) == 0 {
-		return input, nil
-	}
-
-	normalized := map[string]any{}
-	ambiguous := make([]string, 0, 1)
-	reserved := make([]string, 0, 1)
-	unknown := make([]string, 0, 1)
-	for key, value := range input {
-		matches := matchingToolInputSections(sectionProps, key)
-		switch len(matches) {
-		case 0:
-			if isReservedToolExecInputKey(key) {
-				reserved = append(reserved, key)
-				continue
-			}
-			if hasBody && (len(presentSections) == 1 || bodyAllowsLooseFields) {
-				assignToolInputSection(normalized, "body", key, value)
-				continue
-			}
-			unknown = append(unknown, key)
-		case 1:
-			assignToolInputSection(normalized, matches[0], key, value)
-		default:
-			ambiguous = append(ambiguous, fmt.Sprintf("%s(%s)", key, strings.Join(matches, ",")))
-		}
-	}
-	if len(ambiguous) > 0 {
-		sort.Strings(ambiguous)
-		return nil, fmt.Errorf("flat input has ambiguous fields: %s; use nested input sections {query,path,header,body}", strings.Join(ambiguous, ", "))
-	}
-	if len(reserved) > 0 {
-		sort.Strings(reserved)
-		return nil, fmt.Errorf("tool exec input contains reserved context/runtime fields: %s; move them to --context", strings.Join(reserved, ", "))
-	}
-	if len(unknown) > 0 {
-		sort.Strings(unknown)
-		return nil, fmt.Errorf("flat input contains unknown fields: %s", strings.Join(unknown, ", "))
-	}
-	return normalized, nil
-}
-
-func isReservedToolExecInputKey(key string) bool {
-	switch strings.TrimSpace(key) {
-	case "context", "profile", "secrets_file", "region", "endpoint", "trace", "execution", "contract_digest", "contract_cache_hint":
-		return true
-	default:
-		return false
-	}
-}
-
-func reservedToolExecInputKeys(input map[string]any) []string {
-	reserved := make([]string, 0, 1)
-	for key := range input {
-		if isReservedToolExecInputKey(key) {
-			reserved = append(reserved, key)
-		}
-	}
-	sort.Strings(reserved)
-	return reserved
-}
-
-func toolSchemaAllowsLooseFields(schema map[string]any) bool {
-	if len(schema) == 0 {
-		return false
-	}
-	if schema["additionalProperties"] != nil {
-		return true
-	}
-	props, _ := schema["properties"].(map[string]any)
-	return len(props) == 0
-}
-
-func matchingToolInputSections(sectionProps map[string]map[string]any, key string) []string {
-	out := make([]string, 0, 2)
-	for _, section := range []string{"path", "query", "header", "body"} {
-		props := sectionProps[section]
-		if len(props) == 0 {
-			continue
-		}
-		if _, ok := props[key]; ok {
-			out = append(out, section)
-		}
-	}
-	return out
-}
-
-func assignToolInputSection(dst map[string]any, section, key string, value any) {
-	section = strings.TrimSpace(section)
-	if section == "" {
-		return
-	}
-	current, _ := dst[section].(map[string]any)
-	if current == nil {
-		current = map[string]any{}
-		dst[section] = current
-	}
-	current[key] = value
-}
-
-func validateToolExecInput(contract toolCatalog, input map[string]any) error {
-	inputSchema := contract.InputSchema
-	if len(inputSchema) == 0 {
-		return nil
-	}
-	missing := make([]string, 0, 4)
-	sectioned := hasToolInputSections(input)
-	for _, section := range []string{"query", "path", "header", "body"} {
-		sectionSchema, ok := inputSchema[section].(map[string]any)
-		if !ok || len(sectionSchema) == 0 {
-			continue
-		}
-
-		var sectionInput map[string]any
-		if sectioned {
-			sectionInput, _ = input[section].(map[string]any)
-		} else if section == "body" {
-			sectionInput = input
-		}
-		if sectionInput == nil {
-			sectionInput = map[string]any{}
-		}
-		collectToolSchemaRequiredFields(sectionSchema, sectionInput, "input."+section, &missing)
-	}
-	if len(missing) == 0 {
-		return nil
-	}
-	sort.Strings(missing)
-	if len(missing) == 1 {
-		return fmt.Errorf("missing required field: %s", missing[0])
-	}
-	return errors.New("missing required fields: " + strings.Join(missing, ", "))
-}
-
-func collectToolSchemaRequiredFields(schema map[string]any, input map[string]any, path string, missing *[]string) {
-	for _, name := range toolRequiredFields(schema["required"]) {
-		value, ok := input[name]
-		if !ok || value == nil {
-			*missing = append(*missing, path+"."+name)
-		}
-	}
-
-	props, _ := schema["properties"].(map[string]any)
-	propNames := make([]string, 0, len(props))
-	for name := range props {
-		propNames = append(propNames, name)
-	}
-	sort.Strings(propNames)
-	for _, name := range propNames {
-		raw := props[name]
-		childSchema, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		childInput, ok := input[name].(map[string]any)
-		if !ok {
-			continue
-		}
-		collectToolSchemaRequiredFields(childSchema, childInput, path+"."+name, missing)
-	}
-}
-
-func hasToolInputSections(input map[string]any) bool {
-	for _, key := range []string{"query", "header", "path", "body"} {
-		if _, ok := input[key]; ok {
-			return true
-		}
-	}
-	return false
-}
-
-func sectionStringMap(v any) map[string]string {
-	src, ok := v.(map[string]any)
-	if !ok || src == nil {
-		return map[string]string{}
-	}
-	out := make(map[string]string, len(src))
-	for key, value := range src {
-		out[strings.TrimSpace(key)] = stringifyToolValue(value)
-	}
-	return out
-}
-
-func stringifyToolValue(v any) string {
-	switch value := v.(type) {
-	case string:
-		return value
-	case bool:
-		if value {
-			return "true"
-		}
-		return "false"
-	case nil:
-		return ""
-	default:
-		raw, err := json.Marshal(value)
-		if err == nil && len(raw) > 0 && string(raw) != "null" {
-			if raw[0] == '"' {
-				var decoded string
-				if err := json.Unmarshal(raw, &decoded); err == nil {
-					return decoded
-				}
-			}
-			return string(raw)
-		}
-		return fmt.Sprint(value)
-	}
-}
-
-func toolDigestWarnings(contract toolCatalog, expected string) []map[string]any {
+func toolDigestWarnings(operation contract.Operation, expected string) []map[string]any {
 	expected = strings.TrimSpace(expected)
 	if expected == "" {
 		return nil
 	}
-	actual := toolContractForDigest(contract)
+	actual := toolContractForDigest(operation)
 	if strings.EqualFold(expected, actual) {
 		return nil
 	}
@@ -586,8 +245,8 @@ func toolDigestWarnings(contract toolCatalog, expected string) []map[string]any 
 	}
 }
 
-func buildToolContractDigestStatus(contract toolCatalog, expected string) map[string]any {
-	actual := toolContractForDigest(contract)
+func buildToolContractDigestStatus(operation contract.Operation, expected string) map[string]any {
+	actual := toolContractForDigest(operation)
 	status := map[string]any{
 		"value":  actual,
 		"policy": "soft",

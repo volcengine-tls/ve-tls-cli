@@ -3,9 +3,11 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
 )
 
-func TestBuildCapabilities_FallsBackToRawSwaggerTagForGroup(t *testing.T) {
+func TestBuildSourceOperationsFallsBackToRawSwaggerTagForGroup(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/ActiveTlsAccount": {
@@ -21,15 +23,15 @@ func TestBuildCapabilities_FallsBackToRawSwaggerTagForGroup(t *testing.T) {
 		"Account": "account",
 	}
 
-	got := buildCapabilities(doc, "stage1", groupKeys, map[string]string{}, map[string]apiDocEntry{})
-	if len(got.Commands) != 1 {
-		t.Fatalf("commands=%d", len(got.Commands))
+	got := buildSourceOperations(doc, groupKeys, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(got) != 1 {
+		t.Fatalf("operations=%d", len(got))
 	}
-	if got.Commands[0].Group != "account" {
-		t.Fatalf("group=%q", got.Commands[0].Group)
+	if got[0].Group != "account" {
+		t.Fatalf("group=%q", got[0].Group)
 	}
-	if got.Commands[0].GroupTitle != "Account" {
-		t.Fatalf("group title=%q", got.Commands[0].GroupTitle)
+	if got[0].GroupTitle != "Account" {
+		t.Fatalf("group title=%q", got[0].GroupTitle)
 	}
 }
 
@@ -106,7 +108,7 @@ func TestParseDocRequestParamsMarkdown(t *testing.T) {
 	}
 }
 
-func TestBuildToolCatalogMinimalFields(t *testing.T) {
+func TestBuildOperationCatalogMinimalFields(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/DescribeProject": {
@@ -127,12 +129,12 @@ func TestBuildToolCatalogMinimalFields(t *testing.T) {
 	}
 	groupKeys := map[string]string{"Project": "project"}
 
-	got := buildToolCatalog(doc, "stage1", groupKeys, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
-	if len(got.Tools) != 1 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	got := buildOperationCatalogForTest(t, doc, "stage1", groupKeys, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(got.Operations) != 1 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
 
-	gotTool := got.Tools[0]
+	gotTool := got.Operations[0]
 	if gotTool.ID != "project.describe" {
 		t.Fatalf("id=%q", gotTool.ID)
 	}
@@ -154,42 +156,42 @@ func TestBuildToolCatalogMinimalFields(t *testing.T) {
 	if gotTool.Visibility != "public" {
 		t.Fatalf("visibility=%q", gotTool.Visibility)
 	}
-	if gotTool.Method != "GET" {
-		t.Fatalf("method=%q", gotTool.Method)
+	if gotTool.Wire.Method != "GET" {
+		t.Fatalf("method=%q", gotTool.Wire.Method)
 	}
-	if gotTool.Path != "/DescribeProject" {
-		t.Fatalf("path=%q", gotTool.Path)
+	if gotTool.Wire.Path != "/DescribeProject" {
+		t.Fatalf("path=%q", gotTool.Wire.Path)
 	}
-	if gotTool.Summary != "DescribeProject" {
-		t.Fatalf("summary=%q", gotTool.Summary)
+	if gotTool.Docs.Summary != "DescribeProject" {
+		t.Fatalf("summary=%q", gotTool.Docs.Summary)
 	}
 	if len(gotTool.InputSchema) == 0 {
 		t.Fatalf("missing input_schema")
 	}
-	if gotTool.ContextSchema == nil || gotTool.ExecutionSchema == nil {
+	if got.ContextSchema == nil || got.ExecutionSchema == nil {
 		t.Fatalf("missing context/execution schema")
 	}
-	if gotTool.OutputPolicy == "" {
+	if gotTool.Output.Policy == "" {
 		t.Fatalf("missing output_policy")
 	}
-	if gotTool.RiskLevel == "" {
+	if gotTool.Risk.Level == "" {
 		t.Fatalf("missing risk_level")
 	}
-	if gotTool.DocSource == "" {
+	if gotTool.Docs.Source == "" {
 		t.Fatalf("missing doc_source")
 	}
-	ctxProps, ok := gotTool.ContextSchema["properties"].(map[string]any)
+	ctxProps, ok := got.ContextSchema["properties"].(map[string]any)
 	if !ok {
-		t.Fatalf("context schema malformed: %+v", gotTool.ContextSchema)
+		t.Fatalf("context schema malformed: %+v", got.ContextSchema)
 	}
 	for _, key := range []string{"region", "profile", "secrets_file", "endpoint", "trace", "contract_digest", "execution"} {
 		if _, ok := ctxProps[key]; !ok {
 			t.Fatalf("context missing %q field", key)
 		}
 	}
-	execProps, ok := gotTool.ExecutionSchema["properties"].(map[string]any)
+	execProps, ok := got.ExecutionSchema["properties"].(map[string]any)
 	if !ok {
-		t.Fatalf("execution schema malformed: %+v", gotTool.ExecutionSchema)
+		t.Fatalf("execution schema malformed: %+v", got.ExecutionSchema)
 	}
 	for _, key := range []string{"artifact", "dry_run", "projection", "page", "page_all"} {
 		if _, ok := execProps[key]; !ok {
@@ -198,18 +200,18 @@ func TestBuildToolCatalogMinimalFields(t *testing.T) {
 	}
 	pageObj, ok := execProps["page"].(map[string]any)
 	if !ok {
-		t.Fatalf("execution page schema malformed: %+v", gotTool.ExecutionSchema)
+		t.Fatalf("execution page schema malformed: %+v", got.ExecutionSchema)
 	}
 	pageObjProps, ok := pageObj["properties"].(map[string]any)
 	if !ok {
-		t.Fatalf("execution page schema missing properties: %+v", gotTool.ExecutionSchema)
+		t.Fatalf("execution page schema missing properties: %+v", got.ExecutionSchema)
 	}
 	if _, ok := pageObjProps["all"]; !ok {
-		t.Fatalf("execution page schema missing all: %+v", gotTool.ExecutionSchema)
+		t.Fatalf("execution page schema missing all: %+v", got.ExecutionSchema)
 	}
 }
 
-func TestBuildToolCatalogContextSchemaCarriesWave2Guidance(t *testing.T) {
+func TestBuildOperationCatalogContextSchemaCarriesWave2Guidance(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/CreateTopic": {
@@ -220,16 +222,16 @@ func TestBuildToolCatalogContextSchemaCarriesWave2Guidance(t *testing.T) {
 			},
 		},
 	}
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Topic": "topic"}, map[string]string{}, map[string]apiDocEntry{
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Topic": "topic"}, map[string]string{}, map[string]apiDocEntry{
 		"CreateTopic": {GroupTitle: "Topic"},
 	}, toolCatalogOverrides{})
-	if len(got.Tools) != 1 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	if len(got.Operations) != 1 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
 
-	ctxProps, ok := got.Tools[0].ContextSchema["properties"].(map[string]any)
+	ctxProps, ok := got.ContextSchema["properties"].(map[string]any)
 	if !ok {
-		t.Fatalf("context schema malformed: %+v", got.Tools[0].ContextSchema)
+		t.Fatalf("context schema malformed: %+v", got.ContextSchema)
 	}
 	for _, key := range []string{"profile", "secrets_file", "region", "endpoint", "trace", "contract_digest", "execution"} {
 		field, ok := ctxProps[key].(map[string]any)
@@ -247,7 +249,7 @@ func TestBuildToolCatalogContextSchemaCarriesWave2Guidance(t *testing.T) {
 	}
 }
 
-func TestBuildToolCatalogContextRuntimeEffectsMatchCurrentSelectorAndTraceSemantics(t *testing.T) {
+func TestBuildOperationCatalogContextRuntimeEffectsMatchCurrentSelectorAndTraceSemantics(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/DescribeTopics": {
@@ -258,16 +260,16 @@ func TestBuildToolCatalogContextRuntimeEffectsMatchCurrentSelectorAndTraceSemant
 			},
 		},
 	}
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Topic": "topic"}, map[string]string{}, map[string]apiDocEntry{
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Topic": "topic"}, map[string]string{}, map[string]apiDocEntry{
 		"DescribeTopics": {GroupTitle: "Topic"},
 	}, toolCatalogOverrides{})
-	if len(got.Tools) != 1 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	if len(got.Operations) != 1 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
 
-	ctxProps, ok := got.Tools[0].ContextSchema["properties"].(map[string]any)
+	ctxProps, ok := got.ContextSchema["properties"].(map[string]any)
 	if !ok {
-		t.Fatalf("context schema malformed: %+v", got.Tools[0].ContextSchema)
+		t.Fatalf("context schema malformed: %+v", got.ContextSchema)
 	}
 
 	secretsField, ok := ctxProps["secrets_file"].(map[string]any)
@@ -293,7 +295,7 @@ func TestBuildToolCatalogContextRuntimeEffectsMatchCurrentSelectorAndTraceSemant
 	}
 }
 
-func TestBuildToolCatalogSkipsUndocumentedOperationsWhenDocIndexPresent(t *testing.T) {
+func TestBuildOperationCatalogSkipsUndocumentedOperationsWhenDocIndexPresent(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/DescribeProject": {
@@ -310,18 +312,18 @@ func TestBuildToolCatalogSkipsUndocumentedOperationsWhenDocIndexPresent(t *testi
 			},
 		},
 	}
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Project": "project"}, map[string]string{}, map[string]apiDocEntry{
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Project": "project"}, map[string]string{}, map[string]apiDocEntry{
 		"DescribeProject": {GroupTitle: "Project"},
 	}, toolCatalogOverrides{})
-	if len(got.Tools) != 1 {
-		t.Fatalf("tools=%d got=%+v", len(got.Tools), got.Tools)
+	if len(got.Operations) != 1 {
+		t.Fatalf("operations=%d got=%+v", len(got.Operations), got.Operations)
 	}
-	if got.Tools[0].Summary != "DescribeProject" {
-		t.Fatalf("unexpected tool summary=%q", got.Tools[0].Summary)
+	if got.Operations[0].Docs.Summary != "DescribeProject" {
+		t.Fatalf("unexpected operation summary=%q", got.Operations[0].Docs.Summary)
 	}
 }
 
-func TestBuildToolCatalogExecutionSchemaCarriesWave2Guidance(t *testing.T) {
+func TestBuildOperationCatalogExecutionSchemaCarriesWave2Guidance(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/DescribeTopics": {
@@ -332,14 +334,14 @@ func TestBuildToolCatalogExecutionSchemaCarriesWave2Guidance(t *testing.T) {
 			},
 		},
 	}
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Topic": "topic"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
-	if len(got.Tools) != 1 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Topic": "topic"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(got.Operations) != 1 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
 
-	execProps, ok := got.Tools[0].ExecutionSchema["properties"].(map[string]any)
+	execProps, ok := got.ExecutionSchema["properties"].(map[string]any)
 	if !ok {
-		t.Fatalf("execution schema malformed: %+v", got.Tools[0].ExecutionSchema)
+		t.Fatalf("execution schema malformed: %+v", got.ExecutionSchema)
 	}
 	for _, key := range []string{"dry_run", "projection", "artifact", "page"} {
 		field, ok := execProps[key].(map[string]any)
@@ -352,7 +354,7 @@ func TestBuildToolCatalogExecutionSchemaCarriesWave2Guidance(t *testing.T) {
 	}
 }
 
-func TestBuildToolCatalogInputSchema(t *testing.T) {
+func TestBuildOperationCatalogInputSchema(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/DescribeProject/{projectId}": {
@@ -392,11 +394,11 @@ func TestBuildToolCatalogInputSchema(t *testing.T) {
 		},
 	}
 
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Project": "project"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
-	if len(got.Tools) != 1 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Project": "project"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(got.Operations) != 1 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
-	input := got.Tools[0].InputSchema
+	input := got.Operations[0].InputSchema
 	query, ok := input["query"].(map[string]any)
 	if !ok || query == nil {
 		t.Fatalf("query schema missing: %+v", input)
@@ -433,15 +435,15 @@ func TestBuildToolCatalogInputSchema(t *testing.T) {
 	if !ok || bodyObj["type"] != "string" {
 		t.Fatalf("body payload malformed: %+v", bodyProps["name"])
 	}
-	if got.Tools[0].ContextSchema["type"] == nil {
-		t.Fatalf("context schema malformed: %+v", got.Tools[0].ContextSchema)
+	if got.ContextSchema["type"] == nil {
+		t.Fatalf("context schema malformed: %+v", got.ContextSchema)
 	}
-	if got.Tools[0].ExecutionSchema["type"] == nil {
-		t.Fatalf("execution schema malformed: %+v", got.Tools[0].ExecutionSchema)
+	if got.ExecutionSchema["type"] == nil {
+		t.Fatalf("execution schema malformed: %+v", got.ExecutionSchema)
 	}
 }
 
-func TestBuildToolCatalogFiltersManagedHeadersFromPublicInputSchema(t *testing.T) {
+func TestBuildOperationCatalogFiltersManagedHeadersFromPublicInputSchema(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/CreateProject": {
@@ -466,11 +468,11 @@ func TestBuildToolCatalogFiltersManagedHeadersFromPublicInputSchema(t *testing.T
 		},
 	}
 
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Project": "project"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
-	if len(got.Tools) != 1 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Project": "project"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(got.Operations) != 1 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
-	input := got.Tools[0].InputSchema
+	input := got.Operations[0].InputSchema
 	header, ok := input["header"].(map[string]any)
 	if !ok || header["properties"] == nil {
 		t.Fatalf("header schema missing: %+v", input)
@@ -486,7 +488,7 @@ func TestBuildToolCatalogFiltersManagedHeadersFromPublicInputSchema(t *testing.T
 	}
 }
 
-func TestBuildToolCatalogIDStableAndUnique(t *testing.T) {
+func TestBuildOperationCatalogIDStableAndUnique(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/DescribeAccountQuota": {
@@ -505,23 +507,24 @@ func TestBuildToolCatalogIDStableAndUnique(t *testing.T) {
 	}
 	groupKeys := map[string]string{"Account": "account"}
 
-	got := buildToolCatalog(doc, "stage1", groupKeys, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
-	if len(got.Tools) != 2 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	got := buildOperationCatalogForTest(t, doc, "stage1", groupKeys, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(got.Operations) != 2 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
 	ids := map[string]struct{}{}
-	for _, tool := range got.Tools {
-		if !strings.HasPrefix(tool.ID, "account.") {
+	for _, tool := range got.Operations {
+		id := string(tool.ID)
+		if !strings.HasPrefix(id, "account.") {
 			t.Fatalf("id=%q", tool.ID)
 		}
-		if _, ok := ids[tool.ID]; ok {
+		if _, ok := ids[id]; ok {
 			t.Fatalf("duplicate id=%q", tool.ID)
 		}
-		ids[tool.ID] = struct{}{}
+		ids[id] = struct{}{}
 	}
 }
 
-func TestBuildToolCatalogInputSchemaUsesStructuredRefBodySchema(t *testing.T) {
+func TestBuildOperationCatalogInputSchemaUsesStructuredRefBodySchema(t *testing.T) {
 	defs := map[string]swaggerSchema{
 		"CreateTicketRequest": {
 			Type: "object",
@@ -558,11 +561,11 @@ func TestBuildToolCatalogInputSchemaUsesStructuredRefBodySchema(t *testing.T) {
 		Definitions: defs,
 	}
 
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Ticket": "ticket"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
-	if len(got.Tools) != 1 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Ticket": "ticket"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(got.Operations) != 1 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
-	input := got.Tools[0].InputSchema
+	input := got.Operations[0].InputSchema
 	body, ok := input["body"].(map[string]any)
 	if !ok {
 		t.Fatalf("body schema missing: %+v", input)
@@ -596,7 +599,7 @@ func TestBuildToolCatalogInputSchemaUsesStructuredRefBodySchema(t *testing.T) {
 	}
 }
 
-func TestBuildToolCatalogInputSchemaExpandsAllOfAndPreservesNestedConstraints(t *testing.T) {
+func TestBuildOperationCatalogInputSchemaExpandsAllOfAndPreservesNestedConstraints(t *testing.T) {
 	minLen := 1
 	maxLen := 256
 	minimum := 64.0
@@ -656,11 +659,11 @@ func TestBuildToolCatalogInputSchemaExpandsAllOfAndPreservesNestedConstraints(t 
 		},
 	}
 
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Index": "index"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
-	if len(got.Tools) != 1 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Index": "index"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(got.Operations) != 1 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
-	input := got.Tools[0].InputSchema
+	input := got.Operations[0].InputSchema
 	body, ok := input["body"].(map[string]any)
 	if !ok {
 		t.Fatalf("body schema missing: %+v", input)
@@ -709,7 +712,7 @@ func TestBuildToolCatalogInputSchemaExpandsAllOfAndPreservesNestedConstraints(t 
 	}
 }
 
-func TestBuildToolCatalogExpandsNestedArrayItemSchemasInsideAllOfRefs(t *testing.T) {
+func TestBuildOperationCatalogExpandsNestedArrayItemSchemasInsideAllOfRefs(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/CreateShipper": {
@@ -802,11 +805,11 @@ func TestBuildToolCatalogExpandsNestedArrayItemSchemasInsideAllOfRefs(t *testing
 		},
 	}
 
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Shipper": "shipper"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
-	if len(got.Tools) != 1 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Shipper": "shipper"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(got.Operations) != 1 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
-	body := got.Tools[0].InputSchema["body"].(map[string]any)
+	body := got.Operations[0].InputSchema["body"].(map[string]any)
 	contentInfo := body["properties"].(map[string]any)["ContentInfo"].(map[string]any)
 	contentProps := contentInfo["properties"].(map[string]any)
 
@@ -834,7 +837,7 @@ func TestBuildToolCatalogExpandsNestedArrayItemSchemasInsideAllOfRefs(t *testing
 	}
 }
 
-func TestBuildToolCatalogInputSchemaUnwrapsBodyParamNameFromRef(t *testing.T) {
+func TestBuildOperationCatalogInputSchemaUnwrapsBodyParamNameFromRef(t *testing.T) {
 	defs := map[string]swaggerSchema{
 		"CreateTicketRequest": {
 			Type: "object",
@@ -871,11 +874,11 @@ func TestBuildToolCatalogInputSchemaUnwrapsBodyParamNameFromRef(t *testing.T) {
 		Definitions: defs,
 	}
 
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Ticket": "ticket"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
-	if len(got.Tools) != 1 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Ticket": "ticket"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(got.Operations) != 1 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
-	input := got.Tools[0].InputSchema
+	input := got.Operations[0].InputSchema
 	body, ok := input["body"].(map[string]any)
 	if !ok {
 		t.Fatalf("body schema missing: %+v", input)
@@ -895,7 +898,7 @@ func TestBuildToolCatalogInputSchemaUnwrapsBodyParamNameFromRef(t *testing.T) {
 	}
 }
 
-func TestBuildToolCatalogInputSchemaMergesDocParamsForMissingFields(t *testing.T) {
+func TestBuildOperationCatalogInputSchemaMergesDocParamsForMissingFields(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/DescribeProject": {
@@ -917,7 +920,7 @@ func TestBuildToolCatalogInputSchemaMergesDocParamsForMissingFields(t *testing.T
 	}
 	docIndex := map[string]apiDocEntry{
 		"DescribeProject": {
-			RequestParamsDoc: []capabilityDocParam{
+			RequestParamsDoc: []apiDocParam{
 				{Name: "Region", In: "query", Type: "String", RequiredText: "是"},
 				{Name: "X-Ctl", In: "header", Type: "String"},
 				{Name: "Content-Type", In: "header", Type: "String"},
@@ -926,11 +929,11 @@ func TestBuildToolCatalogInputSchemaMergesDocParamsForMissingFields(t *testing.T
 		},
 	}
 
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Project": "project"}, map[string]string{}, docIndex, toolCatalogOverrides{})
-	if len(got.Tools) != 1 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Project": "project"}, map[string]string{}, docIndex, toolCatalogOverrides{})
+	if len(got.Operations) != 1 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
-	input := got.Tools[0].InputSchema
+	input := got.Operations[0].InputSchema
 	query, ok := input["query"].(map[string]any)
 	if !ok || query["properties"] == nil {
 		t.Fatalf("query schema missing: %+v", input)
@@ -964,7 +967,7 @@ func TestBuildToolCatalogInputSchemaMergesDocParamsForMissingFields(t *testing.T
 	}
 }
 
-func TestBuildToolCatalogOverridesPutLogsBodySchemaForAgentFriendlyInput(t *testing.T) {
+func TestBuildOperationCatalogOverridesPutLogsBodySchemaForAgentFriendlyInput(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/PutLogs": {
@@ -995,11 +998,11 @@ func TestBuildToolCatalogOverridesPutLogsBodySchemaForAgentFriendlyInput(t *test
 		},
 	}
 
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Log": "log"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
-	if len(got.Tools) != 1 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Log": "log"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(got.Operations) != 1 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
-	input := got.Tools[0].InputSchema
+	input := got.Operations[0].InputSchema
 	body, ok := input["body"].(map[string]any)
 	if !ok {
 		t.Fatalf("body schema missing: %+v", input)
@@ -1061,7 +1064,7 @@ func TestBuildToolCatalogOverridesPutLogsBodySchemaForAgentFriendlyInput(t *test
 	}
 }
 
-func TestBuildToolCatalogOverridesTraceWeakTypedFields(t *testing.T) {
+func TestBuildOperationCatalogOverridesTraceWeakTypedFields(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/CreateTraceInstance": {
@@ -1129,13 +1132,13 @@ func TestBuildToolCatalogOverridesTraceWeakTypedFields(t *testing.T) {
 		},
 	}
 
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Trace": "trace"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
-	if len(got.Tools) != 3 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Trace": "trace"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(got.Operations) != 3 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
-	bySummary := map[string]toolEntry{}
-	for _, tool := range got.Tools {
-		bySummary[tool.Summary] = tool
+	bySummary := map[string]contract.Operation{}
+	for _, operation := range got.Operations {
+		bySummary[operation.Docs.Summary] = operation
 	}
 
 	for _, summary := range []string{"CreateTraceInstance", "ModifyTraceInstance"} {
@@ -1187,7 +1190,7 @@ func TestBuildToolCatalogOverridesTraceWeakTypedFields(t *testing.T) {
 	}
 }
 
-func TestBuildToolCatalogPreservesStructuredTraceSchemasWhenPresent(t *testing.T) {
+func TestBuildOperationCatalogPreservesStructuredTraceSchemasWhenPresent(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/CreateTraceInstance": {
@@ -1243,13 +1246,13 @@ func TestBuildToolCatalogPreservesStructuredTraceSchemasWhenPresent(t *testing.T
 		},
 	}
 
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Trace": "trace"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
-	if len(got.Tools) != 2 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Trace": "trace"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(got.Operations) != 2 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
-	bySummary := map[string]toolEntry{}
-	for _, tool := range got.Tools {
-		bySummary[tool.Summary] = tool
+	bySummary := map[string]contract.Operation{}
+	for _, operation := range got.Operations {
+		bySummary[operation.Docs.Summary] = operation
 	}
 
 	create := bySummary["CreateTraceInstance"]
@@ -1277,7 +1280,7 @@ func TestBuildToolCatalogPreservesStructuredTraceSchemasWhenPresent(t *testing.T
 	}
 }
 
-func TestBuildToolCatalogOverrideFields(t *testing.T) {
+func TestBuildOperationCatalogOverrideFields(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/DescribeProject": {
@@ -1293,36 +1296,36 @@ func TestBuildToolCatalogOverrideFields(t *testing.T) {
 			"project.describe": "high",
 		},
 		OutputPolicy: map[string]string{
-			"project.describe": "page",
+			"project.describe": "full",
 		},
 		ErrorRecovery: map[string]string{
-			"project.describe": "retry-after-fix",
+			"project.describe": "retry",
 		},
 		UsageConstraints: map[string]string{
 			"project.describe": "require-region",
 		},
 	}
 
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Project": "project"}, map[string]string{}, map[string]apiDocEntry{}, overrides)
-	if len(got.Tools) != 1 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Project": "project"}, map[string]string{}, map[string]apiDocEntry{}, overrides)
+	if len(got.Operations) != 1 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
-	gotTool := got.Tools[0]
-	if gotTool.RiskLevel != "high" {
-		t.Fatalf("risk override=%q", gotTool.RiskLevel)
+	gotTool := got.Operations[0]
+	if gotTool.Risk.Level != "high" {
+		t.Fatalf("risk override=%q", gotTool.Risk.Level)
 	}
-	if gotTool.OutputPolicy != "page" {
-		t.Fatalf("output_policy override=%q", gotTool.OutputPolicy)
+	if gotTool.Output.Policy != "full" {
+		t.Fatalf("output_policy override=%q", gotTool.Output.Policy)
 	}
-	if gotTool.ErrorRecovery != "retry-after-fix" {
-		t.Fatalf("error_recovery override=%q", gotTool.ErrorRecovery)
+	if gotTool.Risk.ErrorRecovery != "retry" {
+		t.Fatalf("error_recovery override=%q", gotTool.Risk.ErrorRecovery)
 	}
-	if gotTool.UsageConstraints != "require-region" {
-		t.Fatalf("usage_constraints override=%q", gotTool.UsageConstraints)
+	if gotTool.Docs.UsageConstraints != "require-region" {
+		t.Fatalf("usage_constraints override=%q", gotTool.Docs.UsageConstraints)
 	}
 }
 
-func TestBuildToolCatalogSupportsAllMatchesGeneratedPaginationHeuristic(t *testing.T) {
+func TestBuildOperationCatalogSupportsAllMatchesGeneratedPaginationHeuristic(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/DescribeProjects": {
@@ -1352,14 +1355,14 @@ func TestBuildToolCatalogSupportsAllMatchesGeneratedPaginationHeuristic(t *testi
 		"Tag":     "tag",
 	}
 
-	got := buildToolCatalog(doc, "stage1", groupKeys, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
-	if len(got.Tools) != 2 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	source := buildSourceOperations(doc, groupKeys, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(source) != 2 {
+		t.Fatalf("operations=%d", len(source))
 	}
 
-	byID := map[string]toolEntry{}
-	for _, tool := range got.Tools {
-		byID[tool.ID] = tool
+	byID := map[string]sourceOperation{}
+	for _, operation := range source {
+		byID[operation.ID] = operation
 	}
 	if !byID["project.describe"].SupportsAll {
 		t.Fatalf("expected DescribeProjects to support all")
@@ -1369,7 +1372,7 @@ func TestBuildToolCatalogSupportsAllMatchesGeneratedPaginationHeuristic(t *testi
 	}
 }
 
-func TestBuildToolCatalogDoesNotFallbackAllLogPostActionsToCreate(t *testing.T) {
+func TestBuildOperationCatalogDoesNotFallbackAllLogPostActionsToCreate(t *testing.T) {
 	doc := swaggerDoc{
 		Paths: map[string]swaggerPathItem{
 			"/PutLogs": {
@@ -1390,13 +1393,13 @@ func TestBuildToolCatalogDoesNotFallbackAllLogPostActionsToCreate(t *testing.T) 
 		},
 	}
 
-	got := buildToolCatalog(doc, "stage1", map[string]string{"Log": "log"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
-	if len(got.Tools) != 5 {
-		t.Fatalf("tools=%d", len(got.Tools))
+	got := buildOperationCatalogForTest(t, doc, "stage1", map[string]string{"Log": "log"}, map[string]string{}, map[string]apiDocEntry{}, toolCatalogOverrides{})
+	if len(got.Operations) != 5 {
+		t.Fatalf("operations=%d", len(got.Operations))
 	}
 	verbs := map[string]string{}
-	for _, tool := range got.Tools {
-		verbs[tool.Summary] = strings.TrimSpace(tool.Verb)
+	for _, operation := range got.Operations {
+		verbs[operation.Docs.Summary] = strings.TrimSpace(operation.Verb)
 	}
 	if verbs["CreateDownloadTask"] != "create" {
 		t.Fatalf("CreateDownloadTask verb=%q", verbs["CreateDownloadTask"])
@@ -1416,4 +1419,27 @@ func TestBuildToolCatalogDoesNotFallbackAllLogPostActionsToCreate(t *testing.T) 
 func asTestString(v any) string {
 	s, _ := v.(string)
 	return strings.TrimSpace(s)
+}
+
+func buildOperationCatalogForTest(
+	t *testing.T,
+	doc swaggerDoc,
+	version string,
+	groupKeys map[string]string,
+	tagTitles map[string]string,
+	docIndex map[string]apiDocEntry,
+	overrides toolCatalogOverrides,
+) contract.Catalog {
+	t.Helper()
+	source := buildSourceOperations(doc, groupKeys, tagTitles, docIndex, overrides)
+	// Input/schema tests use synthetic action IDs that are intentionally not
+	// part of the explicit production pagination registry.
+	for i := range source {
+		source[i].SupportsAll = false
+	}
+	catalog, err := buildOperationCatalogV2FromSource(version, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return catalog
 }

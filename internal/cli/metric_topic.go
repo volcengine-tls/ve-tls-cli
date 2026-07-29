@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
@@ -42,10 +43,26 @@ func metricTopicList(ctx *Context, args []string) (any, error) {
 		return nil, err
 	}
 	if all {
-		return listAllByPageNumber(ctx, "/DescribeMetricTopics", query, "Topics")
+		return executeShortcutOperation(ctx, shortcutExecutionRequest{
+			OperationID: "metric-topic.describe-metric-topics",
+			Input: execution.Input{
+				Query: shortcutQueryInput(query),
+				Body:  shortcutEmptyJSONBodyInput(),
+			},
+			PageAll: true,
+			LegacyPageAll: &legacyPageAllPolicy{
+				ListField:  "Topics",
+				ForceTotal: true,
+			},
+		})
 	}
-	body, _ := util.MustJSON(map[string]any{})
-	return ctx.Do("GET", "/DescribeMetricTopics", query, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "metric-topic.describe-metric-topics",
+		Input: execution.Input{
+			Query: shortcutQueryInput(query),
+			Body:  shortcutEmptyJSONBodyInput(),
+		},
+	})
 }
 
 func metricTopicGet(ctx *Context, args []string) (any, error) {
@@ -66,8 +83,13 @@ func metricTopicGet(ctx *Context, args []string) (any, error) {
 	if topicID == "" {
 		return nil, errors.New("missing --topic-id")
 	}
-	body, _ := util.MustJSON(map[string]any{})
-	return ctx.Do("GET", "/DescribeMetricTopic", map[string]string{"TopicId": topicID}, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "metric-topic.describe-metric-topic",
+		Input: execution.Input{
+			Query: shortcutQueryInput(map[string]string{"TopicId": topicID}),
+			Body:  shortcutEmptyJSONBodyInput(),
+		},
+	})
 }
 
 func metricTopicCreate(ctx *Context, args []string) (any, error) {
@@ -209,11 +231,12 @@ func metricTopicCreate(ctx *Context, args []string) (any, error) {
 		}
 	}
 
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("POST", "/CreateMetricTopic", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "metric-topic.create",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(req),
+		},
+	})
 }
 
 func metricTopicModify(ctx *Context, args []string) (any, error) {
@@ -347,11 +370,12 @@ func metricTopicModify(ctx *Context, args []string) (any, error) {
 		}
 	}
 
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("PUT", "/ModifyMetricTopic", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "metric-topic.modify",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(req),
+		},
+	})
 }
 
 func metricTopicDelete(ctx *Context, args []string) (any, error) {
@@ -372,11 +396,12 @@ func metricTopicDelete(ctx *Context, args []string) (any, error) {
 	if topicID == "" {
 		return nil, errors.New("missing --topic-id")
 	}
-	body, err := util.MustJSON(map[string]any{"TopicId": topicID})
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("DELETE", "/DeleteMetricTopic", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "metric-topic.delete",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(map[string]any{"TopicId": topicID}),
+		},
+	})
 }
 
 func metricTopicSearch(ctx *Context, args []string) (any, error) {
@@ -384,9 +409,5 @@ func metricTopicSearch(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("POST", "/SearchLogs", nil, nil, body)
+	return executeSearchLogsShortcut(ctx, req)
 }

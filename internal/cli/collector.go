@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
@@ -121,10 +122,26 @@ func collectorList(ctx *Context, args []string) (any, error) {
 		}
 	}
 	if all {
-		return listAllByPageNumber(ctx, "/DescribeRulesV2", query, "Rules")
+		return executeShortcutOperation(ctx, shortcutExecutionRequest{
+			OperationID: "collector.describe-rules-v2",
+			Input: execution.Input{
+				Query: shortcutQueryInput(query),
+				Body:  shortcutEmptyJSONBodyInput(),
+			},
+			PageAll: true,
+			LegacyPageAll: &legacyPageAllPolicy{
+				ListField:  "Rules",
+				ForceTotal: true,
+			},
+		})
 	}
-	body, _ := util.MustJSON(map[string]any{})
-	return ctx.Do("GET", "/DescribeRulesV2", query, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "collector.describe-rules-v2",
+		Input: execution.Input{
+			Query: shortcutQueryInput(query),
+			Body:  shortcutEmptyJSONBodyInput(),
+		},
+	})
 }
 
 func collectorGet(ctx *Context, args []string) (any, error) {
@@ -145,8 +162,13 @@ func collectorGet(ctx *Context, args []string) (any, error) {
 	if ruleID == "" {
 		return nil, errors.New("missing --rule-id")
 	}
-	body, _ := util.MustJSON(map[string]any{})
-	return ctx.Do("GET", "/DescribeRuleV2", map[string]string{"RuleId": ruleID}, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "collector.describe-rule-v2",
+		Input: execution.Input{
+			Query: shortcutQueryInput(map[string]string{"RuleId": ruleID}),
+			Body:  shortcutEmptyJSONBodyInput(),
+		},
+	})
 }
 
 func collectorCreate(ctx *Context, args []string) (any, error) {
@@ -154,11 +176,12 @@ func collectorCreate(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("POST", "/CreateRule", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "collector.create",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(req),
+		},
+	})
 }
 
 func collectorModify(ctx *Context, args []string) (any, error) {
@@ -166,11 +189,12 @@ func collectorModify(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("PUT", "/ModifyRule", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "collector.modify-rule",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(req),
+		},
+	})
 }
 
 func collectorDelete(ctx *Context, args []string) (any, error) {
@@ -191,11 +215,12 @@ func collectorDelete(ctx *Context, args []string) (any, error) {
 	if ruleID == "" {
 		return nil, errors.New("missing --rule-id")
 	}
-	body, err := util.MustJSON(map[string]any{"RuleId": ruleID})
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("DELETE", "/DeleteRule", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "collector.delete-rule",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(map[string]any{"RuleId": ruleID}),
+		},
+	})
 }
 
 func buildCollectorBody(args []string, modify bool) (map[string]any, error) {

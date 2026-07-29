@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,36 @@ import (
 	"github.com/volcengine-tls/ve-tls-cli/internal/config"
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
+
+func TestTraceClientConstructionFailureDoesNotCreateTrace(t *testing.T) {
+	clearAuthTestEnv(t)
+	traceDir := t.TempDir()
+	ctx := newContext(&bytes.Buffer{}, &bytes.Buffer{}, output.FormatJSON, "dyn", "")
+	ctx.cfg = config.Config{
+		Version: 1,
+		Profiles: map[string]config.Profile{
+			"dyn": {
+				Mode:     config.AuthModeSSO,
+				Region:   "cn-beijing",
+				Endpoint: "https://tls-cn-beijing.volces.com",
+			},
+		},
+	}
+	ctx.cfgPath = "/tmp/test-config.json"
+	ctx.TraceDir = traceDir
+	ctx.authFactory = &fakeAuthFactory{ssoErr: errors.New("provider construction failed")}
+
+	if _, err := ctx.DoRaw("GET", "/DescribeProjects", nil, nil, nil); err == nil {
+		t.Fatal("DoRaw error=nil, want provider construction failure")
+	}
+	entries, err := os.ReadDir(traceDir)
+	if err != nil {
+		t.Fatalf("read trace dir: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("trace files=%d, want 0 before client construction succeeds", len(entries))
+	}
+}
 
 func TestNormalizeTraceRedactValue(t *testing.T) {
 	cases := map[string]string{

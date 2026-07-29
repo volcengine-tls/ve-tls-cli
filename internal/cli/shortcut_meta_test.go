@@ -79,7 +79,7 @@ func TestShortcutDescribeLogHistogramUsesDescribeHistogramV1(t *testing.T) {
 	}
 }
 
-func TestShortcutDescribeMetricTopicCreateAndModifyWithoutTemplateClaim(t *testing.T) {
+func TestShortcutDescribeMetricTopicCreateAndModifyKeepsStructuredFlagGuidance(t *testing.T) {
 	tests := []struct {
 		command   string
 		action    string
@@ -126,14 +126,14 @@ func TestShortcutDescribeMetricTopicCreateAndModifyWithoutTemplateClaim(t *testi
 					t.Fatalf("missing %q in stdout: %q", want, out)
 				}
 			}
-			if strings.Contains(out, `"print_template"`) || strings.Contains(out, "--print-request-template") {
-				t.Fatalf("metric-topic %s describe must not advertise an unavailable request template: %q", tc.command, out)
+			if strings.Contains(out, `"print_template"`) || strings.Contains(out, `"request_body"`) {
+				t.Fatalf("metric-topic %s describe should keep structured shortcut flags primary: %q", tc.command, out)
 			}
 		})
 	}
 }
 
-func TestShortcutPrintRequestTemplateMetricTopicUnavailable(t *testing.T) {
+func TestShortcutPrintRequestTemplateMetricTopicAvailable(t *testing.T) {
 	tests := []struct {
 		command string
 		mode    string
@@ -142,12 +142,12 @@ func TestShortcutPrintRequestTemplateMetricTopicUnavailable(t *testing.T) {
 		{
 			command: "create",
 			mode:    "required",
-			want:    "request template is not available for metric-topic create",
+			want:    `"ProjectId"`,
 		},
 		{
 			command: "modify",
 			mode:    "full",
-			want:    "request template is not available for metric-topic modify",
+			want:    `"TopicId"`,
 		},
 	}
 
@@ -155,22 +155,15 @@ func TestShortcutPrintRequestTemplateMetricTopicUnavailable(t *testing.T) {
 		t.Run(tc.command+"_"+tc.mode, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			code := Run([]string{"metric-topic", tc.command, "--print-request-template=" + tc.mode}, &stdout, &stderr)
-			if code == 0 {
-				t.Fatalf("expected failure, stdout=%q stderr=%q", stdout.String(), stderr.String())
+			if code != 0 {
+				t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 			}
-			if stderr.Len() != 0 {
-				t.Fatalf("structured shortcut error should be written to stdout, stderr=%q", stderr.String())
+			var template map[string]any
+			if err := json.Unmarshal(stdout.Bytes(), &template); err != nil {
+				t.Fatalf("decode template: %v\nstdout=%q", err, stdout.String())
 			}
-			var envelope struct {
-				Error struct {
-					Message string `json:"message"`
-				} `json:"error"`
-			}
-			if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
-				t.Fatalf("decode error envelope: %v\nstdout=%q", err, stdout.String())
-			}
-			if envelope.Error.Message != tc.want {
-				t.Fatalf("error=%q, want %q", envelope.Error.Message, tc.want)
+			if !strings.Contains(stdout.String(), tc.want) {
+				t.Fatalf("template missing %q: %q", tc.want, stdout.String())
 			}
 		})
 	}
@@ -178,22 +171,19 @@ func TestShortcutPrintRequestTemplateMetricTopicUnavailable(t *testing.T) {
 
 func TestShortcutTemplateSupportRequiresResolvableCurrentOperation(t *testing.T) {
 	for _, spec := range shortcutSpecs() {
-		if !spec.SupportsTemplate {
+		if !spec.Presentation.SupportsTemplate {
 			continue
 		}
 		t.Run(spec.Group+"/"+spec.Command, func(t *testing.T) {
-			if strings.TrimSpace(spec.APIGroup) == "" {
-				t.Fatal("SupportsTemplate requires a non-empty APIGroup")
-			}
-			if strings.TrimSpace(spec.APIAction) == "" {
-				t.Fatal("SupportsTemplate requires a non-empty APIAction")
-			}
-			ops, err := shortcutActionOps(spec.APIGroup, spec.APIAction)
+			target, err := resolveShortcutTarget(spec)
 			if err != nil {
-				t.Fatalf("SupportsTemplate requires a resolvable current operation: %v", err)
+				t.Fatalf("SupportsTemplate requires a resolvable target: %v", err)
 			}
-			if len(ops) == 0 {
-				t.Fatal("SupportsTemplate requires at least one current operation")
+			if strings.TrimSpace(target.APIGroup) == "" || strings.TrimSpace(target.APIAction) == "" {
+				t.Fatalf("SupportsTemplate requires an API-backed target: %#v", target)
+			}
+			if !target.HasOperation || strings.TrimSpace(string(target.Operation.ID)) == "" {
+				t.Fatalf("SupportsTemplate requires a resolvable backing operation: %#v", target)
 			}
 			template, err := shortcutRequestTemplateOutput(spec, "required")
 			if err != nil {

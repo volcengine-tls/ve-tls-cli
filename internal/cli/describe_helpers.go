@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"strings"
 	"unicode/utf8"
 )
@@ -169,21 +168,4 @@ func conciseFieldDescription(s string) string {
 		}
 	}
 	return strings.TrimSpace(s)
-}
-
-func shortcutActionOps(group, action string) ([]apiActionOp, error) {
-	doc, err := loadAPICapabilities()
-	if err != nil {
-		return nil, err
-	}
-	index := buildAPIIndex(doc)
-	actions, ok := index[normalizeToken(group)]
-	if !ok {
-		return nil, errors.New("api group not found: " + group)
-	}
-	ops, ok := actions[normalizeActionToken(action)]
-	if !ok || len(ops) == 0 {
-		return nil, errors.New("api action not found: " + group + "." + action)
-	}
-	return ops, nil
 }

@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -21,7 +22,7 @@ func TestWorkflowCatalogSourceDoesNotReferenceShortcutLookup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read workflow_meta.go: %v", err)
 	}
-	for _, forbidden := range []string{"lookupShortcutSpec", "shortcutCommandSpec"} {
+	for _, forbidden := range []string{"lookupShortcutSpec", "shortcutCommandSpec", "shortcutActionOps"} {
 		if strings.Contains(string(raw), forbidden) {
 			t.Fatalf("workflow_meta.go should not reference %q after decoupling", forbidden)
 		}
@@ -48,10 +49,10 @@ func TestWorkflowCatalogSourceMatchesCurrentWorkflowMetadata(t *testing.T) {
 				"--output jsonl",
 				"--output-mode file",
 			},
-			APIGroup:  "log",
-			APIAction: "SearchLogs",
-			BackedBy:  []string{"SearchLogs"},
-			Source:    "cli_workflow",
+			APIGroup:     "log",
+			APIAction:    "SearchLogs",
+			OperationIDs: []string{"log.search"},
+			Source:       "cli_workflow",
 		},
 		{
 			ID:                  "log.export-analysis",
@@ -68,10 +69,10 @@ func TestWorkflowCatalogSourceMatchesCurrentWorkflowMetadata(t *testing.T) {
 				"--output jsonl",
 				"--output-mode file",
 			},
-			APIGroup:  "log",
-			APIAction: "SearchLogs",
-			BackedBy:  []string{"SearchLogs"},
-			Source:    "cli_workflow",
+			APIGroup:     "log",
+			APIAction:    "SearchLogs",
+			OperationIDs: []string{"log.search"},
+			Source:       "cli_workflow",
 			Notes: []string{
 				"与 log.search 一样使用 SearchLogs 的 SQL/分析 Query 语法；区别在于这里的定位是大结果导出，而不是交互式预览。",
 				"如果只是担心 stdout 过大，但并不需要完整分析行导出，先留在 log.search，让 CLI 的 deliveryMode 决定 stdout 还是 file_auto。",
@@ -79,19 +80,19 @@ func TestWorkflowCatalogSourceMatchesCurrentWorkflowMetadata(t *testing.T) {
 			},
 		},
 		{
-			ID:          "log.ingest",
-			Group:       "log",
-			Command:     "ingest",
-			Action:      "log.ingest",
-			Summary:     "批量导入文本或 JSON 日志",
-			Description: "面向本地 lines/jsonl/json-array 导入工作流；CLI 负责补时间、组批、统计头和 protobuf 编码。",
-			Method:      "POST",
-			Path:        "/PutLogs",
-			InputMode:   "ingest via --input; lines/jsonl/json-array normalized by CLI before PutLogs",
-			APIGroup:    "log",
-			APIAction:   "PutLogs",
-			BackedBy:    []string{"PutLogs"},
-			Source:      "cli_workflow",
+			ID:           "log.ingest",
+			Group:        "log",
+			Command:      "ingest",
+			Action:       "log.ingest",
+			Summary:      "批量导入文本或 JSON 日志",
+			Description:  "面向本地 lines/jsonl/json-array 导入工作流；CLI 负责补时间、组批、统计头和 protobuf 编码。",
+			Method:       "POST",
+			Path:         "/PutLogs",
+			InputMode:    "ingest via --input; lines/jsonl/json-array normalized by CLI before PutLogs",
+			APIGroup:     "log",
+			APIAction:    "PutLogs",
+			OperationIDs: []string{"log.put"},
+			Source:       "cli_workflow",
 			Notes: []string{
 				"这是本地导入工作流，不是 tool log.put 的别名；如果你需要直接按公开 PutLogs 契约构造请求，请改用 tool log.put。",
 				"lines 输入默认写入字段 __content__。",
@@ -121,12 +122,12 @@ func TestWorkflowCatalogSourceMatchesCurrentWorkflowMetadata(t *testing.T) {
 			got[i].Source != want[i].Source {
 			t.Fatalf("workflow[%d] mismatch:\n got=%#v\nwant=%#v", i, got[i], want[i])
 		}
-		if len(got[i].BackedBy) != len(want[i].BackedBy) {
-			t.Fatalf("workflow[%d] backed_by mismatch: got=%#v want=%#v", i, got[i].BackedBy, want[i].BackedBy)
+		if len(got[i].OperationIDs) != len(want[i].OperationIDs) {
+			t.Fatalf("workflow[%d] operation ids mismatch: got=%#v want=%#v", i, got[i].OperationIDs, want[i].OperationIDs)
 		}
-		for j := range want[i].BackedBy {
-			if got[i].BackedBy[j] != want[i].BackedBy[j] {
-				t.Fatalf("workflow[%d] backed_by mismatch: got=%#v want=%#v", i, got[i].BackedBy, want[i].BackedBy)
+		for j := range want[i].OperationIDs {
+			if got[i].OperationIDs[j] != want[i].OperationIDs[j] {
+				t.Fatalf("workflow[%d] operation ids mismatch: got=%#v want=%#v", i, got[i].OperationIDs, want[i].OperationIDs)
 			}
 		}
 		if len(got[i].RecommendedGlobalFlags) != len(want[i].RecommendedGlobalFlags) {
@@ -154,6 +155,51 @@ func TestWorkflowCatalogSourceMatchesCurrentWorkflowMetadata(t *testing.T) {
 				t.Fatalf("workflow[%d] params[%d] mismatch: got=%#v want=%#v", i, j, gotParam, wantParam)
 			}
 		}
+	}
+}
+
+func TestWorkflowBackedByDerivesOperationActions(t *testing.T) {
+	want := map[string][]string{
+		"log.export":          {"SearchLogs"},
+		"log.export-analysis": {"SearchLogs"},
+		"log.ingest":          {"PutLogs"},
+	}
+	for _, workflow := range workflowCatalogSource() {
+		got, err := workflowBackedBy(workflow)
+		if err != nil {
+			t.Fatalf("%s: %v", workflow.ID, err)
+		}
+		if expected := want[workflow.ID]; !reflect.DeepEqual(got, expected) {
+			t.Fatalf("%s backed_by=%v, want %v", workflow.ID, got, expected)
+		}
+	}
+}
+
+func TestWorkflowDescribeOutputDerivesBackedBy(t *testing.T) {
+	want := map[string][]string{
+		"log.export":          {"SearchLogs"},
+		"log.export-analysis": {"SearchLogs"},
+		"log.ingest":          {"PutLogs"},
+	}
+	for _, workflow := range workflowCatalogSource() {
+		out, err := workflowDescribeOutput(workflow)
+		if err != nil {
+			t.Fatalf("%s: %v", workflow.ID, err)
+		}
+		if expected := want[workflow.ID]; !reflect.DeepEqual(out["backed_by"], expected) {
+			t.Fatalf("%s output backed_by=%v, want %v", workflow.ID, out["backed_by"], expected)
+		}
+	}
+}
+
+func TestWorkflowBackedByRejectsUnknownOperation(t *testing.T) {
+	workflow := workflowCatalog{
+		ID:           "log.invalid",
+		OperationIDs: []string{"log.not-real"},
+	}
+	_, err := workflowBackedBy(workflow)
+	if err == nil || !strings.Contains(err.Error(), `unknown operation "log.not-real"`) {
+		t.Fatalf("workflowBackedBy() error=%v, want unknown operation", err)
 	}
 }
 
