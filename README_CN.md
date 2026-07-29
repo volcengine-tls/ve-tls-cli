@@ -54,14 +54,25 @@
 推荐直接安装默认的 `volclog` 二进制：
 
 ```bash
+curl -fsSL -o install-binary.sh \
+  https://raw.githubusercontent.com/volcengine-tls/ve-tls-cli/main/scripts/install-binary.sh
 VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-bash scripts/install-binary.sh
+bash install-binary.sh
 ```
 
 如果你明确需要人类 shortcut 版，可以显式指定：
 
 ```bash
-bash scripts/install-binary.sh --edition human
+curl -fsSL -o install-binary.sh \
+  https://raw.githubusercontent.com/volcengine-tls/ve-tls-cli/main/scripts/install-binary.sh
+VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
+bash install-binary.sh --edition human
+```
+
+二进制默认安装到 `~/.local/bin`。如果系统提示找不到 `volclog` 或 `volclog-human`，请先把该目录加入当前 shell 的 `PATH`：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 `volclog` 只暴露：
@@ -88,8 +99,8 @@ npm install -g @volcengine-tls/volclog
 ```bash
 volclog configure set \
   --profile default \
-  --ak <ak> \
-  --sk <sk> \
+  --ak 'YOUR_ACCESS_KEY_ID' \
+  --sk 'YOUR_SECRET_ACCESS_KEY' \
   --region cn-beijing \
   --endpoint https://tls-cn-beijing.volces.com
 
@@ -173,8 +184,16 @@ volclog tool exec project.describe-projects \
 **方式一：二进制下载（推荐）**
 
 ```bash
+curl -fsSL -o install-binary.sh \
+  https://raw.githubusercontent.com/volcengine-tls/ve-tls-cli/main/scripts/install-binary.sh
 VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-bash scripts/install-binary.sh --edition human
+bash install-binary.sh --edition human
+```
+
+默认安装目录是 `~/.local/bin`。如有需要，请将其加入 `PATH`：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 **方式二：npm 全局安装**
@@ -183,12 +202,15 @@ bash scripts/install-binary.sh --edition human
 npm install -g @volcengine-tls/volclog-human
 ```
 
-**方式三：Go 安装**
+**方式三：使用 Go 从源码构建**
 
-需要 Go 1.22+。
+需要 Go 1.22+，并先获取仓库源码：
 
 ```bash
-go build -tags=human -o /usr/local/bin/volclog-human ./cmd/volclog
+git clone https://github.com/volcengine-tls/ve-tls-cli.git
+cd ve-tls-cli
+mkdir -p "$HOME/.local/bin"
+go build -tags=human -o "$HOME/.local/bin/volclog-human" ./cmd/volclog
 ```
 
 **方式四：本地源码安装**
@@ -209,7 +231,7 @@ volclog-human configure
 
 ```bash
 volclog-human project list
-volclog-human topic list --project-id <your-project-id>
+volclog-human topic list --project-id 'YOUR_PROJECT_ID'
 ```
 
 如果你要使用 `volclog-human` shortcut，请看 [docs/cli-human-shortcuts.md](docs/cli-human-shortcuts.md)。
@@ -227,13 +249,13 @@ volclog-human topic list --project-id <your-project-id>
 安装到你的 agent 技能目录：
 
 ```bash
-volclog skill install --dir <agent-skills-dir>
+volclog skill install --dir /path/to/agent/skills
 ```
 
 如果只想临时安装一次，也可以直接用 `npx`：
 
 ```bash
-npx @volcengine-tls/volclog skill install --dir <agent-skills-dir>
+npx @volcengine-tls/volclog skill install --dir /path/to/agent/skills
 ```
 
 ---

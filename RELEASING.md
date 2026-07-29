@@ -7,14 +7,16 @@
 - `go test ./...` 通过
 - `gofmt -w` 已执行，且 `gofmt -l .` 无输出
 - `go vet ./...` 通过
-- README/README_CN 中的安装命令与示例路径可在仓库根目录直接执行
+- README/README_CN 中的二进制安装命令可在空目录直接执行
 - `volclog --help`、`volclog <group> -h`、`volclog --version` 输出符合预期
 - GitHub Release 产物命名与安装脚本一致：
   - macOS/Linux：`volclog_<os>_<arch>.tar.gz` 与 `volclog_<os>_<arch>.tar.gz.sha256`
   - Windows：`volclog_windows_<arch>.zip` 与 `volclog_windows_<arch>.zip.sha256`
   - 安装脚本：
-    - macOS/Linux：`scripts/install-binary.sh`
-    - Windows：`scripts/install.ps1`
+    - macOS/Linux：`install-binary.sh`
+    - Windows：`install.ps1`
+
+安装脚本由 tag 触发的 release workflow 自动上传，后续版本不需要手工添加。历史 Release 仅在仍需支持对应固定版本的脚本安装时按需回填，不要求全量补齐。
 
 ## 版本号与 Tag 规则
 
@@ -43,22 +45,27 @@ git push origin volclog-v1.0.0
 
 ### 3) 验证安装（建议）
 
+以下命令用于验证已经包含安装脚本资产的 Release；尚未回填脚本的历史版本不能直接使用对应的 `install-binary.sh` / `install.ps1` Release URL。
+
 安装最新 release：
 ```bash
-VOLCLOG_BASE_URL="https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download" bash scripts/install-binary.sh
+curl -fsSLO https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download/install-binary.sh
+VOLCLOG_BASE_URL="https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download" bash install-binary.sh
 ~/.local/bin/volclog --version
 ```
 
 安装指定版本：
 ```bash
-VOLCLOG_BASE_URL="https://github.com/volcengine-tls/ve-tls-cli/releases/download/volclog-v1.0.0" bash scripts/install-binary.sh
+tag="volclog-vX.Y.Z"
+curl -fsSLO "https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}/install-binary.sh"
+VOLCLOG_BASE_URL="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}" bash install-binary.sh
 ~/.local/bin/volclog --version
 ```
 
 Windows 安装（示例）：
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install.ps1
-powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -BaseUrl "https://github.com/volcengine-tls/ve-tls-cli/releases/download/volclog-v1.0.0"
+Invoke-WebRequest -Uri "https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download/install.ps1" -OutFile install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 ## 常见问题

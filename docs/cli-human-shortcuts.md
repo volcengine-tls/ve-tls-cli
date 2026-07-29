@@ -44,7 +44,7 @@
 
 ```bash
 volclog-human project list --output table
-volclog-human topic list --project-id <ProjectId> --output table
+volclog-human topic list --project-id 'YOUR_PROJECT_ID' --output table
 volclog-human host-group list --all
 volclog-human collector list --all
 ```
@@ -81,25 +81,25 @@ volclog-human topic create --request file://topic_req.json
 
 volclog-human index create --describe
 volclog-human index create --print-request-template=full > index_req.json
-volclog-human index create --topic-id <TopicId> --request file://index_req.json
+volclog-human index create --topic-id 'YOUR_TOPIC_ID' --request file://index_req.json
 ```
 
 ### 快速检索和导出日志
 
 ```bash
 volclog-human log search \
-  --topic-id <TopicId> \
+  --topic-id 'YOUR_TOPIC_ID' \
   --query "error" \
-  --from <StartTimeMs> \
-  --to <EndTimeMs> \
+  --from 'START_TIME_MS' \
+  --to 'END_TIME_MS' \
   --limit 100
 
 volclog-human --output jsonl --output-mode file --output-dir ./out \
   log export \
-  --topic-id <TopicId> \
+  --topic-id 'YOUR_TOPIC_ID' \
   --query "*" \
-  --from <StartTimeMs> \
-  --to <EndTimeMs>
+  --from 'START_TIME_MS' \
+  --to 'END_TIME_MS'
 ```
 
 ### 导出分析结果
@@ -107,10 +107,10 @@ volclog-human --output jsonl --output-mode file --output-dir ./out \
 ```bash
 volclog-human --output jsonl --output-mode file --output-dir ./out \
   log export-analysis \
-  --topic-id <TopicId> \
+  --topic-id 'YOUR_TOPIC_ID' \
   --query "* | select status, count(*) as cnt group by status" \
-  --from <StartTimeMs> \
-  --to <EndTimeMs>
+  --from 'START_TIME_MS' \
+  --to 'END_TIME_MS'
 ```
 
 ---

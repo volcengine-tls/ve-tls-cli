@@ -54,14 +54,25 @@ Commands in this section use `volclog` by default.
 Recommended: install the default `volclog` binary:
 
 ```bash
+curl -fsSL -o install-binary.sh \
+  https://raw.githubusercontent.com/volcengine-tls/ve-tls-cli/main/scripts/install-binary.sh
 VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-bash scripts/install-binary.sh
+bash install-binary.sh
 ```
 
 You can also install the human shortcut edition explicitly:
 
 ```bash
-bash scripts/install-binary.sh --edition human
+curl -fsSL -o install-binary.sh \
+  https://raw.githubusercontent.com/volcengine-tls/ve-tls-cli/main/scripts/install-binary.sh
+VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
+bash install-binary.sh --edition human
+```
+
+The binary is installed to `~/.local/bin` by default. If `volclog` or `volclog-human` is not found, add that directory to the current shell's `PATH`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 `volclog` only exposes:
@@ -88,8 +99,8 @@ Set up a local profile or inject one-shot credentials, then verify with `doctor`
 ```bash
 volclog configure set \
   --profile default \
-  --ak <ak> \
-  --sk <sk> \
+  --ak 'YOUR_ACCESS_KEY_ID' \
+  --sk 'YOUR_SECRET_ACCESS_KEY' \
   --region cn-beijing \
   --endpoint https://tls-cn-beijing.volces.com
 
@@ -168,8 +179,16 @@ If you are working directly in a terminal and want the shortcut layer, install `
 **Option 1: Download Binary (Recommended)**
 
 ```bash
+curl -fsSL -o install-binary.sh \
+  https://raw.githubusercontent.com/volcengine-tls/ve-tls-cli/main/scripts/install-binary.sh
 VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-bash scripts/install-binary.sh --edition human
+bash install-binary.sh --edition human
+```
+
+The default install directory is `~/.local/bin`. Add it to `PATH` if necessary:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 **Option 2: Install via npm**
@@ -178,12 +197,15 @@ bash scripts/install-binary.sh --edition human
 npm install -g @volcengine-tls/volclog-human
 ```
 
-**Option 3: Install with Go**
+**Option 3: Build from source with Go**
 
-Requires Go 1.22+.
+Requires Go 1.22+ and a source checkout:
 
 ```bash
-go build -tags=human -o /usr/local/bin/volclog-human ./cmd/volclog
+git clone https://github.com/volcengine-tls/ve-tls-cli.git
+cd ve-tls-cli
+mkdir -p "$HOME/.local/bin"
+go build -tags=human -o "$HOME/.local/bin/volclog-human" ./cmd/volclog
 ```
 
 **Option 4: Install from Local Source**
@@ -204,7 +226,7 @@ volclog-human configure
 
 ```bash
 volclog-human project list
-volclog-human topic list --project-id <your-project-id>
+volclog-human topic list --project-id 'YOUR_PROJECT_ID'
 ```
 
 For the full shortcut layer, see [docs/cli-human-shortcuts.md](docs/cli-human-shortcuts.md).
@@ -222,13 +244,13 @@ The repository includes one bundled agent skill package under `skills/`:
 Install it into your agent skill directory:
 
 ```bash
-volclog skill install --dir <agent-skills-dir>
+volclog skill install --dir /path/to/agent/skills
 ```
 
 For one-off installs, `npx` also works:
 
 ```bash
-npx @volcengine-tls/volclog skill install --dir <agent-skills-dir>
+npx @volcengine-tls/volclog skill install --dir /path/to/agent/skills
 ```
 
 ---

@@ -112,15 +112,25 @@ flowchart LR
 对 Agent/自动化，推荐先安装默认的 `volclog` 二进制：
 
 ```bash
+curl -fsSL -o install-binary.sh \
+  https://raw.githubusercontent.com/volcengine-tls/ve-tls-cli/main/scripts/install-binary.sh
 VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-bash scripts/install-binary.sh
+bash install-binary.sh
 ```
 
 如果你确实需要人工 shortcut，再安装 `volclog-human`：
 
 ```bash
+curl -fsSL -o install-binary.sh \
+  https://raw.githubusercontent.com/volcengine-tls/ve-tls-cli/main/scripts/install-binary.sh
 VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-bash scripts/install-binary.sh --edition human
+bash install-binary.sh --edition human
+```
+
+二进制默认安装到 `~/.local/bin`。如果后续命令提示找不到 `volclog` 或 `volclog-human`，先执行：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 如果你更习惯 npm，同样优先装 agent 版：
@@ -138,7 +148,7 @@ npm install -g @volcengine-tls/volclog-human
 如果你已经有 Go 1.22+，也可以：
 
 ```bash
-go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
+GOBIN="$HOME/.local/bin" go install github.com/volcengine-tls/ve-tls-cli/cmd/volclog@latest
 ```
 
 验证：
@@ -160,8 +170,8 @@ volclog-human --version
 ```bash
 volclog configure set \
   --profile default \
-  --ak <ak> \
-  --sk <sk> \
+  --ak 'YOUR_ACCESS_KEY_ID' \
+  --sk 'YOUR_SECRET_ACCESS_KEY' \
   --region cn-beijing \
   --endpoint https://tls-cn-beijing.volces.com
 ```
@@ -373,10 +383,10 @@ volclog raw --method GET --path /DescribeProjects
 适合高频场景，优先给人类使用。
 
 ```bash
-volclog project list --all
-volclog topic create --describe
-volclog log export --describe
-volclog collector create --describe
+volclog-human project list --all
+volclog-human topic create --describe
+volclog-human log export --describe
+volclog-human collector create --describe
 ```
 
 特点：
@@ -413,19 +423,19 @@ volclog-human --output table project list --all
 如果没有合适项目，再创建：
 
 ```bash
-volclog project create --describe
-volclog project create --print-request-template=full > project_req.json
-volclog --dry-run project create --request file://project_req.json
-volclog project create --request file://project_req.json
+volclog-human project create --describe
+volclog-human project create --print-request-template=full > project_req.json
+volclog-human --dry-run project create --request file://project_req.json
+volclog-human project create --request file://project_req.json
 ```
 
 #### Step 2：创建日志主题
 
 ```bash
-volclog topic create --describe
-volclog topic create --print-request-template=full > topic_req.json
-volclog --dry-run topic create --request file://topic_req.json
-volclog topic create --request file://topic_req.json
+volclog-human topic create --describe
+volclog-human topic create --print-request-template=full > topic_req.json
+volclog-human --dry-run topic create --request file://topic_req.json
+volclog-human topic create --request file://topic_req.json
 ```
 
 #### Step 3：给主题配置索引
@@ -433,16 +443,16 @@ volclog topic create --request file://topic_req.json
 这是最容易“猜 body 猜错”的一步，应该直接走模板：
 
 ```bash
-volclog index create --describe
-volclog index create --print-request-template=full > index_req.json
-volclog --dry-run index create --topic-id <TopicId> --request file://index_req.json
-volclog index create --topic-id <TopicId> --request file://index_req.json
+volclog-human index create --describe
+volclog-human index create --print-request-template=full > index_req.json
+volclog-human --dry-run index create --topic-id 'YOUR_TOPIC_ID' --request file://index_req.json
+volclog-human index create --topic-id 'YOUR_TOPIC_ID' --request file://index_req.json
 ```
 
 #### Step 4：找到目标机器组
 
 ```bash
-volclog host-group list --all \
+volclog-human host-group list --all \
   --jmes-filter "HostGroupHostsRulesInfos[].HostGroupInfo.{HostGroupId: HostGroupId, HostGroupName: HostGroupName}"
 ```
 
@@ -451,10 +461,10 @@ volclog host-group list --all \
 #### Step 5：创建采集规则并绑定机器组
 
 ```bash
-volclog collector create --describe
-volclog collector create --print-request-template=full > collector_req.json
-volclog --dry-run collector create --request file://collector_req.json
-volclog collector create --request file://collector_req.json
+volclog-human collector create --describe
+volclog-human collector create --print-request-template=full > collector_req.json
+volclog-human --dry-run collector create --request file://collector_req.json
+volclog-human collector create --request file://collector_req.json
 
 volclog tool describe collector.apply-rule-to-host-groups
 volclog --dry-run tool exec collector.apply-rule-to-host-groups --context file://ctx.json --input file://bind_req.json
@@ -473,17 +483,17 @@ volclog tool exec collector.apply-rule-to-host-groups --context file://ctx.json 
 
 ```bash
 printf 'volclog-smoke-check trace_id=smoke-001 status=ok\n' | \
-  volclog log ingest --topic-id <TopicId> --input - --input-format lines
+  volclog-human log ingest --topic-id 'YOUR_TOPIC_ID' --input - --input-format lines
 ```
 
 然后马上检索确认：
 
 ```bash
-volclog log search \
-  --topic-id <TopicId> \
+volclog-human log search \
+  --topic-id 'YOUR_TOPIC_ID' \
   --query "*" \
-  --from <StartTimeMs> \
-  --to <EndTimeMs> \
+  --from 'START_TIME_MS' \
+  --to 'END_TIME_MS' \
   --limit 20
 ```
 
@@ -502,19 +512,19 @@ volclog log search \
 echo 'volclog-smoke-check trace_id=smoke-001 status=ok' >> /path/to/real/app.log
 
 # 回到 CLI 里按唯一标记检索
-volclog log search \
-  --topic-id <TopicId> \
+volclog-human log search \
+  --topic-id 'YOUR_TOPIC_ID' \
   --query 'smoke-001' \
-  --from <StartTimeMs> \
-  --to <EndTimeMs> \
+  --from 'START_TIME_MS' \
+  --to 'END_TIME_MS' \
   --limit 20
 ```
 
 如果这一步还没有结果，再去看配置细节：
 
 ```bash
-volclog collector get --rule-id <RuleId> --output-mode file --output-dir ./out
-volclog host-group get --host-group-id <HostGroupId> --output-mode file --output-dir ./out
+volclog-human collector get --rule-id 'YOUR_RULE_ID' --output-mode file --output-dir ./out
+volclog-human host-group get --host-group-id 'YOUR_HOST_GROUP_ID' --output-mode file --output-dir ./out
 ```
 
 #### 这条链路里，`volclog` 顺手的地方
@@ -549,10 +559,10 @@ volclog workflow describe log.ingest
 
 ```bash
 volclog-human --output table log search \
-  --topic-id <TopicId> \
+  --topic-id 'YOUR_TOPIC_ID' \
   --query "level:error" \
-  --from <StartTimeMs> \
-  --to <EndTimeMs> \
+  --from 'START_TIME_MS' \
+  --to 'END_TIME_MS' \
   --limit 20
 ```
 
@@ -561,11 +571,11 @@ volclog-human --output table log search \
 #### Step 2：看时间分布，确认是不是尖峰故障
 
 ```bash
-volclog log histogram \
-  --topic-id <TopicId> \
+volclog-human log histogram \
+  --topic-id 'YOUR_TOPIC_ID' \
   --query "level:error" \
-  --from <StartTimeMs> \
-  --to <EndTimeMs> \
+  --from 'START_TIME_MS' \
+  --to 'END_TIME_MS' \
   --interval 60
 ```
 
@@ -577,12 +587,12 @@ volclog log histogram \
 #### Step 3：导出原始样本
 
 ```bash
-volclog --output jsonl --output-mode file --output-dir ./out \
+volclog-human --output jsonl --output-mode file --output-dir ./out \
   log export \
-  --topic-id <TopicId> \
+  --topic-id 'YOUR_TOPIC_ID' \
   --query "level:error" \
-  --from <StartTimeMs> \
-  --to <EndTimeMs>
+  --from 'START_TIME_MS' \
+  --to 'END_TIME_MS'
 ```
 
 如果结果可能很大，不要直接打 stdout。`log export` 的文件模式已经支持分页批次写文件，更适合大结果导出。
@@ -590,12 +600,12 @@ volclog --output jsonl --output-mode file --output-dir ./out \
 #### Step 4：导出聚合分析结果
 
 ```bash
-volclog --output jsonl --output-mode file --output-dir ./out \
+volclog-human --output jsonl --output-mode file --output-dir ./out \
   log export-analysis \
-  --topic-id <TopicId> \
+  --topic-id 'YOUR_TOPIC_ID' \
   --query "* | select status, count(*) as cnt group by status order by cnt desc limit 20" \
-  --from <StartTimeMs> \
-  --to <EndTimeMs>
+  --from 'START_TIME_MS' \
+  --to 'END_TIME_MS'
 ```
 
 这里要记住一个常见坑：
@@ -606,12 +616,12 @@ volclog --output jsonl --output-mode file --output-dir ./out \
 #### Step 5：如果已经拿到命中样本，再追上下文
 
 ```bash
-volclog log context --describe
-volclog log context \
-  --topic-id <TopicId> \
-  --context-flow <ContextFlow> \
-  --source <Source> \
-  --package-offset <PackageOffset> \
+volclog-human log context --describe
+volclog-human log context \
+  --topic-id 'YOUR_TOPIC_ID' \
+  --context-flow 'YOUR_CONTEXT_FLOW' \
+  --source 'YOUR_SOURCE' \
+  --package-offset 'YOUR_PACKAGE_OFFSET' \
   --prev-logs 20 \
   --next-logs 20
 ```
@@ -642,23 +652,23 @@ volclog log context \
 #### Step 1：列出机器组，并优先拿完整列表
 
 ```bash
-volclog host-group list --all \
+volclog-human host-group list --all \
   --jmes-filter "HostGroupHostsRulesInfos[].HostGroupInfo.{HostGroupId: HostGroupId, HostGroupName: HostGroupName}"
 ```
 
 如果你怀疑返回对象层级复杂，不要硬读 stdout，直接把详情写文件：
 
 ```bash
-volclog --output-mode file --output-dir ./out \
-  host-group get --host-group-id <HostGroupId>
+volclog-human --output-mode file --output-dir ./out \
+  host-group get --host-group-id 'YOUR_HOST_GROUP_ID'
 ```
 
 #### Step 2：列规则并定位目标采集规则
 
 ```bash
-volclog collector list --all --project-id <ProjectId>
-volclog --output-mode file --output-dir ./out \
-  collector get --rule-id <RuleId>
+volclog-human collector list --all --project-id 'YOUR_PROJECT_ID'
+volclog-human --output-mode file --output-dir ./out \
+  collector get --rule-id 'YOUR_RULE_ID'
 ```
 
 #### Step 3：修复绑定关系
@@ -695,11 +705,11 @@ volclog tool describe host-group.delete-host
 #### Step 5：回到日志层验证
 
 ```bash
-volclog log search \
-  --topic-id <TopicId> \
+volclog-human log search \
+  --topic-id 'YOUR_TOPIC_ID' \
   --query "*" \
-  --from <StartTimeMs> \
-  --to <EndTimeMs> \
+  --from 'START_TIME_MS' \
+  --to 'END_TIME_MS' \
   --limit 20
 ```
 
@@ -761,8 +771,8 @@ TLS 场景里比较常见的问题是：
 `volclog` 的建议路径是：
 
 ```bash
-volclog --output jsonl --output-mode file --output-dir ./out log export ...
-volclog --output jsonl --output-mode file --output-dir ./out log export-analysis ...
+volclog-human --output jsonl --output-mode file --output-dir ./out log export ...
+volclog-human --output jsonl --output-mode file --output-dir ./out log export-analysis ...
 ```
 
 对 Agent 来说，这比“先搜索，再把大段结果塞进自己的上下文里处理”可控得多。
@@ -846,7 +856,7 @@ volclog skill install \
 更稳的默认姿势是：
 
 ```bash
---output-mode file --output-dir <writable-dir>
+--output-mode file --output-dir ./out
 ```
 
 ### 5. 装了 skill，却没有把它当成执行规则
@@ -855,20 +865,20 @@ volclog skill install \
 
 ***
 
-## 如果你只记住 7 条命令
+## 如果你只记住 8 条命令
 
 ```bash
 volclog doctor
 volclog tool list
-volclog tool describe <group.action>
-volclog workflow describe <group.workflow>
-volclog tool exec <group.action> --context file://ctx.json --input file://req.json
+volclog tool describe project.create
+volclog workflow describe log.export
+volclog tool exec project.create --context file://ctx.json --input file://req.json
 volclog raw --method GET --path /DescribeProjects
-volclog --output-mode file --output-dir <writable-dir> <command>
+volclog --output-mode file --output-dir ./out workflow exec log.export --input file://req.json
 volclog skill install --dir /path/to/project/.codex/skills
 ```
 
-这六条命令背后，其实是一种比较朴素的用法：
+这八条命令背后，其实是一种比较朴素的用法：
 
 **不要只把** **`volclog`** **当作一个“能查日志的 CLI”，更可以把它当作一套把 TLS 工作流走顺的执行面。**
 
