@@ -44,3 +44,34 @@ func asUsageError(err error) (*usageError, bool) {
 	}
 	return nil, false
 }
+
+type scopedHelpError struct {
+	cause error
+	hint  string
+}
+
+func (e *scopedHelpError) Error() string { return e.cause.Error() }
+
+func (e *scopedHelpError) Unwrap() error { return e.cause }
+
+func withScopedHelpHint(err error, command string) error {
+	if err == nil {
+		return nil
+	}
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return err
+	}
+	return &scopedHelpError{
+		cause: err,
+		hint:  "run '" + command + " --help' to inspect accepted flags and required fields",
+	}
+}
+
+func scopedHelpHint(err error) string {
+	var scoped *scopedHelpError
+	if errors.As(err, &scoped) {
+		return strings.TrimSpace(scoped.hint)
+	}
+	return ""
+}

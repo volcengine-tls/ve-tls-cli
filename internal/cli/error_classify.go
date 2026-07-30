@@ -142,6 +142,16 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		} else if strings.Contains(msg, "must use file://") || strings.Contains(msg, "inline JSON object") || strings.Contains(msg, "json must be object") {
 			hint = "use file://ctx.json, -, or inline JSON object with 'volclog tool exec <group.action>'; tool exec also accepts flat JSON when fields map cleanly to query/path/header/body"
 		}
+		if scoped := scopedHelpHint(err); scoped != "" {
+			unknownFlag := strings.HasPrefix(msg, "unknown flag:")
+			flag := strings.TrimSpace(strings.TrimPrefix(msg, "unknown flag:"))
+			if strings.HasPrefix(msg, "missing --") ||
+				strings.HasPrefix(msg, "missing value for ") ||
+				strings.HasPrefix(msg, "unexpected argument:") ||
+				(unknownFlag && !isGlobalFlagName(flag)) {
+				hint = scoped
+			}
+		}
 		return errPayload{
 			RequestID:  requestID,
 			StatusCode: statusCode,
@@ -149,6 +159,7 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 			Hint:       hint,
 		}, 1
 	}
+	scopedValidation := scopedHelpHint(err) != "" && isScopedCommandValidation(msg)
 	if strings.HasPrefix(msg, "missing required field:") ||
 		strings.HasPrefix(msg, "missing required fields:") ||
 		strings.HasPrefix(msg, "workflow input missing required fields:") ||
@@ -160,12 +171,16 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		strings.Contains(msg, "unsupported log contents type") ||
 		strings.HasPrefix(msg, "json: cannot unmarshal ") ||
 		strings.HasPrefix(msg, "result too large for stdout;") ||
-		strings.HasPrefix(msg, "--secrets-file is not supported for ") {
+		strings.HasPrefix(msg, "--secrets-file is not supported for ") ||
+		scopedValidation {
 		hint := validationHint(group, msg)
 		if strings.HasPrefix(msg, "tool exec input contains reserved context/runtime fields:") {
 			hint = "move runtime selector, trace, execution, and contract fields into --context / context.* instead of --input"
 		} else if strings.HasPrefix(msg, "result too large for stdout;") {
 			hint = "rerun with --output-dir <writable-dir> to allow file_auto, or reduce stdout with --jmes-filter / execution.projection"
+		}
+		if scoped := scopedHelpHint(err); scoped != "" {
+			hint = scoped
 		}
 		return errPayload{
 			RequestID:  requestID,
@@ -329,6 +344,12 @@ func validationHint(group string, msg string) string {
 	default:
 		return "inspect the contract with 'volclog tool describe <group.action>' or 'volclog workflow describe <group.command>' and align the JSON input/context fields"
 	}
+}
+
+func isScopedCommandValidation(msg string) bool {
+	return strings.HasPrefix(msg, "invalid --") ||
+		strings.HasPrefix(msg, "unknown registration scope:") ||
+		strings.HasPrefix(msg, "start URL ")
 }
 
 func httpErrorCode(body []byte) string {

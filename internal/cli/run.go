@@ -307,6 +307,11 @@ func usageText() string {
 		b.WriteString(group.Description)
 		b.WriteString("\n")
 	}
+	b.WriteString("\n鉴权速选:\n")
+	b.WriteString("  个人终端 Console Login: volclog login --help\n")
+	b.WriteString("  企业 SSO 首次配置:      volclog configure sso-session --help\n")
+	b.WriteString("  静态 AK/SK 或工作负载:  volclog configure set --help\n")
+	b.WriteString("  配置完成后验证:         volclog --profile <name> doctor\n")
 	if currentEdition() == cliEditionVolclog {
 		b.WriteString("\n  可用 volclog skill install --dir <skills-dir> 安装内置 volclog 技能。\n")
 		b.WriteString("  当前 volclog 只暴露 configure/doctor/skill/tool/workflow/raw/login/logout/sso；human shortcut 需切到 volclog-human（-tags=human）。\n\n")

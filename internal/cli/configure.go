@@ -6,38 +6,53 @@ import (
 )
 
 func runConfigure(ctx *Context, args []string, ssoFactory ssoAdapterFactory) (any, error) {
-	if err := ctx.LoadConfig(); err != nil {
-		return nil, err
+	helpLookup := func(command string) (string, bool) {
+		switch command {
+		case "sso-session":
+			return usageConfigureSSOSession(), true
+		case "sso":
+			return usageConfigureSSO(), true
+		default:
+			return "", false
+		}
 	}
-	return runSubcommandGroup(args, usageConfigure(), nil, nil, func(command string, commandArgs []string) (any, error) {
+	return runSubcommandGroup(args, usageConfigure(), nil, helpLookup, func(command string, commandArgs []string) (any, error) {
+		if err := ctx.LoadConfig(); err != nil {
+			return nil, err
+		}
+		var (
+			out any
+			err error
+		)
 		switch command {
 		case "set":
-			return configureSet(ctx, commandArgs)
+			out, err = configureSet(ctx, commandArgs)
 		case "use":
-			return configureUse(ctx, commandArgs)
+			out, err = configureUse(ctx, commandArgs)
 		case "show":
-			return configureShow(ctx, commandArgs)
+			out, err = configureShow(ctx, commandArgs)
 		case "list":
-			return configureList(ctx, commandArgs)
+			out, err = configureList(ctx, commandArgs)
 		case "delete":
-			return configureDelete(ctx, commandArgs)
+			out, err = configureDelete(ctx, commandArgs)
 		case "profile":
-			return runConfigureProfile(ctx, commandArgs)
+			out, err = runConfigureProfile(ctx, commandArgs)
 		case "cred":
-			return runConfigureCred(ctx, commandArgs)
+			out, err = runConfigureCred(ctx, commandArgs)
 		case "project":
-			return runConfigureProject(ctx, commandArgs)
+			out, err = runConfigureProject(ctx, commandArgs)
 		case "sso-session":
-			return runConfigureSSOSession(ctx, commandArgs)
+			out, err = runConfigureSSOSession(ctx, commandArgs)
 		case "sso":
 			factory := ssoFactory
 			if factory == nil {
 				factory = newProductionSSOAdapter
 			}
-			return runConfigureSSOWithFactory(ctx, commandArgs, factory)
+			out, err = runConfigureSSOWithFactory(ctx, commandArgs, factory)
 		default:
 			return nil, errors.New("unknown configure command: " + command)
 		}
+		return out, withScopedHelpHint(err, "volclog configure "+command)
 	})
 }
 
