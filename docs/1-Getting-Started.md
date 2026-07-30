@@ -28,7 +28,7 @@ The Unix installer requires `curl`, `tar`, and either `sha256sum` or `shasum`. T
 Download the installer from the target release and run it from any directory:
 
 ```bash
-tag=volclog-v1.0.5-rc.2
+tag=volclog-v1.1.1-rc.1
 base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
 curl -fsSLO "${base_url}/install-binary.sh"
 VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh
@@ -43,7 +43,7 @@ export PATH="$HOME/.local/bin:$PATH"
 To install the human edition, add `--edition human`:
 
 ```bash
-tag=volclog-v1.0.5-rc.2
+tag=volclog-v1.1.1-rc.1
 base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
 curl -fsSLO "${base_url}/install-binary.sh"
 VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh --edition human
@@ -52,7 +52,7 @@ VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh --edition human
 On Windows, download the PowerShell installer from the target release:
 
 ```powershell
-$tag = "volclog-v1.0.5-rc.2"
+$tag = "volclog-v1.1.1-rc.1"
 $baseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/download/$tag"
 Invoke-WebRequest -Uri "$baseUrl/install.ps1" -OutFile install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -BaseUrl $baseUrl
