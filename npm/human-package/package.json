@@ -1,6 +1,6 @@
 {
   "name": "@volcengine-tls/volclog-human",
-  "version": "1.1.1-rc.1",
+  "version": "1.0.5-rc.3",
   "description": "Volcengine TLS CLI human edition",
   "license": "Apache-2.0",
   "bin": {
