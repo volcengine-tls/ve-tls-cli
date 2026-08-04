@@ -1,0 +1,265 @@
+{
+  "create_flags_only": {
+    "action": "collector.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "InputType": 2,
+          "LogType": "json_log",
+          "Paths": [
+            "/var/log/collector-a.log",
+            "/var/log/collector-b.log"
+          ],
+          "Pause": 1,
+          "RuleName": "collector-create-flags",
+          "TopicId": "collector-create-topic-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateRule",
+        "query": {}
+      }
+    }
+  },
+  "create_flags_override_request": {
+    "action": "collector.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "Extra": {
+            "Key": "keep"
+          },
+          "InputType": 2,
+          "LogType": "json_log",
+          "Paths": [
+            "/data/flag-a.log",
+            "/data/flag-b.log"
+          ],
+          "Pause": 0,
+          "RuleName": "flag-rule",
+          "TopicId": "flag-topic"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateRule",
+        "query": {}
+      }
+    }
+  },
+  "create_request_only": {
+    "action": "collector.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "Extra": {
+            "Key": "keep"
+          },
+          "InputType": 1,
+          "LogType": "fullregex_log",
+          "Paths": [
+            "/data/request.log"
+          ],
+          "Pause": 0,
+          "RuleName": "request-only-rule",
+          "TopicId": "request-only-topic"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateRule",
+        "query": {}
+      }
+    }
+  },
+  "delete": {
+    "action": "collector.delete",
+    "data": {
+      "request_preview": {
+        "body": {
+          "RuleId": "collector-delete-rule-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "DELETE",
+        "path": "/DeleteRule",
+        "query": {}
+      }
+    }
+  },
+  "get": {
+    "action": "collector.get",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeRuleV2",
+        "query": {
+          "RuleId": "collector-get-rule-id"
+        }
+      }
+    }
+  },
+  "list_all_first_request": {
+    "action": "collector.list",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "Content-Md5",
+          "Content-Type",
+          "Host",
+          "User-Agent",
+          "X-Content-Sha256",
+          "X-Date",
+          "X-Tls-Apiversion"
+        ],
+        "method": "GET",
+        "path": "/DescribeRulesV2",
+        "query": {
+          "Hidden": [
+            "false"
+          ],
+          "PageNumber": [
+            "1"
+          ],
+          "PageSize": [
+            "17"
+          ],
+          "Pause": [
+            "1"
+          ],
+          "ProjectId": [
+            "collector-list-all-project-id"
+          ]
+        }
+      }
+    },
+    "pagination": {
+      "merged": true,
+      "mode": "page_all",
+      "pageCount": 1,
+      "pageSize": 17
+    }
+  },
+  "list_common_flags": {
+    "action": "collector.list",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeRulesV2",
+        "query": {
+          "Hidden": "true",
+          "IamProjectName": "collector-list-iam-project",
+          "LogType": "delimiter_log",
+          "PageNumber": "3",
+          "PageSize": "25",
+          "ProjectId": "collector-list-project-id",
+          "ProjectName": "collector-list-project",
+          "RuleId": "collector-list-rule-id",
+          "RuleName": "collector-list-rule",
+          "RuleType": "1",
+          "TopicId": "collector-list-topic-id",
+          "TopicName": "collector-list-topic"
+        }
+      }
+    }
+  },
+  "list_pause_false": {
+    "action": "collector.list",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeRulesV2",
+        "query": {
+          "Pause": "0",
+          "RuleName": "pause-false"
+        }
+      }
+    }
+  },
+  "list_pause_true": {
+    "action": "collector.list",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeRulesV2",
+        "query": {
+          "Pause": "1",
+          "RuleName": "pause-true"
+        }
+      }
+    }
+  },
+  "list_pause_unset": {
+    "action": "collector.list",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeRulesV2",
+        "query": {
+          "RuleName": "pause-unset"
+        }
+      }
+    }
+  },
+  "modify": {
+    "action": "collector.modify",
+    "data": {
+      "request_preview": {
+        "body": {
+          "InputType": 3,
+          "LogType": "delimiter_log",
+          "Paths": [
+            "/var/log/collector-modified.log"
+          ],
+          "Pause": 0,
+          "RuleId": "collector-modify-rule-id",
+          "RuleName": "collector-modified",
+          "TopicId": "collector-modify-topic-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "PUT",
+        "path": "/ModifyRule",
+        "query": {}
+      }
+    }
+  }
+}

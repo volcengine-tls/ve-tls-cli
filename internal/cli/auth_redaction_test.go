@@ -340,7 +340,7 @@ func TestRedaction_ErrorEnvelopeDoesNotRenderCause(t *testing.T) {
 
 	// Structured envelope must not contain canaries.
 	var stderr bytes.Buffer
-	writeStructuredError(&bytes.Buffer{}, &stderr, &dynamicAuthError{mode: config.AuthModeSSO, err: err}, "", 0, "tool", nil)
+	writeStructuredError(&bytes.Buffer{}, &stderr, newDynamicAuthError(config.AuthModeSSO, err), "", 0, "tool", nil)
 	assertNoCanaries(t, "error envelope", stderr.String())
 }
 
@@ -746,8 +746,8 @@ func TestWorkloadErrorEnvelopeRedactsCanaries(t *testing.T) {
 			if !errors.As(err, &dae) {
 				t.Fatal("expected *dynamicAuthError in error chain")
 			}
-			if dae.mode != tc.mode {
-				t.Fatalf("dae.mode=%q, want %q", dae.mode, tc.mode)
+			if dae.AuthMode() != tc.mode {
+				t.Fatalf("dae.AuthMode()=%q, want %q", dae.AuthMode(), tc.mode)
 			}
 
 			// err.Error() must not contain any canary.

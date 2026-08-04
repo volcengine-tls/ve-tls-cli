@@ -1,3 +1,5 @@
+//go:build human
+
 package cli
 
 import (
@@ -29,16 +31,4 @@ func maybeSetBoolField(dst map[string]any, key string, set bool, value bool) {
 	if set {
 		dst[key] = value
 	}
-}
-
-func maybeSetStringListField(dst map[string]any, key string, value string) error {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	items, err := util.ReadStringListMaybeFile(value)
-	if err != nil {
-		return err
-	}
-	dst[key] = items
-	return nil
 }

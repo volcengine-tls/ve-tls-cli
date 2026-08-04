@@ -70,79 +70,18 @@ type swaggerSchema struct {
 	MaxLength            *int                     `json:"maxLength"`
 }
 
-type capabilityDoc struct {
-	Version  string              `json:"version"`
-	Commands []capabilityCommand `json:"commands"`
-}
-
-type capabilityCommand struct {
-	Group            string               `json:"group"`
-	GroupTitle       string               `json:"group_title,omitempty"`
-	Action           string               `json:"action"`
-	Summary          string               `json:"summary,omitempty"`
-	Method           string               `json:"method"`
-	Path             string               `json:"path"`
-	Params           []capabilityParam    `json:"params,omitempty"`
-	RequestParamsDoc []capabilityDocParam `json:"request_params_doc,omitempty"`
-}
-
-type capabilityParam struct {
-	Name        string   `json:"name"`
-	In          string   `json:"in"`
-	Required    bool     `json:"required,omitempty"`
-	Type        string   `json:"type,omitempty"`
-	Format      string   `json:"format,omitempty"`
-	Ref         string   `json:"ref,omitempty"`
-	Description string   `json:"description,omitempty"`
-	Enum        []string `json:"enum,omitempty"`
-	Pattern     string   `json:"pattern,omitempty"`
-	Minimum     *float64 `json:"minimum,omitempty"`
-	Maximum     *float64 `json:"maximum,omitempty"`
-	MinLength   *int     `json:"min_length,omitempty"`
-	MaxLength   *int     `json:"max_length,omitempty"`
-}
-
-type capabilityDocParam struct {
-	Name         string `json:"name"`
-	In           string `json:"in,omitempty"`
-	Type         string `json:"type,omitempty"`
-	RequiredText string `json:"required_text,omitempty"`
-	Example      string `json:"example,omitempty"`
-	Description  string `json:"description,omitempty"`
+type apiDocParam struct {
+	Name         string
+	In           string
+	Type         string
+	RequiredText string
+	Example      string
+	Description  string
 }
 
 type apiDocEntry struct {
 	GroupTitle       string
-	RequestParamsDoc []capabilityDocParam
-}
-
-type toolCatalogDoc struct {
-	Version string      `json:"version"`
-	Tools   []toolEntry `json:"tools"`
-}
-
-type toolEntry struct {
-	ID               string         `json:"id"`
-	Group            string         `json:"group"`
-	Action           string         `json:"action"`
-	Resource         string         `json:"resource"`
-	Verb             string         `json:"verb"`
-	Family           string         `json:"family"`
-	Method           string         `json:"method"`
-	Path             string         `json:"path"`
-	Visibility       string         `json:"visibility"`
-	Summary          string         `json:"summary"`
-	InputSchema      map[string]any `json:"input_schema"`
-	ContextSchema    map[string]any `json:"context_schema"`
-	ExecutionSchema  map[string]any `json:"execution_schema"`
-	OutputPolicy     string         `json:"output_policy"`
-	ErrorRecovery    string         `json:"error_recovery"`
-	DocSource        string         `json:"doc_source"`
-	UsageConstraints string         `json:"usage_constraints"`
-	RiskLevel        string         `json:"risk_level"`
-	SupportsDryRun   bool           `json:"supports_dry_run"`
-	SupportsAll      bool           `json:"supports_all"`
-	IsEnvelopeOutput bool           `json:"is_envelope_output"`
+	RequestParamsDoc []apiDocParam
 }
 
 type toolCatalogOverrides struct {
@@ -154,8 +93,11 @@ type toolCatalogOverrides struct {
 
 func main() {
 	spec := flag.String("spec", "", "path to swagger.json")
-	outCapabilities := flag.String("out-capabilities", "internal/cli/generated_capabilities.go", "output file for capabilities")
-	outToolCatalog := flag.String("out-tool-catalog", "internal/cli/generated_tool_catalog.go", "output file for tool catalog")
+	outOperationCatalog := flag.String("out-operation-catalog", "internal/contract/generated_catalog.json", "output file for operation catalog v2")
+	outOperationCatalogLock := flag.String("out-operation-catalog-lock", "contracts/operation-catalog-v2-lock.json", "output file for operation catalog v2 generation lock")
+	internalOperationsPath := flag.String("internal-operation-overrides", "contracts/overrides/internal_operations.json", "path to internal operation overrides")
+	mergeInternalOnly := flag.Bool("merge-internal-operations-only", false, "merge internal operation overrides into the checked-in catalog without external source inputs")
+	lockRoot := flag.String("lock-root", ".", "root used to make generation lock input paths relative")
 	groupKeyMapping := flag.String("group-key-mapping", "contracts/agentic-stage1/group_key_mapping.yaml", "path to group key mapping yaml")
 	swaggerTagMapping := flag.String("swagger-tag-mapping", "repos/日志服务/_swagger_tag_mapping.yaml", "path to swagger tag title mapping yaml")
 	apiDocRoot := flag.String("api-doc-root", "repos/日志服务/API 参考", "path to api reference markdown root")
@@ -163,10 +105,20 @@ func main() {
 	toolRecoveryOverridesPath := flag.String("tool-recovery-overrides", "contracts/overrides/recovery.yaml", "path to tool error recovery override yaml")
 	toolOutputPolicyOverridesPath := flag.String("tool-output-policy-overrides", "contracts/overrides/output_policy.yaml", "path to tool output policy override yaml")
 	toolUsageConstraintsPath := flag.String("tool-usage-constraints-overrides", "contracts/overrides/usage_constraints.yaml", "path to tool usage constraints override yaml")
-	version := flag.String("version", "stage1", "capabilities version")
-	toolVersion := flag.String("tool-version", "v1", "tool catalog version")
+	contractVersion := flag.String("contract-version", "v1", "operation contract version")
 	flag.Parse()
 
+	if *mergeInternalOnly {
+		if err := mergeInternalOperationsIntoCheckedInCatalog(
+			*outOperationCatalog,
+			*outOperationCatalogLock,
+			*internalOperationsPath,
+			*lockRoot,
+		); err != nil {
+			fatal(err)
+		}
+		return
+	}
 	if strings.TrimSpace(*spec) == "" {
 		fatal(errors.New("missing --spec"))
 	}
@@ -190,13 +142,48 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	caps := buildCapabilities(doc, strings.TrimSpace(*version), groupKeys, tagTitles, docIndex)
-	toolCatalog := buildToolCatalog(doc, strings.TrimSpace(*toolVersion), groupKeys, tagTitles, docIndex, toolOverrides)
-
-	if err := writeCapabilitiesGo(*outCapabilities, caps); err != nil {
+	sourceOperations := buildSourceOperations(doc, groupKeys, tagTitles, docIndex, toolOverrides)
+	operationCatalog, err := buildOperationCatalogV2FromSource(strings.TrimSpace(*contractVersion), sourceOperations)
+	if err != nil {
 		fatal(err)
 	}
-	if err := writeToolCatalogGo(*outToolCatalog, toolCatalog); err != nil {
+	internalOperations, err := loadInternalOperationOverrides(*internalOperationsPath)
+	if err != nil {
+		fatal(err)
+	}
+	operationCatalog, err = mergeInternalOperations(operationCatalog, internalOperations)
+	if err != nil {
+		fatal(err)
+	}
+
+	lock, err := buildOperationCatalogLock(*lockRoot, "source", operationCatalog, map[string]string{
+		"api_doc_root":                  *apiDocRoot,
+		"contract_catalog":              "internal/contract/catalog.go",
+		"contract_digest":               "internal/contract/digest.go",
+		"contract_schema":               "internal/contract/schema.go",
+		"contract_types":                "internal/contract/types.go",
+		"generator_catalog_v2":          "internal/openapigen/catalog_v2.go",
+		"generator_internal_operations": "internal/openapigen/internal_operations.go",
+		"generator_main":                "internal/openapigen/main.go",
+		"generator_source_operations":   "internal/openapigen/source_operations.go",
+		"group_key_mapping":             *groupKeyMapping,
+		"override_internal_operations":  *internalOperationsPath,
+		"override_output_policy":        *toolOutputPolicyOverridesPath,
+		"override_recovery":             *toolRecoveryOverridesPath,
+		"override_risk":                 *toolRiskOverridesPath,
+		"override_usage_constraints":    *toolUsageConstraintsPath,
+		"spec":                          *spec,
+		"swagger_tag_mapping":           *swaggerTagMapping,
+	})
+	if err != nil {
+		fatal(err)
+	}
+	if err := writeOperationCatalogPair(
+		*outOperationCatalog,
+		operationCatalog,
+		*outOperationCatalogLock,
+		lock,
+	); err != nil {
 		fatal(err)
 	}
 }
@@ -222,215 +209,6 @@ func loadSwagger(path string) (swaggerDoc, error) {
 		doc.Definitions = map[string]swaggerSchema{}
 	}
 	return doc, nil
-}
-
-func buildCapabilities(doc swaggerDoc, version string, groupKeys map[string]string, tagTitles map[string]string, docIndex map[string]apiDocEntry) capabilityDoc {
-	commands := make([]capabilityCommand, 0, 512)
-	used := map[string]map[string]string{}
-	paths := make([]string, 0, len(doc.Paths))
-	for p := range doc.Paths {
-		paths = append(paths, p)
-	}
-	sort.Strings(paths)
-	for _, p := range paths {
-		item := doc.Paths[p]
-		methods := []struct {
-			name string
-			op   *swaggerOp
-		}{
-			{"GET", item.Get},
-			{"POST", item.Post},
-			{"PUT", item.Put},
-			{"DELETE", item.Delete},
-			{"PATCH", item.Patch},
-			{"HEAD", item.Head},
-			{"OPTIONS", item.Options},
-		}
-		for _, m := range methods {
-			if m.op == nil || m.op.Deprecated {
-				continue
-			}
-			docEntry, documented := docIndex[strings.TrimSpace(m.op.Summary)]
-			if len(docIndex) > 0 && !documented {
-				continue
-			}
-			groupTitle := resolveGroupTitle(m.op.Tags, tagTitles, docEntry.GroupTitle)
-			group := groupName(groupTitle, groupKeys)
-			action := actionName(group, strings.TrimSpace(m.op.Summary), m.name, p)
-			if used[group] == nil {
-				used[group] = map[string]string{}
-			}
-			sign := m.name + " " + p
-			if prev, ok := used[group][action]; ok && prev != sign {
-				action = disambiguateAction(action, p, m.name, used[group])
-			}
-			used[group][action] = sign
-			params := mergeParams(item.Parameters, m.op.Parameters)
-			commands = append(commands, capabilityCommand{
-				Group:            group,
-				GroupTitle:       groupTitle,
-				Action:           action,
-				Summary:          strings.TrimSpace(m.op.Summary),
-				Method:           m.name,
-				Path:             p,
-				Params:           convertParams(params),
-				RequestParamsDoc: docEntry.RequestParamsDoc,
-			})
-		}
-	}
-	sort.Slice(commands, func(i, j int) bool {
-		if commands[i].Group != commands[j].Group {
-			return commands[i].Group < commands[j].Group
-		}
-		if commands[i].Action != commands[j].Action {
-			return commands[i].Action < commands[j].Action
-		}
-		if commands[i].Method != commands[j].Method {
-			return commands[i].Method < commands[j].Method
-		}
-		return commands[i].Path < commands[j].Path
-	})
-	return capabilityDoc{
-		Version:  version,
-		Commands: commands,
-	}
-}
-
-func buildToolCatalog(doc swaggerDoc, version string, groupKeys map[string]string, tagTitles map[string]string, docIndex map[string]apiDocEntry, overrides toolCatalogOverrides) toolCatalogDoc {
-	tools := make([]toolEntry, 0, 512)
-	used := map[string]map[string]string{}
-	paths := make([]string, 0, len(doc.Paths))
-	for p := range doc.Paths {
-		paths = append(paths, p)
-	}
-	sort.Strings(paths)
-	for _, p := range paths {
-		item := doc.Paths[p]
-		methods := []struct {
-			name string
-			op   *swaggerOp
-		}{
-			{"GET", item.Get},
-			{"POST", item.Post},
-			{"PUT", item.Put},
-			{"DELETE", item.Delete},
-			{"PATCH", item.Patch},
-			{"HEAD", item.Head},
-			{"OPTIONS", item.Options},
-		}
-		for _, m := range methods {
-			if m.op == nil || m.op.Deprecated {
-				continue
-			}
-			docEntry, documented := docIndex[strings.TrimSpace(m.op.Summary)]
-			if len(docIndex) > 0 && !documented {
-				continue
-			}
-			groupTitle := resolveGroupTitle(m.op.Tags, tagTitles, docEntry.GroupTitle)
-			group := groupName(groupTitle, groupKeys)
-			action := actionName(group, strings.TrimSpace(m.op.Summary), m.name, p)
-			if used[group] == nil {
-				used[group] = map[string]string{}
-			}
-			sign := m.name + " " + p
-			if prev, ok := used[group][action]; ok && prev != sign {
-				action = disambiguateAction(action, p, m.name, used[group])
-			}
-			used[group][action] = sign
-
-			verb, resource := splitVerbNoun(action)
-			verb = strings.ToLower(strings.TrimSpace(verb))
-			if verb == "" {
-				verb = inferToolActionVerb(action, strings.TrimSpace(m.name))
-			}
-			resolvedResource := strings.TrimSpace(resource)
-			if resolvedResource == "" {
-				resolvedResource = inferResourceFromPath(p)
-			}
-			family := group
-			if strings.TrimSpace(family) == "" {
-				family = resolvedResource
-			}
-			if family == "" {
-				family = "misc"
-			}
-			params := mergeParams(item.Parameters, m.op.Parameters)
-			inputSchema := buildToolInputSchema(params, doc.Definitions, docEntry.RequestParamsDoc)
-			entry := toolEntry{
-				ID:               strings.TrimSpace(group) + "." + toKebab(action),
-				Group:            group,
-				Action:           action,
-				Resource:         normalizeResourceToken(resolvedResource),
-				Verb:             verb,
-				Family:           family,
-				Method:           m.name,
-				Path:             p,
-				Visibility:       "public",
-				Summary:          strings.TrimSpace(m.op.Summary),
-				InputSchema:      inputSchema,
-				ContextSchema:    defaultToolContextSchema(),
-				ExecutionSchema:  defaultToolExecutionSchema(),
-				OutputPolicy:     inferToolOutputPolicy(action, m.name),
-				ErrorRecovery:    inferToolErrorRecovery(action, m.name),
-				DocSource:        inferToolDocSource(strings.TrimSpace(m.op.Summary), p, groupTitle, docEntry),
-				UsageConstraints: inferToolUsageConstraints(action, group, p),
-				RiskLevel:        inferToolRiskLevel(action, m.name),
-				SupportsDryRun:   true,
-				SupportsAll:      inferSupportsAll(action, m.name, params),
-				IsEnvelopeOutput: true,
-			}
-			applyPublicToolInputSchemaOverrides(&entry)
-			tools = append(tools, entry)
-		}
-	}
-	assignCanonicalToolIDs(tools)
-	for i := range tools {
-		tools[i] = applyToolCatalogOverrides(tools[i], overrides)
-	}
-	sort.Slice(tools, func(i, j int) bool {
-		if tools[i].Group != tools[j].Group {
-			return tools[i].Group < tools[j].Group
-		}
-		if tools[i].ID != tools[j].ID {
-			return tools[i].ID < tools[j].ID
-		}
-		if tools[i].Method != tools[j].Method {
-			return tools[i].Method < tools[j].Method
-		}
-		return tools[i].Path < tools[j].Path
-	})
-	return toolCatalogDoc{
-		Version: version,
-		Tools:   tools,
-	}
-}
-
-func assignCanonicalToolIDs(tools []toolEntry) {
-	verbCounts := map[string]int{}
-	for _, tool := range tools {
-		key := canonicalToolVerbKey(tool.Group, tool.Verb)
-		if key == "" {
-			continue
-		}
-		verbCounts[key]++
-	}
-	for i := range tools {
-		group := strings.TrimSpace(tools[i].Group)
-		if group == "" {
-			continue
-		}
-		verb := normalizeIdentityToken(tools[i].Verb)
-		longID := strings.TrimSpace(group) + "." + toKebab(tools[i].Action)
-		if verb == "" {
-			tools[i].ID = longID
-			continue
-		}
-		if verbCounts[canonicalToolVerbKey(group, verb)] == 1 {
-			tools[i].ID = strings.TrimSpace(group) + "." + verb
-			continue
-		}
-		tools[i].ID = longID
-	}
 }
 
 func canonicalToolVerbKey(group, verb string) string {
@@ -479,30 +257,7 @@ func loadToolCatalogOverrideMap(path string) (map[string]string, error) {
 	return loadSimpleYAMLMapping(p)
 }
 
-func applyToolCatalogOverrides(entry toolEntry, overrides toolCatalogOverrides) toolEntry {
-	if len(overrides.Risk) == 0 && len(overrides.ErrorRecovery) == 0 && len(overrides.OutputPolicy) == 0 && len(overrides.UsageConstraints) == 0 {
-		return entry
-	}
-	id := strings.TrimSpace(entry.ID)
-	if id == "" {
-		return entry
-	}
-	if v := strings.TrimSpace(overrides.Risk[id]); v != "" {
-		entry.RiskLevel = v
-	}
-	if v := strings.TrimSpace(overrides.ErrorRecovery[id]); v != "" {
-		entry.ErrorRecovery = v
-	}
-	if v := strings.TrimSpace(overrides.OutputPolicy[id]); v != "" {
-		entry.OutputPolicy = v
-	}
-	if v := strings.TrimSpace(overrides.UsageConstraints[id]); v != "" {
-		entry.UsageConstraints = v
-	}
-	return entry
-}
-
-func buildToolInputSchema(params []swaggerParam, defs map[string]swaggerSchema, docParams []capabilityDocParam) map[string]any {
+func buildToolInputSchema(params []swaggerParam, defs map[string]swaggerSchema, docParams []apiDocParam) map[string]any {
 	locs := []string{"query", "path", "header", "body"}
 	grouped := map[string][]swaggerParam{}
 	for _, p := range params {
@@ -513,7 +268,7 @@ func buildToolInputSchema(params []swaggerParam, defs map[string]swaggerSchema, 
 		}
 	}
 	out := map[string]any{}
-	docGrouped := map[string][]capabilityDocParam{}
+	docGrouped := map[string][]apiDocParam{}
 	for _, p := range docParams {
 		loc := strings.ToLower(strings.TrimSpace(p.In))
 		if !isTopLevelParamLocation(loc) {
@@ -588,28 +343,28 @@ func buildToolInputSchema(params []swaggerParam, defs map[string]swaggerSchema, 
 	return out
 }
 
-func applyPublicToolInputSchemaOverrides(entry *toolEntry) {
-	if entry == nil {
+func applyPublicSourceInputSchemaOverrides(operation *sourceOperation) {
+	if operation == nil {
 		return
 	}
-	switch strings.TrimSpace(entry.Summary) {
+	switch strings.TrimSpace(operation.Summary) {
 	case "PutLogs":
-		applyPutLogsBodySchemaOverride(entry)
+		applyPutLogsBodySchemaOverride(operation)
 	case "CreateTraceInstance", "ModifyTraceInstance":
-		overrideWeakBodyObjectField(entry.InputSchema, "BackendConfig", map[string]any{
+		overrideWeakBodyObjectField(operation.InputSchema, "BackendConfig", map[string]any{
 			"type":                 "object",
 			"additionalProperties": true,
 		})
 	case "SearchTraces":
-		overrideWeakBodyObjectField(entry.InputSchema, "Query", map[string]any{
+		overrideWeakBodyObjectField(operation.InputSchema, "Query", map[string]any{
 			"type":                 "object",
 			"additionalProperties": true,
 		})
 	}
 }
 
-func applyPutLogsBodySchemaOverride(entry *toolEntry) {
-	if entry == nil {
+func applyPutLogsBodySchemaOverride(operation *sourceOperation) {
+	if operation == nil {
 		return
 	}
 	logKV := map[string]any{
@@ -670,7 +425,7 @@ func applyPutLogsBodySchemaOverride(entry *toolEntry) {
 		},
 		"required": []string{"Logs"},
 	}
-	entry.InputSchema["body"] = map[string]any{
+	operation.InputSchema["body"] = map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"LogGroups": map[string]any{
@@ -680,29 +435,6 @@ func applyPutLogsBodySchemaOverride(entry *toolEntry) {
 		},
 		"required": []string{"LogGroups"},
 	}
-}
-
-func setBodyObjectField(inputSchema map[string]any, field string, schema map[string]any) {
-	if strings.TrimSpace(field) == "" || inputSchema == nil {
-		return
-	}
-	body, ok := inputSchema["body"].(map[string]any)
-	if !ok || body == nil {
-		body = map[string]any{
-			"type":       "object",
-			"properties": map[string]any{},
-		}
-		inputSchema["body"] = body
-	}
-	if t, ok := body["type"].(string); !ok || strings.TrimSpace(t) == "" {
-		body["type"] = "object"
-	}
-	props, ok := body["properties"].(map[string]any)
-	if !ok || props == nil {
-		props = map[string]any{}
-		body["properties"] = props
-	}
-	props[field] = schema
 }
 
 func overrideWeakBodyObjectField(inputSchema map[string]any, field string, schema map[string]any) {
@@ -750,7 +482,7 @@ func shouldFilterManagedToolHeader(name string) bool {
 	}
 }
 
-func buildToolBodyInputSchema(params []swaggerParam, defs map[string]swaggerSchema, docParams []capabilityDocParam) map[string]any {
+func buildToolBodyInputSchema(params []swaggerParam, defs map[string]swaggerSchema, docParams []apiDocParam) map[string]any {
 	schema := map[string]any{
 		"type":       "object",
 		"properties": map[string]any{},
@@ -805,7 +537,7 @@ func buildToolBodyInputSchema(params []swaggerParam, defs map[string]swaggerSche
 	return schema
 }
 
-func mergeDocBodyFieldToObject(schema map[string]any, param capabilityDocParam) bool {
+func mergeDocBodyFieldToObject(schema map[string]any, param apiDocParam) bool {
 	_, ok := schema["properties"]
 	if !ok {
 		return false
@@ -1130,7 +862,7 @@ func isDocParamRequired(requiredText string) bool {
 	return text == "是" || strings.HasPrefix(text, "是") || strings.Contains(text, "required") || text == "true"
 }
 
-func buildDocParamSchema(p capabilityDocParam) map[string]any {
+func buildDocParamSchema(p apiDocParam) map[string]any {
 	rawType := strings.TrimSpace(p.Type)
 	schemaType := mapDocTypeToJSONSchema(rawType)
 	schema := map[string]any{
@@ -1189,30 +921,7 @@ func mapDocArrayItemType(raw string) map[string]any {
 	}
 }
 
-func mergeDocBodyField(schema map[string]any, param capabilityDocParam) bool {
-	props, ok := schema["properties"].(map[string]any)
-	if !ok {
-		return false
-	}
-	candidates := []string{"body", "data", "input", "payload"}
-	for _, name := range candidates {
-		if v, ok := props[name]; ok {
-			if mergeDocFieldToObject(v, param) {
-				return true
-			}
-		}
-	}
-	if len(props) == 1 {
-		for _, v := range props {
-			if mergeDocFieldToObject(v, param) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func mergeDocFieldToObject(obj any, p capabilityDocParam) bool {
+func mergeDocFieldToObject(obj any, p apiDocParam) bool {
 	mp, ok := obj.(map[string]any)
 	if !ok || mp == nil {
 		return false
@@ -1578,12 +1287,12 @@ func loadAPIDocIndex(root string) (map[string]apiDocEntry, error) {
 	return out, nil
 }
 
-func parseDocRequestParamsMarkdown(md string) []capabilityDocParam {
+func parseDocRequestParamsMarkdown(md string) []apiDocParam {
 	lines := strings.Split(md, "\n")
 	inRequest := false
 	currentLoc := ""
 	lastIdx := -1
-	out := make([]capabilityDocParam, 0, 16)
+	out := make([]apiDocParam, 0, 16)
 	for _, raw := range lines {
 		line := strings.TrimSpace(raw)
 		switch {
@@ -1626,7 +1335,7 @@ func parseDocRequestParamsMarkdown(md string) []capabilityDocParam {
 				}
 				continue
 			}
-			out = append(out, capabilityDocParam{
+			out = append(out, apiDocParam{
 				Name:         name,
 				In:           currentLoc,
 				Type:         strings.TrimSpace(stripMarkdownText(cells[1])),
@@ -1711,122 +1420,6 @@ func stripMarkdownText(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-func buildTemplateMaps(doc swaggerDoc) (map[string]string, map[string]string) {
-	required := map[string]string{}
-	full := map[string]string{}
-	refs := usedBodyRefs(doc)
-	for _, ref := range refs {
-		requiredObj, ok := buildTemplateForRef(ref, doc.Definitions, "required", 0, map[string]int{})
-		if ok {
-			required[ref] = marshalPretty(requiredObj)
-		}
-		fullObj, ok := buildTemplateForRef(ref, doc.Definitions, "full", 0, map[string]int{})
-		if ok {
-			full[ref] = marshalPretty(fullObj)
-		}
-	}
-	return required, full
-}
-
-func usedBodyRefs(doc swaggerDoc) []string {
-	set := map[string]struct{}{}
-	for _, item := range doc.Paths {
-		ops := []*swaggerOp{item.Get, item.Post, item.Put, item.Delete, item.Patch, item.Head, item.Options}
-		for _, op := range ops {
-			if op == nil || op.Deprecated {
-				continue
-			}
-			params := mergeParams(item.Parameters, op.Parameters)
-			for _, p := range params {
-				if strings.EqualFold(strings.TrimSpace(p.In), "body") && p.Schema != nil {
-					ref := strings.TrimSpace(p.Schema.Ref)
-					if ref != "" {
-						set[ref] = struct{}{}
-					}
-				}
-			}
-		}
-	}
-	refs := make([]string, 0, len(set))
-	for ref := range set {
-		refs = append(refs, ref)
-	}
-	sort.Strings(refs)
-	return refs
-}
-
-func buildTemplateForRef(ref string, defs map[string]swaggerSchema, mode string, depth int, seen map[string]int) (any, bool) {
-	name := strings.TrimPrefix(strings.TrimSpace(ref), "#/definitions/")
-	s, ok := defs[name]
-	if !ok {
-		return nil, false
-	}
-	return buildTemplateValue(s, defs, mode, depth, seen), true
-}
-
-func buildTemplateValue(s swaggerSchema, defs map[string]swaggerSchema, mode string, depth int, seen map[string]int) any {
-	if depth > 4 {
-		return map[string]any{}
-	}
-	if strings.TrimSpace(s.Ref) != "" {
-		ref := strings.TrimSpace(s.Ref)
-		seen[ref]++
-		if seen[ref] > 1 {
-			return map[string]any{}
-		}
-		v, ok := buildTemplateForRef(ref, defs, mode, depth+1, seen)
-		if !ok {
-			return map[string]any{}
-		}
-		return v
-	}
-	t := strings.ToLower(strings.TrimSpace(s.Type))
-	switch t {
-	case "string":
-		return ""
-	case "integer", "number":
-		return 0
-	case "boolean":
-		return false
-	case "array":
-		if s.Items == nil {
-			return []any{}
-		}
-		return []any{buildTemplateValue(*s.Items, defs, mode, depth+1, seen)}
-	case "object", "":
-		if len(s.Properties) == 0 {
-			if child, ok := parseAdditionalProperties(s.AdditionalProperties); ok {
-				return map[string]any{"key": buildTemplateValue(child, defs, mode, depth+1, seen)}
-			}
-			return map[string]any{}
-		}
-		requiredSet := map[string]struct{}{}
-		for _, n := range s.Required {
-			requiredSet[n] = struct{}{}
-		}
-		keys := make([]string, 0, len(s.Properties))
-		for k := range s.Properties {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		if mode == "full" && len(keys) > 40 {
-			keys = keys[:40]
-		}
-		obj := map[string]any{}
-		for _, k := range keys {
-			if mode == "required" {
-				if _, ok := requiredSet[k]; !ok {
-					continue
-				}
-			}
-			obj[k] = buildTemplateValue(s.Properties[k], defs, mode, depth+1, seen)
-		}
-		return obj
-	default:
-		return ""
-	}
-}
-
 func parseAdditionalProperties(raw json.RawMessage) (swaggerSchema, bool) {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return swaggerSchema{}, false
@@ -1861,66 +1454,6 @@ func mergeParams(a []swaggerParam, b []swaggerParam) []swaggerParam {
 	}
 	for _, p := range b {
 		push(p)
-	}
-	return out
-}
-
-func convertParams(params []swaggerParam) []capabilityParam {
-	out := make([]capabilityParam, 0, len(params))
-	for _, p := range params {
-		cp := capabilityParam{
-			Name:        strings.TrimSpace(p.Name),
-			In:          strings.TrimSpace(p.In),
-			Required:    p.Required,
-			Type:        strings.TrimSpace(p.Type),
-			Format:      strings.TrimSpace(p.Format),
-			Description: strings.TrimSpace(p.Description),
-			Enum:        toStringSlice(p.Enum),
-			Pattern:     strings.TrimSpace(p.Pattern),
-			Minimum:     p.Minimum,
-			Maximum:     p.Maximum,
-			MinLength:   p.MinLength,
-			MaxLength:   p.MaxLength,
-		}
-		if p.Schema != nil {
-			if cp.Type == "" {
-				cp.Type = strings.TrimSpace(p.Schema.Type)
-			}
-			if cp.Format == "" {
-				cp.Format = strings.TrimSpace(p.Schema.Format)
-			}
-			if len(cp.Enum) == 0 {
-				cp.Enum = toStringSlice(p.Schema.Enum)
-			}
-			if cp.Pattern == "" {
-				cp.Pattern = strings.TrimSpace(p.Schema.Pattern)
-			}
-			if cp.Minimum == nil {
-				cp.Minimum = p.Schema.Minimum
-			}
-			if cp.Maximum == nil {
-				cp.Maximum = p.Schema.Maximum
-			}
-			if cp.MinLength == nil {
-				cp.MinLength = p.Schema.MinLength
-			}
-			if cp.MaxLength == nil {
-				cp.MaxLength = p.Schema.MaxLength
-			}
-			cp.Ref = strings.TrimSpace(p.Schema.Ref)
-		}
-		out = append(out, cp)
-	}
-	return out
-}
-
-func toStringSlice(v []any) []string {
-	if len(v) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(v))
-	for _, item := range v {
-		out = append(out, strings.TrimSpace(fmt.Sprint(item)))
 	}
 	return out
 }
@@ -2062,36 +1595,6 @@ func splitVerbNoun(summary string) (string, string) {
 	return "", summary
 }
 
-func nounMatchesGroup(noun, group string) bool {
-	n := normalizeWord(noun)
-	g := normalizeWord(group)
-	if n == "" || g == "" {
-		return false
-	}
-	if n == g {
-		return true
-	}
-	if strings.TrimSuffix(n, "s") == strings.TrimSuffix(g, "s") {
-		return true
-	}
-	return false
-}
-
-func isLikelyPlural(noun string) bool {
-	n := normalizeWord(noun)
-	return strings.HasSuffix(n, "s")
-}
-
-func normalizeWord(s string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(strings.TrimSpace(s)) {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-
 func disambiguateAction(action, path, method string, used map[string]string) string {
 	suffix := pathSuffix(path)
 	if suffix == "" {
@@ -2142,74 +1645,6 @@ func toKebab(s string) string {
 		out = strings.ReplaceAll(out, "--", "-")
 	}
 	return out
-}
-
-func marshalPretty(v any) string {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(v); err != nil {
-		return "{}"
-	}
-	b := bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
-	return string(b)
-}
-
-func writeCapabilitiesGo(path string, caps capabilityDoc) error {
-	b, err := json.Marshal(caps)
-	if err != nil {
-		return err
-	}
-	var out bytes.Buffer
-	out.WriteString("// Code generated by internal/openapigen; DO NOT EDIT.\n")
-	out.WriteString("package cli\n\n")
-	out.WriteString("const generatedCapabilitiesJSON = `")
-	out.Write(b)
-	out.WriteString("`\n")
-	return writeFile(path, out.Bytes())
-}
-
-func writeTemplatesGo(path string, required map[string]string, full map[string]string) error {
-	keysRequired := make([]string, 0, len(required))
-	for k := range required {
-		keysRequired = append(keysRequired, k)
-	}
-	sort.Strings(keysRequired)
-	keysFull := make([]string, 0, len(full))
-	for k := range full {
-		keysFull = append(keysFull, k)
-	}
-	sort.Strings(keysFull)
-
-	var out bytes.Buffer
-	out.WriteString("// Code generated by internal/openapigen; DO NOT EDIT.\n")
-	out.WriteString("package cli\n\n")
-	out.WriteString("var generatedRequestTemplates = map[string]string{\n")
-	for _, k := range keysRequired {
-		out.WriteString(fmt.Sprintf("\t%q: %q,\n", k, required[k]))
-	}
-	out.WriteString("}\n\n")
-	out.WriteString("var generatedRequestTemplatesFull = map[string]string{\n")
-	for _, k := range keysFull {
-		out.WriteString(fmt.Sprintf("\t%q: %q,\n", k, full[k]))
-	}
-	out.WriteString("}\n")
-	return writeFile(path, out.Bytes())
-}
-
-func writeToolCatalogGo(path string, catalog toolCatalogDoc) error {
-	b, err := json.Marshal(catalog)
-	if err != nil {
-		return err
-	}
-	var out bytes.Buffer
-	out.WriteString("// Code generated by internal/openapigen; DO NOT EDIT.\n")
-	out.WriteString("package cli\n\n")
-	out.WriteString("const generatedToolCatalogJSON = `")
-	out.WriteString(string(b))
-	out.WriteString("`\n")
-	return writeFile(path, out.Bytes())
 }
 
 func writeFile(path string, data []byte) error {

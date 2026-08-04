@@ -70,7 +70,6 @@ type loginAdapter struct {
 	stdin    io.Reader
 	stdout   io.Writer
 	stderr   io.Writer
-	clock    func() time.Time
 }
 
 // ErrLogoutPartialFailure is returned when logout deleted the cache but the

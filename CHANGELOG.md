@@ -1,5 +1,13 @@
 # Changelog
 
+## volclog-v1.0.5-rc.3
+
+- Unify public tool and ordinary human CRUD execution around one generated Operation catalog and reusable Executor while preserving all 125 legacy tool contract digests.
+- Derive capabilities and request templates from the canonical catalog, removing duplicated generated metadata and stale static templates.
+- Separate runtime selector, authentication provider, TLS client, transport, and tracing responsibilities from CLI parsing and presentation.
+- Remove unreachable command islands, enforce default and human quality gates, and harden typed-nil runtime boundaries without changing legacy AK/SK behavior.
+- Improve authentication help discovery and guide users from profile setup through `doctor` to the first `tool exec` request.
+
 ## volclog-v1.0.5-rc.2
 
 - Let ECS Role refresh use the caller's timeout budget so the documented retry policy can complete.

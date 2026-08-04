@@ -110,37 +110,6 @@ Exit Code:
 `)
 }
 
-func usageMetricTopicProm() string {
-	return u(`Usage:
-  tlsctl metric-topic prom <subcommand> [args]
-
-Subcommands:
-  query         /topic/{topic_id}/api/v1/query
-  query-range   /topic/{topic_id}/api/v1/query_range
-  series        /topic/{topic_id}/api/v1/series
-  labels        /topic/{topic_id}/api/v1/labels
-  label-values  /topic/{topic_id}/api/v1/label/{label_name}/values
-
-Notes:
-  - --method GET|POST (default GET)
-  - Many args accept file://..., including --query, --time, --start, --end, --match, --label-name
-  - --match file://... supports JSON array of strings or newline-delimited strings
-
-Examples:
-  tlsctl metric-topic prom query --topic-id <tid> --query 'up' --time '2026-03-14T00:00:00Z'
-  tlsctl metric-topic prom query-range --topic-id <tid> --query 'rate(up[5m])' --start 1710374400000 --end 1710378000000 --step 15
-  tlsctl metric-topic prom series --topic-id <tid> --start 1710374400000 --end 1710378000000 --match 'up'
-  tlsctl metric-topic prom labels --topic-id <tid> --match file://./match.txt
-  tlsctl metric-topic prom label-values --topic-id <tid> --label-name job --match 'up'
-
-Exit Code:
-  0 success
-  1 usage / invalid args
-  2 request/runtime failure
-  3 output/decode failure
-`)
-}
-
 func usageIndex() string {
 	return u(`Usage:
   tlsctl index <command> [args]

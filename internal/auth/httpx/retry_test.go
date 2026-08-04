@@ -694,6 +694,7 @@ func TestRetryNilContext(t *testing.T) {
 	factory := func(ctx context.Context) (*http.Request, error) {
 		return http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com", nil)
 	}
+	//lint:ignore SA1012 verifies Do rejects a nil context without invoking the factory
 	resp, err := rc.Do(nil, factory)
 	if err == nil {
 		t.Fatal("expected error from nil context")

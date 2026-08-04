@@ -22,14 +22,19 @@ type workflowCatalog struct {
 	Notes                  []string
 	APIGroup               string
 	APIAction              string
-	BackedBy               []string
+	OperationIDs           []string
 	Source                 string
 }
 
-func workflowCatalogEntries(group string) []workflowCatalog {
+func workflowCatalogEntries(group string) ([]workflowCatalog, error) {
 	entries := workflowCatalogSource()
 	if strings.TrimSpace(group) == "" {
-		return entries
+		for _, item := range entries {
+			if _, err := workflowBackedBy(item); err != nil {
+				return nil, err
+			}
+		}
+		return entries, nil
 	}
 	target := normalizeToken(group)
 	out := make([]workflowCatalog, 0, len(entries))
@@ -37,9 +42,12 @@ func workflowCatalogEntries(group string) []workflowCatalog {
 		if normalizeToken(item.Group) != target {
 			continue
 		}
+		if _, err := workflowBackedBy(item); err != nil {
+			return nil, err
+		}
 		out = append(out, item)
 	}
-	return out
+	return out, nil
 }
 
 func resolveWorkflowByIdentity(group, command string) (workflowCatalog, error) {
@@ -84,8 +92,10 @@ func workflowCatalogSource() []workflowCatalog {
 			},
 			APIGroup:  "log",
 			APIAction: "SearchLogs",
-			BackedBy:  []string{"SearchLogs"},
-			Source:    "cli_workflow",
+			OperationIDs: []string{
+				"log.search",
+			},
+			Source: "cli_workflow",
 		},
 		{
 			ID:                  "log.export-analysis",
@@ -111,8 +121,10 @@ func workflowCatalogSource() []workflowCatalog {
 			},
 			APIGroup:  "log",
 			APIAction: "SearchLogs",
-			BackedBy:  []string{"SearchLogs"},
-			Source:    "cli_workflow",
+			OperationIDs: []string{
+				"log.search",
+			},
+			Source: "cli_workflow",
 			Notes: []string{
 				"与 log.search 一样使用 SearchLogs 的 SQL/分析 Query 语法；区别在于这里的定位是大结果导出，而不是交互式预览。",
 				"如果只是担心 stdout 过大，但并不需要完整分析行导出，先留在 log.search，让 CLI 的 deliveryMode 决定 stdout 还是 file_auto。",
@@ -144,8 +156,10 @@ func workflowCatalogSource() []workflowCatalog {
 			},
 			APIGroup:  "log",
 			APIAction: "PutLogs",
-			BackedBy:  []string{"PutLogs"},
-			Source:    "cli_workflow",
+			OperationIDs: []string{
+				"log.put",
+			},
+			Source: "cli_workflow",
 			Notes: []string{
 				"这是本地导入工作流，不是 tool log.put 的别名；如果你需要直接按公开 PutLogs 契约构造请求，请改用 tool log.put。",
 				"lines 输入默认写入字段 __content__。",
@@ -164,7 +178,27 @@ func workflowCatalogSource() []workflowCatalog {
 	return out
 }
 
-func workflowDescribeOutput(spec workflowCatalog) map[string]any {
+func workflowBackedBy(spec workflowCatalog) ([]string, error) {
+	if len(spec.OperationIDs) == 0 {
+		return nil, fmt.Errorf("workflow %s must declare at least one operation", spec.ID)
+	}
+	out := make([]string, 0, len(spec.OperationIDs))
+	for _, rawID := range spec.OperationIDs {
+		id := strings.TrimSpace(rawID)
+		operation, ok := loadToolOperation(id)
+		if !ok {
+			return nil, fmt.Errorf("workflow %s references unknown operation %q", spec.ID, id)
+		}
+		out = append(out, operation.Action)
+	}
+	return out, nil
+}
+
+func workflowDescribeOutput(spec workflowCatalog) (map[string]any, error) {
+	backedBy, err := workflowBackedBy(spec)
+	if err != nil {
+		return nil, err
+	}
 	executionSchema := workflowExecutionSchema()
 	contextSchema := compactToolContextSchema(enrichToolContextSchema(map[string]any{}, executionSchema, false))
 	return map[string]any{
@@ -180,7 +214,7 @@ func workflowDescribeOutput(spec workflowCatalog) map[string]any {
 		"input_mode":               spec.InputMode,
 		"preferred_output_mode":    spec.PreferredOutputMode,
 		"recommended_global_flags": append([]string(nil), spec.RecommendedGlobalFlags...),
-		"backed_by":                append([]string(nil), spec.BackedBy...),
+		"backed_by":                backedBy,
 		"input_schema":             workflowInputSchema(spec),
 		"input_encoding_hint": map[string]any{
 			"transport":   "--input accepts file://req.json, -, or inline JSON object.",
@@ -195,7 +229,7 @@ func workflowDescribeOutput(spec workflowCatalog) map[string]any {
 			Execute:           "volclog workflow exec " + spec.ID + " --input file://req.json",
 			FallbackDiscovery: "volclog tool list " + spec.APIGroup,
 		},
-	}
+	}, nil
 }
 
 func workflowExecutionSchema() map[string]any {
@@ -238,14 +272,11 @@ func workflowInputSchema(spec workflowCatalog) map[string]any {
 
 func workflowParamsWithDoc(spec workflowCatalog) []apiCapParam {
 	fields := append([]apiCapParam(nil), spec.Params...)
-	if strings.TrimSpace(spec.APIGroup) == "" || strings.TrimSpace(spec.APIAction) == "" {
+	operation, err := resolveWorkflowOperation(spec)
+	if err != nil {
 		return fields
 	}
-	ops, err := shortcutActionOps(spec.APIGroup, spec.APIAction)
-	if err != nil || len(ops) == 0 {
-		return fields
-	}
-	bodyDoc, docs := splitRequestParamsDocForOutput(ops[0].Cmd.RequestParamsDoc)
+	bodyDoc, docs := splitRequestParamsDocForOutput(shortcutOperationDocParams(operation))
 	doc := append(bodyDoc, docs...)
 	return mergeParamsWithDoc(fields, doc)
 }

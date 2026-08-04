@@ -71,6 +71,9 @@ func TestSSOGroupDispatchLoginAndLogout(t *testing.T) {
 	if !logoutCalled {
 		t.Fatal("logout factory should be called")
 	}
+	if err == nil {
+		t.Fatal("expected error from logout")
+	}
 }
 
 // --- Flag parsing: missing values / unknown flags ---

@@ -4,48 +4,7 @@ package cli
 
 import (
 	"sort"
-	"strings"
 )
-
-func relatedShortcutDescribesForAPI(group string, action string) []string {
-	ng := normalizeToken(group)
-	na := normalizeActionToken(action)
-	if ng == "" || na == "" {
-		return nil
-	}
-	specs := shortcutSpecsForGroup(ng)
-	out := make([]string, 0, len(specs))
-	for _, spec := range specs {
-		if spec.HiddenInHelp {
-			continue
-		}
-		if normalizeToken(spec.APIGroup) != ng {
-			continue
-		}
-		if normalizeActionToken(spec.APIAction) != na {
-			continue
-		}
-		out = append(out, "volclog "+spec.Group+" "+spec.Command+" --describe")
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func relatedShortcutLabelsForAPI(group string, action string) []string {
-	describes := relatedShortcutDescribesForAPI(group, action)
-	if len(describes) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(describes))
-	for _, cmd := range describes {
-		cmd = strings.TrimPrefix(strings.TrimSpace(cmd), "volclog ")
-		cmd = strings.TrimSuffix(cmd, " --describe")
-		out = append(out, cmd)
-	}
-	return out
-}
 
 func relatedShortcutDescribesForShortcut(group string, command string) []string {
 	specs := shortcutSpecsForGroup(group)
@@ -70,31 +29,6 @@ func relatedShortcutDescribesForShortcut(group string, command string) []string 
 		return nil
 	}
 	return out
-}
-
-func defaultShortcutDescribeForGroup(group string) string {
-	specs := shortcutSpecsForGroup(group)
-	if len(specs) == 0 {
-		return ""
-	}
-	for _, spec := range specs {
-		if spec.HiddenInHelp {
-			continue
-		}
-		return "volclog " + spec.Group + " " + spec.Command + " --describe"
-	}
-	return ""
-}
-
-func groupAgentEntry(group string) (string, string) {
-	if cmd := defaultShortcutDescribeForGroup(group); cmd != "" {
-		return "shortcut", cmd
-	}
-	group = normalizeToken(group)
-	if group == "" {
-		return "", ""
-	}
-	return "api", "volclog capabilities --group " + group + " --view text"
 }
 
 func shortcutSpecsForGroup(group string) []shortcutCommandSpec {

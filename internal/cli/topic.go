@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
@@ -40,10 +41,26 @@ func topicList(ctx *Context, args []string) (any, error) {
 		return nil, err
 	}
 	if all {
-		return listAllByPageNumber(ctx, "/DescribeTopics", query, "Topics")
+		return executeShortcutOperation(ctx, shortcutExecutionRequest{
+			OperationID: "topic.describe-topics",
+			Input: execution.Input{
+				Query: shortcutQueryInput(query),
+				Body:  shortcutEmptyJSONBodyInput(),
+			},
+			PageAll: true,
+			LegacyPageAll: &legacyPageAllPolicy{
+				ListField:  "Topics",
+				ForceTotal: true,
+			},
+		})
 	}
-	body, _ := util.MustJSON(map[string]any{})
-	return ctx.Do("GET", "/DescribeTopics", query, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "topic.describe-topics",
+		Input: execution.Input{
+			Query: shortcutQueryInput(query),
+			Body:  shortcutEmptyJSONBodyInput(),
+		},
+	})
 }
 
 func topicGet(ctx *Context, args []string) (any, error) {
@@ -64,8 +81,13 @@ func topicGet(ctx *Context, args []string) (any, error) {
 	if topicID == "" {
 		return nil, errors.New("missing --topic-id")
 	}
-	body, _ := util.MustJSON(map[string]any{})
-	return ctx.Do("GET", "/DescribeTopic", map[string]string{"TopicId": topicID}, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "topic.describe-topic",
+		Input: execution.Input{
+			Query: shortcutQueryInput(map[string]string{"TopicId": topicID}),
+			Body:  shortcutEmptyJSONBodyInput(),
+		},
+	})
 }
 
 func topicCreate(ctx *Context, args []string) (any, error) {
@@ -330,11 +352,12 @@ func topicCreate(ctx *Context, args []string) (any, error) {
 			return nil, errors.New("missing --max-split-shard when AutoSplit is true")
 		}
 	}
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("POST", "/CreateTopic", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "topic.create",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(req),
+		},
+	})
 }
 
 func topicModify(ctx *Context, args []string) (any, error) {
@@ -582,11 +605,12 @@ func topicModify(ctx *Context, args []string) (any, error) {
 		}
 	}
 
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("PUT", "/ModifyTopic", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "topic.modify",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(req),
+		},
+	})
 }
 
 func topicDelete(ctx *Context, args []string) (any, error) {
@@ -607,9 +631,10 @@ func topicDelete(ctx *Context, args []string) (any, error) {
 	if topicID == "" {
 		return nil, errors.New("missing --topic-id")
 	}
-	body, err := util.MustJSON(map[string]any{"TopicId": topicID})
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("DELETE", "/DeleteTopic", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "topic.delete",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(map[string]any{"TopicId": topicID}),
+		},
+	})
 }

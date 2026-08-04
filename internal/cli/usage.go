@@ -14,14 +14,22 @@ func usageConfigure() string {
   tlsctl configure <command> [args]
 
 Commands:
-  set     Set a profile
-  project Manage project defaults (show/set)
-  profile Alias commands: add/use/show/list/delete
-  cred    Manage shared credentials (delete)
-  use     Set default profile
-  show    Show a profile
-  list    List profiles
-  delete  Delete a profile (or batch delete by prefix)
+  set          Set a profile
+  sso-session  Configure an enterprise SSO entry
+  sso          Bind a profile and complete the first SSO login
+  project      Manage project defaults (show/set)
+  profile      Alias commands: add/use/show/list/delete
+  cred         Manage shared credentials (delete)
+  use          Set default profile
+  show         Show a profile
+  list         List profiles
+  delete       Delete a profile (or batch delete by prefix)
+
+Authentication:
+  - Static AK/SK, RAM Role ARN, OIDC, or ECS Role: tlsctl configure set --help
+  - Console Login: tlsctl login --help
+  - First-time SSO: tlsctl configure sso-session --help, then tlsctl configure sso --help
+  - SSO re-login or logout: tlsctl sso --help
 
 Configure Set Flags:
   --mode <ak|ramrolearn|oidc|ecsrole>  Auth mode (omit for legacy static AK/SK)
@@ -64,17 +72,23 @@ Examples:
   tlsctl configure set --profile oidc-1 --mode oidc --oidc-token-file /var/run/secrets/token --role-trn trn:iam::2100000000:role/TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure set --profile ecs-1 --mode ecsrole --role-name TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure set --profile default --mode ak --disable-ssl=false
-  tlsctl configure profile add tenant-a --ak <ak> --sk <sk> --endpoint https://tls-cn-beijing.volces.com
+  tlsctl configure profile add tenant-a --ak <ak> --sk <sk> --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure profile use tenant-a
   tlsctl configure use default
   tlsctl configure show --profile default
   tlsctl configure project show
   tlsctl configure project set --output json --output-mode file --output-dir ./out
-  tlsctl --profile tenant-a-sg project list
+  tlsctl --profile tenant-a-sg tool exec project.describe-projects --input '{"PageSize":20}'
   tlsctl configure list
   tlsctl configure delete tenant-a-sg
   tlsctl configure delete --prefix tenant-a --yes
   tlsctl configure cred delete ma-abc-root
+
+Next:
+  tlsctl --profile <name> doctor
+  tlsctl tool list
+  tlsctl tool describe project.describe-projects
+  tlsctl --profile <name> tool exec project.describe-projects --input '{"PageSize":20}'
 
 Exit Code:
   0 success
@@ -110,26 +124,6 @@ Exit Code:
   0 success
   1 usage / invalid args
  2 runtime failure
-`)
-}
-
-func usageAPI() string {
-	return u(`Usage:
-  tlsctl api <legacy surface removed>
-
-Notes:
-  - This legacy surface is no longer routed from the main CLI entry.
-  - Use tlsctl tool ... / tlsctl raw ... instead.
-`)
-}
-
-func usageAPICall() string {
-	return u(`Usage:
-  tlsctl api call <legacy surface removed>
-
-Notes:
-  - This legacy surface is no longer routed from the main CLI entry.
-  - Use tlsctl raw --method <METHOD> --path <PATH> instead.
 `)
 }
 
@@ -368,6 +362,10 @@ Flags:
   - stdout 仅输出最终 JSON（profile/provider/region/endpoint/expires_at/masked_access_key）
   - 授权 URL、prompt、浏览器提示、进度只写 stderr
 
+Next:
+  tlsctl --profile <name> doctor
+  tlsctl --profile <name> tool exec project.describe-projects --input '{"PageSize":20}'
+
 Exit Code:
   0 success
   1 usage / invalid args
@@ -457,6 +455,11 @@ Flags:
   - 授权 URL、prompt、浏览器提示、进度只写 stderr
   - 此阶段没有真实 STS AK，绝不输出 masked_access_key 或任何 OAuth token 片段
 
+Next:
+  tlsctl configure sso --help
+  tlsctl --profile <name> doctor
+  tlsctl --profile <name> tool exec project.describe-projects --input '{"PageSize":20}'
+
 Exit Code:
   0 success
   1 usage / invalid args
@@ -520,6 +523,9 @@ Flags:
   - 默认 scopes 使用冻结的允许值；拒绝未知 scope；空元素视为 malformed 列表并拒绝
   - --name/--start-url/--region 每次必填；仅 --registration-scopes 省略时保留旧值
 
+Next:
+  tlsctl configure sso --help
+
 Exit Code:
   0 success
   1 usage / invalid args
@@ -553,6 +559,10 @@ Flags:
   - 写入 SSOSessionName/AccountID/RoleName
   - 整个事务在 token lock 内完成：快照旧 token -> Login -> binding -> config commit
   - 任意步骤失败在同一锁内精确恢复旧快照
+
+Next:
+  tlsctl --profile <name> doctor
+  tlsctl --profile <name> tool exec project.describe-projects --input '{"PageSize":20}'
 
 Exit Code:
   0 success

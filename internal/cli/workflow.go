@@ -49,7 +49,10 @@ func runWorkflowList(ctx *Context, args []string) (any, error) {
 	if ctx != nil && format == "json" {
 		ctx.FormatOverride = output.FormatJSON
 	}
-	items := workflowCatalogEntries(group)
+	items, err := workflowCatalogEntries(group)
+	if err != nil {
+		return nil, err
+	}
 	if format == "json" {
 		if strings.TrimSpace(group) != "" {
 			return buildWorkflowListJSONByGroup(items, group), nil
@@ -174,7 +177,7 @@ func runWorkflowDescribe(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return workflowDescribeOutput(spec), nil
+	return workflowDescribeOutput(spec)
 }
 
 func runWorkflowExec(ctx *Context, args []string) (any, error) {

@@ -128,6 +128,7 @@ func TestOpenNilReceiver(t *testing.T) {
 // than panicking.
 func TestOpenNilContext(t *testing.T) {
 	opener := &DefaultOpener{GOOS: "linux", Run: func(context.Context, string, ...string) error { return nil }}
+	//lint:ignore SA1012 verifies Open rejects a nil context without panicking
 	err := opener.Open(nil, "https://example.com")
 	if err == nil {
 		t.Fatal("expected error from nil context")

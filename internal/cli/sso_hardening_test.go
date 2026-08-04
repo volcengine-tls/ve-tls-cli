@@ -2248,17 +2248,6 @@ func TestSSOLogoutFirstThenProviderRequiresLogin(t *testing.T) {
 	}
 }
 
-type pauseRevoker struct {
-	holding chan struct{}
-	proceed chan struct{}
-}
-
-func (p *pauseRevoker) RevokeToken(context.Context, *sso.RevokeTokenRequest) error {
-	close(p.holding)
-	<-p.proceed
-	return nil
-}
-
 func TestSSOProviderFirstThenLogoutClearsEverything(t *testing.T) {
 	dir := t.TempDir()
 	cache, err := sso.NewFileCache(dir)

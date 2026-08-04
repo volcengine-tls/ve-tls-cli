@@ -317,7 +317,7 @@ func TestConsoleReauthErrorHasLoginHint(t *testing.T) {
 		Kind:        auth.ReauthRequired,
 		Description: "console login cache missing; run: volclog login",
 	}
-	err := &dynamicAuthError{mode: config.AuthModeConsoleLogin, err: inner}
+	err := newDynamicAuthError(config.AuthModeConsoleLogin, inner)
 	p, code := classifyError(err, "", 0, "tool")
 	if code != 2 {
 		t.Fatalf("unexpected code: %d", code)
@@ -338,7 +338,7 @@ func TestSSOReauthErrorHasSSOLoginHint(t *testing.T) {
 		Kind:        auth.ReauthRequired,
 		Description: "sso token cache missing; run: volclog sso login",
 	}
-	err := &dynamicAuthError{mode: config.AuthModeSSO, err: inner}
+	err := newDynamicAuthError(config.AuthModeSSO, inner)
 	p, code := classifyError(err, "", 0, "tool")
 	if code != 2 {
 		t.Fatalf("unexpected code: %d", code)
@@ -464,7 +464,7 @@ func TestSentinelErrorsTakePriorityOverAuthCause(t *testing.T) {
 func TestSentinelErrorsTakePriorityOverDynamicAuthCause(t *testing.T) {
 	const causeCanary = "dynamic_cause_canary_7b2c"
 	innerCause := &auth.Error{Kind: auth.ProtocolError, Description: causeCanary}
-	daeCause := &dynamicAuthError{mode: config.AuthModeSSO, err: innerCause}
+	daeCause := newDynamicAuthError(config.AuthModeSSO, innerCause)
 
 	cases := []struct {
 		name     string

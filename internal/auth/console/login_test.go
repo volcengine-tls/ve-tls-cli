@@ -802,7 +802,6 @@ func TestNewLoginServiceNilConfigIsSafe(t *testing.T) {
 }
 
 func TestLoginNilTokenResponseFailsSafely(t *testing.T) {
-	const session = "trn:iam::1:user:nilresp"
 	client := &fakeOAuthClient{exchangeResp: nil, endpointURL: DefaultEndpoint}
 	store := &fakeProfileStore{cfg: config.DefaultConfig(), path: "/tmp/config.json"}
 	svc := newLoginService(t, client, newFakeCache(), store)
@@ -1057,6 +1056,7 @@ func TestFileCacheWithLockValidatesInputs(t *testing.T) {
 	}
 
 	t.Run("nil context", func(t *testing.T) {
+		//lint:ignore SA1012 verifies WithLock rejects a nil context
 		err := cache.WithLock(nil, "session", func() error { return nil })
 		if err == nil {
 			t.Error("expected error for nil context")
@@ -1175,7 +1175,6 @@ func TestFileCacheTwoInstancesSerializeLock(t *testing.T) {
 }
 
 func TestLoginNilClientFromFactoryFailsSafely(t *testing.T) {
-	const session = "trn:iam::1:user:nilclient"
 	store := &fakeProfileStore{cfg: config.DefaultConfig(), path: "/tmp/config.json"}
 	svc := newLoginService(t, &fakeOAuthClient{endpointURL: DefaultEndpoint}, newFakeCache(), store)
 	svc.oauthClientFactory = func(string) (OAuthClient, error) { return nil, nil }
@@ -1289,7 +1288,6 @@ func TestLoginAuthorizerErrorDoesNotLeakCanary(t *testing.T) {
 // the injected OAuth client's ExchangeToken is wrapped safely at the Login
 // boundary.
 func TestLoginExchangeErrorDoesNotLeakCanary(t *testing.T) {
-	const session = "trn:iam::1:user:exchcanary"
 	const exchCanary = "exchange-secret-canary-888"
 	client := &fakeOAuthClient{
 		exchangeErr: errors.New(exchCanary),

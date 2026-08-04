@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth/browser"
 )
@@ -68,20 +67,6 @@ type fakeOpener struct {
 func (f *fakeOpener) Open(ctx context.Context, url string) error {
 	f.openedURL = url
 	return f.err
-}
-
-// recordingFactory wraps a callbackServerFactory and records whether it was
-// invoked before BuildAuthorizeURL on the client.
-type recordingFactory struct {
-	factory  callbackServerFactory
-	called   bool
-	callTime time.Time
-}
-
-func (r *recordingFactory) make() (callbackServer, error) {
-	r.called = true
-	r.callTime = time.Now()
-	return r.factory()
 }
 
 // fakeOAuthClient implements OAuthClient for tests.

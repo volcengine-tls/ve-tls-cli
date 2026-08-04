@@ -431,9 +431,11 @@ func TestPortalNilReceiverAndContext(t *testing.T) {
 		return newResponse(http.StatusOK, `{}`, nil), nil
 	}), 1)
 
+	//lint:ignore SA1012 verifies ListAccounts rejects a nil context
 	if _, err := client.ListAccounts(nil, "tok"); err == nil {
 		t.Fatal("expected error for nil context")
 	}
+	//lint:ignore SA1012 verifies GetRoleCredentials rejects a nil context
 	if _, err := client.GetRoleCredentials(nil, "tok", "acc", "role"); err == nil {
 		t.Fatal("expected error for nil context")
 	}

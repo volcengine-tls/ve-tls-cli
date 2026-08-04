@@ -1,62 +1,14 @@
 package cli
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
-	"io"
 	"os"
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth"
 	"github.com/volcengine-tls/ve-tls-cli/internal/config"
-	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
-
-type errPayload struct {
-	ErrorCode    string `json:"errorCode"`
-	ErrorMessage string `json:"errorMessage"`
-	RequestID    string `json:"requestId,omitempty"`
-	StatusCode   int    `json:"statusCode,omitempty"`
-	Kind         string `json:"kind,omitempty"`
-	Hint         string `json:"hint,omitempty"`
-}
-
-type removedCommandError struct {
-	Command string
-	Hint    string
-}
-
-func (e *removedCommandError) Error() string {
-	return "legacy command removed: " + strings.TrimSpace(e.Command)
-}
-
-func removedLegacyCommandError(command string, hint string) error {
-	return &removedCommandError{
-		Command: strings.TrimSpace(command),
-		Hint:    strings.TrimSpace(hint),
-	}
-}
-
-func writeCLIError(w io.Writer, err error, requestID string, statusCode int, kind string, hint string) {
-	p := errPayload{
-		ErrorCode:    "CLIError",
-		ErrorMessage: err.Error(),
-		RequestID:    requestID,
-		StatusCode:   statusCode,
-		Kind:         kind,
-		Hint:         hint,
-	}
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if e := enc.Encode(p); e != nil {
-		_, _ = w.Write([]byte(err.Error() + "\n"))
-		return
-	}
-	_, _ = w.Write(buf.Bytes())
-}
 
 func classifyError(err error, requestID string, statusCode int, group string) (errPayload, int) {
 	msg := strings.TrimSpace(err.Error())
@@ -126,15 +78,15 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 			Hint:       "console login cache deleted but profile binding could not be cleared; rerun logout to retry, or inspect config with 'volclog configure show --profile <name>'",
 		}, 2
 	}
-	// Dynamic auth errors carry the profile mode via *dynamicAuthError so the
-	// re-login hint is exact and mode-aware, never guessed from free text.
-	var dae *dynamicAuthError
+	// Dynamic auth errors expose the profile mode through a narrow interface so
+	// classification does not depend on the runtime package's concrete type.
+	var dae interface{ AuthMode() string }
 	if errors.As(err, &dae) {
 		return errPayload{
 			RequestID:  requestID,
 			StatusCode: statusCode,
 			Kind:       "auth",
-			Hint:       dynamicReauthHint(dae.mode),
+			Hint:       dynamicReauthHint(dae.AuthMode()),
 		}, 2
 	}
 	// Plain auth.Error (not wrapped with a mode) is still classified as
@@ -190,6 +142,16 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		} else if strings.Contains(msg, "must use file://") || strings.Contains(msg, "inline JSON object") || strings.Contains(msg, "json must be object") {
 			hint = "use file://ctx.json, -, or inline JSON object with 'volclog tool exec <group.action>'; tool exec also accepts flat JSON when fields map cleanly to query/path/header/body"
 		}
+		if scoped := scopedHelpHint(err); scoped != "" {
+			unknownFlag := strings.HasPrefix(msg, "unknown flag:")
+			flag := strings.TrimSpace(strings.TrimPrefix(msg, "unknown flag:"))
+			if strings.HasPrefix(msg, "missing --") ||
+				strings.HasPrefix(msg, "missing value for ") ||
+				strings.HasPrefix(msg, "unexpected argument:") ||
+				(unknownFlag && !isGlobalFlagName(flag)) {
+				hint = scoped
+			}
+		}
 		return errPayload{
 			RequestID:  requestID,
 			StatusCode: statusCode,
@@ -197,6 +159,7 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 			Hint:       hint,
 		}, 1
 	}
+	scopedValidation := scopedHelpHint(err) != "" && isScopedCommandValidation(msg)
 	if strings.HasPrefix(msg, "missing required field:") ||
 		strings.HasPrefix(msg, "missing required fields:") ||
 		strings.HasPrefix(msg, "workflow input missing required fields:") ||
@@ -208,12 +171,16 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		strings.Contains(msg, "unsupported log contents type") ||
 		strings.HasPrefix(msg, "json: cannot unmarshal ") ||
 		strings.HasPrefix(msg, "result too large for stdout;") ||
-		strings.HasPrefix(msg, "--secrets-file is not supported for ") {
+		strings.HasPrefix(msg, "--secrets-file is not supported for ") ||
+		scopedValidation {
 		hint := validationHint(group, msg)
 		if strings.HasPrefix(msg, "tool exec input contains reserved context/runtime fields:") {
 			hint = "move runtime selector, trace, execution, and contract fields into --context / context.* instead of --input"
 		} else if strings.HasPrefix(msg, "result too large for stdout;") {
 			hint = "rerun with --output-dir <writable-dir> to allow file_auto, or reduce stdout with --jmes-filter / execution.projection"
+		}
+		if scoped := scopedHelpHint(err); scoped != "" {
+			hint = scoped
 		}
 		return errPayload{
 			RequestID:  requestID,
@@ -379,6 +346,12 @@ func validationHint(group string, msg string) string {
 	}
 }
 
+func isScopedCommandValidation(msg string) bool {
+	return strings.HasPrefix(msg, "invalid --") ||
+		strings.HasPrefix(msg, "unknown registration scope:") ||
+		strings.HasPrefix(msg, "start URL ")
+}
+
 func httpErrorCode(body []byte) string {
 	if len(body) == 0 {
 		return ""
@@ -417,19 +390,6 @@ func globalFlagPositionHint(flag string, group string) string {
 	return "flag " + flag + " is global and position-sensitive; move it before the group, e.g. '" + example + " <group> ...'"
 }
 
-func writeStructuredError(stdout, stderr io.Writer, err error, requestID string, statusCode int, group string, env map[string]any) int {
-	payload, code := classifyError(err, requestID, statusCode, group)
-	if env != nil {
-		if err2 := output.Write(stdout, env, output.FormatJSON); err2 != nil {
-			writeCLIError(stderr, err2, payload.RequestID, payload.StatusCode, "decode", "output write failed")
-			return 3
-		}
-		return code
-	}
-	writeCLIError(stderr, err, payload.RequestID, payload.StatusCode, payload.Kind, payload.Hint)
-	return code
-}
-
 func isGlobalFlagName(flag string) bool {
 	flag = strings.TrimSpace(flag)
 	if flag == "" {
@@ -444,19 +404,4 @@ func isGlobalFlagName(flag string) bool {
 		}
 	}
 	return false
-}
-
-type usageError struct {
-	Text     string
-	ExitCode int
-}
-
-func (e *usageError) Error() string { return "usage" }
-
-func asUsageError(err error) (*usageError, bool) {
-	var ue *usageError
-	if errors.As(err, &ue) {
-		return ue, true
-	}
-	return nil, false
 }
