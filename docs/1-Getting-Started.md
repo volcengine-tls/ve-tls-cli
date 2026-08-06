@@ -28,7 +28,7 @@ The Unix installer requires `curl`, `tar`, and either `sha256sum` or `shasum`. T
 Download the installer from the target release and run it from any directory:
 
 ```bash
-tag=volclog-v1.0.5-rc.3
+tag=volclog-v1.0.5
 base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
 curl -fsSLO "${base_url}/install-binary.sh"
 VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh
@@ -43,7 +43,7 @@ export PATH="$HOME/.local/bin:$PATH"
 To install the human edition, add `--edition human`:
 
 ```bash
-tag=volclog-v1.0.5-rc.3
+tag=volclog-v1.0.5
 base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
 curl -fsSLO "${base_url}/install-binary.sh"
 VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh --edition human
@@ -52,7 +52,7 @@ VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh --edition human
 On Windows, download the PowerShell installer from the target release:
 
 ```powershell
-$tag = "volclog-v1.0.5-rc.3"
+$tag = "volclog-v1.0.5"
 $baseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/download/$tag"
 Invoke-WebRequest -Uri "$baseUrl/install.ps1" -OutFile install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -BaseUrl $baseUrl
@@ -66,16 +66,16 @@ $env:PATH = "$env:LOCALAPPDATA\Programs\volclog;$env:PATH"
 
 ### 3.2 Install via npm
 
-Requires Node.js 18+. Install this release candidate with the `rc` tag from the public npm registry:
+Requires Node.js 18+. Install the stable release from the public npm registry:
 
 ```bash
-npm install -g @volcengine-tls/volclog@rc --registry https://registry.npmjs.org/
+npm install -g @volcengine-tls/volclog@latest --registry https://registry.npmjs.org/
 ```
 
 For the human edition:
 
 ```bash
-npm install -g @volcengine-tls/volclog-human@rc --registry https://registry.npmjs.org/
+npm install -g @volcengine-tls/volclog-human@latest --registry https://registry.npmjs.org/
 ```
 
 ### 3.3 Build from source

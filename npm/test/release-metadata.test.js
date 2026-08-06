@@ -10,8 +10,8 @@ const repoRoot = path.resolve(__dirname, '..', '..');
 const rootPackage = require(path.join(repoRoot, 'package.json'));
 const humanPackage = require(path.join(repoRoot, 'npm', 'human-package', 'package.json'));
 
-test('release candidate metadata stays aligned across Go and npm packages', () => {
-  const version = '1.0.5-rc.3';
+test('stable release metadata stays aligned across Go and npm packages', () => {
+  const version = '1.0.5';
   const releaseTag = `volclog-v${version}`;
   const goVersion = fs.readFileSync(
     path.join(repoRoot, 'internal', 'version', 'version.go'),
@@ -21,14 +21,14 @@ test('release candidate metadata stays aligned across Go and npm packages', () =
 
   assert.equal(rootPackage.version, version);
   assert.equal(humanPackage.version, version);
-  assert.equal(rootPackage.publishConfig.tag, 'rc');
-  assert.equal(humanPackage.publishConfig.tag, 'rc');
+  assert.equal(rootPackage.publishConfig.tag, 'latest');
+  assert.equal(humanPackage.publishConfig.tag, 'latest');
   assert.equal(rootPackage.publishConfig.registry, 'https://registry.npmjs.org/');
   assert.equal(humanPackage.publishConfig.registry, 'https://registry.npmjs.org/');
-  assert.equal(rootPackage.scripts.prepublishOnly, 'node scripts/check-npm-rc-publish.mjs');
+  assert.equal(rootPackage.scripts.prepublishOnly, 'node scripts/check-npm-publish.mjs');
   assert.equal(
     humanPackage.scripts.prepublishOnly,
-    'node ../../scripts/check-npm-rc-publish.mjs',
+    'node ../../scripts/check-npm-publish.mjs',
   );
   assert.match(goVersion, new RegExp(`var Version = "${releaseTag.replaceAll('.', '\\.')}"`));
   assert.match(changelog, new RegExp(`^## ${releaseTag.replaceAll('.', '\\.')}$`, 'm'));
@@ -78,18 +78,29 @@ test('PowerShell installer does not swallow checksum mismatches', () => {
   );
 });
 
-test('npm release candidate guard rejects latest and accepts rc', () => {
-  const script = path.join(repoRoot, 'scripts', 'check-npm-rc-publish.mjs');
-  const latest = spawnSync(process.execPath, [script], {
-    env: { ...process.env, npm_config_tag: 'latest' },
+test('npm publish guard keeps stable and release candidate dist-tags separate', () => {
+  const script = path.join(repoRoot, 'scripts', 'check-npm-publish.mjs');
+  const stableLatest = spawnSync(process.execPath, [script], {
+    env: { ...process.env, npm_package_version: '1.0.5', npm_config_tag: 'latest' },
+    encoding: 'utf8',
+  });
+  const stableRC = spawnSync(process.execPath, [script], {
+    env: { ...process.env, npm_package_version: '1.0.5', npm_config_tag: 'rc' },
+    encoding: 'utf8',
+  });
+  const rcLatest = spawnSync(process.execPath, [script], {
+    env: { ...process.env, npm_package_version: '1.0.6-rc.1', npm_config_tag: 'latest' },
     encoding: 'utf8',
   });
   const rc = spawnSync(process.execPath, [script], {
-    env: { ...process.env, npm_config_tag: 'rc' },
+    env: { ...process.env, npm_package_version: '1.0.6-rc.1', npm_config_tag: 'rc' },
     encoding: 'utf8',
   });
 
-  assert.notEqual(latest.status, 0);
-  assert.match(latest.stderr, /must be published with --tag rc/);
+  assert.equal(stableLatest.status, 0, stableLatest.stderr);
+  assert.notEqual(stableRC.status, 0);
+  assert.match(stableRC.stderr, /must be published with --tag latest/);
+  assert.notEqual(rcLatest.status, 0);
+  assert.match(rcLatest.stderr, /must be published with --tag rc/);
   assert.equal(rc.status, 0, rc.stderr);
 });

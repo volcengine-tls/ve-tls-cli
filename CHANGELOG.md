@@ -1,5 +1,13 @@
 # Changelog
 
+## volclog-v1.0.5
+
+- Add standalone Console Login, SSO, RAM Role ARN, OIDC, and ECS Role authentication while preserving legacy AK/SK and manual STS behavior.
+- Unify explicit TLS region, endpoint, and timeout configuration across authentication modes, with safer runtime validation and authentication help discovery.
+- Unify agent and human execution around one generated Operation catalog and reusable Executor while preserving the legacy tool contract surface.
+- Remove unreachable and duplicated CLI/catalog code, harden runtime boundaries, and retain default and human quality gates.
+- Publish verified Unix and Windows binary installers and support stable npm installation for both `volclog` and `volclog-human`.
+
 ## volclog-v1.0.5-rc.3
 
 - Unify public tool and ordinary human CRUD execution around one generated Operation catalog and reusable Executor while preserving all 125 legacy tool contract digests.

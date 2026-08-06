@@ -30,14 +30,14 @@
 版本建议：
 - `0.0.0` 通常用于开发态占位（不建议作为对外发布版本号）
 - npm 包版本不带 `volclog-v` 前缀，例如 `1.0.5-rc.3`。
-- RC npm 包必须使用 `rc` dist-tag，不能更新 `latest`。
+- RC npm 包必须使用 `rc` dist-tag，正式版必须使用 `latest`；发布门禁会按版本号自动校验。
 
 ## 发布流程（GitHub Actions）
 
 ### 1) 打 Tag 并推送
 ```bash
-git tag volclog-v1.0.5-rc.3
-git push origin volclog-v1.0.5-rc.3
+git tag volclog-v1.0.5
+git push origin volclog-v1.0.5
 ```
 
 ### 2) 等待工作流完成
@@ -73,30 +73,36 @@ Invoke-WebRequest -Uri "$baseUrl/install.ps1" -OutFile install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -BaseUrl $baseUrl
 ```
 
-## npm RC 发布
+## npm 发布
 
 必须先等待同版本 GitHub Release 产物上传完成，因为 npm 安装脚本会按照 npm
-包版本下载对应的 `volclog-vX.Y.Z-rc.N` 二进制。
+包版本下载对应的 `volclog-vX.Y.Z` 或 `volclog-vX.Y.Z-rc.N` 二进制。
 
-发布两个 RC 包：
+发布两个正式版包：
 
 ```bash
-npm run publish:npm:rc
-npm run publish:npm:human:rc
+npm run publish:npm
+npm run publish:npm:human
 ```
 
-两个包的 `publishConfig.tag` 均固定为 `rc`，registry 固定为官方
-`https://registry.npmjs.org/`；上面的脚本也显式携带相同参数，避免 RC
-意外更新 `latest` 或被错误发布到本机配置的镜像站。`prepublishOnly`
-还会拒绝任何没有显式传入 `--tag rc` 的 RC 发布命令。
+RC 包则显式使用 `rc` tag：
+
+```bash
+npm publish --registry https://registry.npmjs.org/ --tag rc --access public .
+npm publish --registry https://registry.npmjs.org/ --tag rc --access public ./npm/human-package
+```
+
+两个包的 registry 均固定为官方 `https://registry.npmjs.org/`。当前正式版的
+`publishConfig.tag` 为 `latest`；`prepublishOnly` 会根据包版本是否包含预发布后缀，
+拒绝正式版使用 `rc` 或 RC 使用 `latest`，避免误更新 dist-tag。
 
 验证：
 
 ```bash
 npm view @volcengine-tls/volclog dist-tags --registry https://registry.npmjs.org/
 npm view @volcengine-tls/volclog-human dist-tags --registry https://registry.npmjs.org/
-npm install -g @volcengine-tls/volclog@rc --registry https://registry.npmjs.org/
-npm install -g @volcengine-tls/volclog-human@rc --registry https://registry.npmjs.org/
+npm install -g @volcengine-tls/volclog@latest --registry https://registry.npmjs.org/
+npm install -g @volcengine-tls/volclog-human@latest --registry https://registry.npmjs.org/
 ```
 
 ## 常见问题
