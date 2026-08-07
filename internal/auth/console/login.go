@@ -110,8 +110,9 @@ type AuthorizerFactory func(client OAuthClient, state, codeChallenge string) Aut
 // LoginOptions holds the parameters for a Console Login attempt.
 type LoginOptions struct {
 	Remote bool
-	// EndpointURL is the internal Console OAuth endpoint. It is retained for
-	// cache refresh compatibility and tests, but is not exposed as a CLI flag.
+	// EndpointURL is the Console OAuth base endpoint selected by
+	// --login-endpoint. When empty, DefaultEndpoint is used. The normalized
+	// value is stored in the login cache so refresh uses the same issuer.
 	EndpointURL string
 	Profile     string
 	Region      string

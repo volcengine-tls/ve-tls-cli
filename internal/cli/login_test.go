@@ -258,8 +258,9 @@ func TestLoginShortFlagsMatchLongFlags(t *testing.T) {
 		{"long region", []string{"--region", "cn-beijing"}, loginOpts{Region: "cn-beijing"}},
 		{"remote", []string{"--remote"}, loginOpts{Remote: true}},
 		{"endpoint", []string{"--endpoint", "https://tls-cn-beijing.volces.com"}, loginOpts{Endpoint: "https://tls-cn-beijing.volces.com"}},
-		{"all flags", []string{"-p", "prod", "-r", "cn-beijing", "--remote", "--endpoint", "https://tls-cn-beijing.volces.com"},
-			loginOpts{Profile: "prod", Region: "cn-beijing", Remote: true, Endpoint: "https://tls-cn-beijing.volces.com"}},
+		{"login endpoint", []string{"--login-endpoint", "https://signin.byteplus.com"}, loginOpts{LoginEndpoint: "https://signin.byteplus.com"}},
+		{"all flags", []string{"-p", "prod", "-r", "cn-beijing", "--remote", "--endpoint", "https://tls-cn-beijing.volces.com", "--login-endpoint", "https://signin.byteplus.com"},
+			loginOpts{Profile: "prod", Region: "cn-beijing", Remote: true, Endpoint: "https://tls-cn-beijing.volces.com", LoginEndpoint: "https://signin.byteplus.com"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

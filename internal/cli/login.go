@@ -19,10 +19,11 @@ import (
 // loginOpts mirrors console.LoginOptions but is local to the CLI package so the
 // adapter interface does not leak the console package type into tests.
 type loginOpts struct {
-	Profile  string
-	Region   string
-	Endpoint string
-	Remote   bool
+	Profile       string
+	Region        string
+	Endpoint      string
+	LoginEndpoint string
+	Remote        bool
 }
 
 // loginResult is the redacted result of a successful console login. It is the
@@ -155,8 +156,8 @@ func resolveProfileSelector(global, local string) (string, error) {
 }
 
 // parseLoginFlags parses login command flags. It accepts -p/--profile,
-// -r/--region, --endpoint, and --remote. Any --secrets-file flag is rejected
-// explicitly.
+// -r/--region, --endpoint, --login-endpoint, and --remote. Any --secrets-file
+// flag is rejected explicitly.
 func parseLoginFlags(args []string) (loginOpts, error) {
 	var opts loginOpts
 	for i := 0; i < len(args); i++ {
@@ -186,6 +187,15 @@ func parseLoginFlags(args []string) (loginOpts, error) {
 			opts.Endpoint = strings.TrimSpace(args[i+1])
 			if opts.Endpoint == "" {
 				return opts, errors.New("invalid --endpoint: empty value")
+			}
+			i++
+		case "--login-endpoint":
+			if i+1 >= len(args) {
+				return opts, errors.New("missing value for --login-endpoint")
+			}
+			opts.LoginEndpoint = strings.TrimSpace(args[i+1])
+			if opts.LoginEndpoint == "" {
+				return opts, errors.New("invalid --login-endpoint: empty value")
 			}
 			i++
 		case "--secrets-file":
@@ -654,10 +664,11 @@ type consoleLoginServiceAdapter struct {
 
 func (a *consoleLoginServiceAdapter) Login(ctx context.Context, opts loginOpts) (*loginResult, error) {
 	res, err := a.svc.Login(ctx, console.LoginOptions{
-		Profile:  opts.Profile,
-		Region:   opts.Region,
-		Endpoint: opts.Endpoint,
-		Remote:   opts.Remote,
+		Profile:     opts.Profile,
+		Region:      opts.Region,
+		Endpoint:    opts.Endpoint,
+		EndpointURL: opts.LoginEndpoint,
+		Remote:      opts.Remote,
 	})
 	if err != nil {
 		return nil, err

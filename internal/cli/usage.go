@@ -345,7 +345,7 @@ Agent:
 
 func usageLogin() string {
 	return u(`Usage:
-  tlsctl login [-p|--profile NAME] [-r|--region REGION] [--endpoint URL] [--remote]
+  tlsctl login [-p|--profile NAME] [-r|--region REGION] [--endpoint URL] [--login-endpoint URL] [--remote]
 
 概览:
   通过 Console Login（OAuth Authorization Code + PKCE）登录并获取临时 STS 凭证。
@@ -356,6 +356,7 @@ Flags:
   -p, --profile <name>       目标 profile（与全局 --profile 冲突时报错）
   -r, --region <region>      保存到 profile 的 TLS region
   --endpoint <url>           保存到 profile 的 TLS 业务 endpoint
+  --login-endpoint <url>     Console OAuth 根地址（默认 https://signin.volcengine.com）
   --remote                   使用跨设备远程登录（手动输入授权码）
 
 输出:
@@ -372,7 +373,8 @@ Exit Code:
   2 runtime failure
 
 注意:
-  - Console 授权端点由 CLI 内部固定；--endpoint 始终表示 TLS 业务地址
+  - --login-endpoint 只影响登录授权；--endpoint 始终表示 TLS 业务地址
+  - 登录地址必须是干净的 HTTPS 根地址；登录成功后会随缓存保存并用于后续刷新
   - 省略 region/endpoint 时保留 profile 原值；新 profile 可在登录后补充
   - 不接受 --secrets-file；不要把长期静态凭证注入交互登录进程
   - 登录失败必须失败关闭，不会回退到环境 AK/SK

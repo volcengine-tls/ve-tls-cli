@@ -318,7 +318,7 @@ volclog tool exec project.describe-projects
 - 明确 TLS Region 和 Endpoint；
 - 远程模式下，可以把终端显示的授权 URL 复制到本地浏览器，并把授权码粘贴回终端。
 
-`login --region --endpoint` 会把两个 TLS 运行值写入目标 profile。任一参数都可以省略以保留旧值，之后再通过 `configure set` 补充。
+`login --region --endpoint` 会把两个 TLS 运行值写入目标 profile。任一参数都可以省略以保留旧值，之后再通过 `configure set` 补充。`--login-endpoint` 用于选择 Console OAuth 服务，与 TLS 业务 Endpoint 相互独立。
 
 ### 5.3 本地浏览器登录
 
@@ -331,7 +331,7 @@ volclog login \
 
 本地模式使用 loopback callback 接收浏览器授权结果。登录成功后，profile 会切换为 `mode=console-login`，保存登录会话绑定，并且只修补显式提供的 TLS 运行字段。未提供的已有身份和运行字段保持不变，新 profile 不会自动写入默认 Region。
 
-Console 授权服务地址由 CLI 内部管理，不提供用户配置参数。`--endpoint` 始终表示 TLS 业务 Endpoint。
+Console 授权服务默认使用 `https://signin.volcengine.com`。如需选择其他兼容的 Console OAuth 根地址，可使用 `--login-endpoint`。登录地址必须是干净的 HTTPS 根地址，不能包含用户信息、查询参数、片段或非根路径。地址会在规范化后随登录缓存保存，后续自动刷新会继续使用同一个授权服务；不含该字段的旧缓存仍使用默认地址。`--endpoint` 始终表示 TLS 业务 Endpoint。
 
 ### 5.4 远程或跨设备登录
 

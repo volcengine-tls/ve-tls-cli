@@ -318,7 +318,7 @@ volclog tool exec project.describe-projects
 - Know the TLS region and endpoint;
 - In remote mode, copy the authorization URL shown by the terminal to a local browser, then paste the authorization code back into the terminal.
 
-`login --region --endpoint` writes both TLS runtime values into the target profile. Either value may be omitted to preserve an existing value and supplied later with `configure set`.
+`login --region --endpoint` writes both TLS runtime values into the target profile. Either value may be omitted to preserve an existing value and supplied later with `configure set`. `--login-endpoint` selects the Console OAuth service and is independent of the TLS business endpoint.
 
 ### 5.3 Local browser login
 
@@ -331,7 +331,7 @@ volclog login \
 
 Local mode uses a loopback callback to receive the browser authorization result. After a successful login, the profile switches to `mode=console-login`, stores the login session binding, and patches only explicitly supplied TLS runtime values. Existing identity and runtime fields that were not supplied remain unchanged. A new profile does not receive an implicit default region.
 
-The Console authorization service endpoint is managed internally and is not user-configurable. The `--endpoint` flag always means the TLS business endpoint.
+The Console authorization service defaults to `https://signin.volcengine.com`. Use `--login-endpoint` to select another compatible Console OAuth root. The login endpoint must be a clean HTTPS root URL without user information, query, fragment, or a non-root path. It is normalized and stored with the login cache so automatic refresh continues to use the same authorization service. Existing caches without this field continue to use the default address. The `--endpoint` flag always means the TLS business endpoint.
 
 ### 5.4 Remote or cross-device login
 

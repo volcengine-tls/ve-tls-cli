@@ -168,10 +168,11 @@ func TestConsoleLoginServiceAdapterTranslatesOptionsAndResult(t *testing.T) {
 	adapter := &consoleLoginServiceAdapter{svc: svc}
 
 	res, err := adapter.Login(context.Background(), loginOpts{
-		Profile:  "p1",
-		Region:   "cn-beijing",
-		Endpoint: "https://tls-cn-beijing.volces.com",
-		Remote:   true,
+		Profile:       "p1",
+		Region:        "cn-beijing",
+		Endpoint:      "https://tls-cn-beijing.volces.com",
+		LoginEndpoint: "https://signin.byteplus.com",
+		Remote:        true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -183,7 +184,7 @@ func TestConsoleLoginServiceAdapterTranslatesOptionsAndResult(t *testing.T) {
 	}
 	if svc.gotOpts.Profile != "p1" || svc.gotOpts.Region != "cn-beijing" ||
 		svc.gotOpts.Endpoint != "https://tls-cn-beijing.volces.com" ||
-		!svc.gotOpts.Remote || svc.gotOpts.EndpointURL != "" {
+		!svc.gotOpts.Remote || svc.gotOpts.EndpointURL != "https://signin.byteplus.com" {
 		t.Fatalf("options not translated: %+v", svc.gotOpts)
 	}
 }
@@ -555,6 +556,7 @@ func TestLoginMissingValueFlagsAreUsageAndDoNotCallFactory(t *testing.T) {
 		{"short-region", "-r"},
 		{"long-region", "--region"},
 		{"endpoint", "--endpoint"},
+		{"login-endpoint", "--login-endpoint"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
