@@ -6,52 +6,91 @@ import (
 	"io"
 	"sort"
 	"strings"
-	"time"
 
+	appruntime "github.com/volcengine-tls/ve-tls-cli/internal/app/runtime"
 	"github.com/volcengine-tls/ve-tls-cli/internal/config"
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
-type Context struct {
+type InvocationOptions struct {
 	Stdout             io.Writer
 	Stderr             io.Writer
 	Format             output.Format
-	FormatOverride     output.Format
 	OutputExplicit     bool
 	OutputMode         string
 	OutputModeExplicit bool
 	OutputDir          string
 	OutputFile         string
 	Profile            string
+	RuntimeRegion      string
+	RuntimeEndpoint    string
 	GlobalSecretsFile  string
 	Filter             string
 	TraceDir           string
 	TraceRedact        string
-	TracePath          string
-	RequestID          string
-	StatusCode         int
 	DryRun             bool
-	Action             string
-	PaginationMeta     map[string]any
+}
 
-	cfg       config.Config
-	cfgPath   string
-	profile   config.Profile
-	client    *tlsapi.Client
-	traceW    io.WriteCloser
-	defaults  config.ProfileDefaults
+type ResponseState struct {
+	FormatOverride output.Format
+	TracePath      string
+	RequestID      string
+	StatusCode     int
+	Action         string
+	PaginationMeta map[string]any
+}
+
+type configState struct {
+	cfg     config.Config
+	cfgPath string
+}
+
+type runtimeState struct {
+	profile    config.Profile
+	resolution appruntime.Resolution
+	client     *tlsapi.Client
+	defaults   config.ProfileDefaults
+
+	// profileResolved tracks whether ResolveProfile has run for the current
+	// request. It replaces the old "AccessKeyID == \"\"" sentinel because
+	// dynamic profiles legitimately have no static AK.
+	profileResolved bool
+	// forceStaticAuth is set when --secrets-file (global or context) loads
+	// successfully. It forces the static EffectiveProfile path even when the
+	// selected profile declares a dynamic mode.
+	forceStaticAuth bool
+	// authFactory constructs dynamic providers (SSO, Console Login, RAM Role
+	// ARN, OIDC, ECS Role). Tests inject a fake; production uses
+	// runtime.DefaultProviderFactory.
+	authFactory authProviderFactory
+}
+
+type traceState struct {
+	traceW io.WriteCloser
+}
+
+type Context struct {
+	InvocationOptions
+	ResponseState
+	configState
+	runtimeState
+	traceState
+
 	apiIOMeta apiIOMeta
 }
 
 func newContext(stdout, stderr io.Writer, format output.Format, profile, filter string) *Context {
 	return &Context{
-		Stdout:  stdout,
-		Stderr:  stderr,
-		Format:  format,
-		Profile: profile,
-		Filter:  filter,
+		InvocationOptions: InvocationOptions{
+			Stdout:  stdout,
+			Stderr:  stderr,
+			Format:  format,
+			Profile: profile,
+			Filter:  filter,
+		},
 	}
 }
 
@@ -62,11 +101,22 @@ func (c *Context) LoadConfig() error {
 	}
 	c.cfg = cfg
 	c.cfgPath = p
+	c.invalidateProfileCache()
 	return nil
 }
 
 func (c *Context) SaveConfig() error {
 	return config.Save(c.cfg, c.cfgPath)
+}
+
+func (c *Context) UpdateConfig(fn func(*config.Config) error) error {
+	cfg, err := config.Update(c.cfgPath, fn)
+	if err != nil {
+		return err
+	}
+	c.cfg = cfg
+	c.invalidateProfileCache()
+	return nil
 }
 
 func (c *Context) ResolveProfile() error {
@@ -75,29 +125,72 @@ func (c *Context) ResolveProfile() error {
 			return err
 		}
 	}
-	p, err := config.EffectiveProfile(c.cfg, c.Profile, c.defaults)
+	resolution, err := appruntime.Resolve(appruntime.ResolveRequest{
+		Config:          c.cfg,
+		ExplicitProfile: c.Profile,
+		Defaults:        c.defaults,
+		RuntimeRegion:   c.RuntimeRegion,
+		RuntimeEndpoint: c.RuntimeEndpoint,
+		ForceStatic:     c.forceStaticAuth,
+	})
 	if err != nil {
 		return err
 	}
-	c.profile = p
+	c.resolution = resolution
+	c.profile = resolution.Profile
+	c.profileResolved = true
 	return nil
 }
 
 func (c *Context) SetProfileDefaults(d config.ProfileDefaults) {
 	c.defaults = d
+	c.invalidateProfileCache()
+}
+
+// invalidateProfileCache clears the resolved profile and cached client so the
+// next ResolveProfile/Client call re-reads the current config and defaults.
+// Any caller that replaces cfg, cfgPath, or defaults must invoke this to avoid
+// serving stale cached state from a previous request.
+func (c *Context) invalidateProfileCache() {
+	c.profileResolved = false
+	c.profile = config.Profile{}
+	c.resolution = appruntime.Resolution{}
+	c.client = nil
 }
 
 func (c *Context) Client() (*tlsapi.Client, error) {
 	if c.client != nil {
 		return c.client, nil
 	}
-	if c.profile.AccessKeyID == "" {
+	if !c.profileResolved {
 		if err := c.ResolveProfile(); err != nil {
 			return nil, err
 		}
 	}
-	t := time.Duration(c.profile.TimeoutSeconds) * time.Second
-	cl, err := tlsapi.New(c.profile.Endpoint, c.profile.Region, c.Profile, c.profile.AccessKeyID, c.profile.SecretAccessKey, c.profile.SecurityToken, t)
+	resolution := c.resolution
+	if strings.TrimSpace(resolution.ProfileName) == "" {
+		mode, err := config.NormalizeAuthMode(c.profile.Mode)
+		if err != nil {
+			return nil, err
+		}
+		resolution = appruntime.Resolution{
+			ProfileName: c.cfg.SelectedProfileName(c.Profile),
+			Profile:     c.profile,
+			Mode:        mode,
+			Dynamic:     !c.forceStaticAuth && config.IsProviderAuthMode(mode),
+			ForceStatic: c.forceStaticAuth,
+		}
+	}
+	cl, err := appruntime.BuildClient(appruntime.BuildClientRequest{
+		Mode:        resolution.Mode,
+		ConfigPath:  c.cfgPath,
+		ProfileName: resolution.ProfileName,
+		Config:      c.cfg,
+		Profile:     resolution.Profile,
+		SDKProfile:  c.Profile,
+		ForceStatic: resolution.ForceStatic,
+		Factory:     c.authFactory,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -106,18 +199,35 @@ func (c *Context) Client() (*tlsapi.Client, error) {
 }
 
 func (c *Context) DoRaw(method, path string, query map[string]string, header map[string]string, body []byte) (tlsapi.Response, error) {
+	return c.doRaw(context.Background(), method, path, query, header, body)
+}
+
+func (c *Context) doRaw(ctx context.Context, method, path string, query map[string]string, header map[string]string, body []byte) (tlsapi.Response, error) {
 	client, err := c.Client()
 	if err != nil {
 		return tlsapi.Response{}, err
 	}
-	start := time.Now()
-	c.traceRequest(method, path, query, body)
-	resp, err := client.Do(context.Background(), method, path, query, header, body)
+	transport := appruntime.NewTracingTransport(
+		appruntime.NewTransport(func() (*tlsapi.Client, error) {
+			return client, nil
+		}),
+		contextRuntimeTracer{context: c},
+	)
+	response, err := transport.Do(ctx, execution.Request{
+		Method: method,
+		Path:   path,
+		Query:  query,
+		Header: header,
+		Body:   body,
+	})
 	if err != nil {
-		c.traceResponse(0, "", time.Since(start), nil, err)
 		return tlsapi.Response{}, err
 	}
-	c.traceResponse(resp.StatusCode, resp.Header.Get("x-tls-requestid"), time.Since(start), resp.Body, nil)
+	resp := tlsapi.Response{
+		StatusCode: response.StatusCode,
+		Header:     response.Header,
+		Body:       response.Body,
+	}
 	c.RequestID = resp.Header.Get("x-tls-requestid")
 	c.StatusCode = resp.StatusCode
 	return resp, nil

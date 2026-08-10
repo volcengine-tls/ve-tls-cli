@@ -1,0 +1,264 @@
+{
+  "operations": [
+    {
+      "id": "metric-topic.describe-metric-topics",
+      "group": "metric-topic",
+      "group_title": "Metric topic",
+      "action": "DescribeMetricTopics",
+      "resource": "metric-topics",
+      "verb": "describe",
+      "family": "metric-topic",
+      "visibility": "internal",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeMetricTopics",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "PageNumber": {"type": "integer"},
+            "PageSize": {"type": "integer"},
+            "Region": {"type": "string"},
+            "ProjectId": {"type": "string"},
+            "ProjectName": {"type": "string"},
+            "TopicId": {"type": "string"},
+            "TopicName": {"type": "string"},
+            "FuzzySearchKey": {"type": "string"},
+            "Description": {"type": "string"},
+            "Tags": {"type": "string"},
+            "IsFullName": {"type": "boolean"},
+            "Favourite": {"type": "boolean"},
+            "OrderByProject": {"type": "boolean"}
+          }
+        }
+      },
+      "pagination": {
+        "mode": "page-number",
+        "page_number_param": "PageNumber",
+        "page_size_param": "PageSize",
+        "items_field": "Topics",
+        "total_field": "Total",
+        "default_page_size": 100,
+        "max_pages": 1000
+      },
+      "runtime": {"supports_dry_run": true},
+      "output": {"policy": "envelope", "is_envelope_output": true},
+      "docs": {
+        "summary": "Describe metric topics",
+        "source": "internal operation override",
+        "usage_constraints": "Internal operation used by the human shortcut executor."
+      },
+      "risk": {"level": "low", "error_recovery": "safe-retry"}
+    },
+    {
+      "id": "metric-topic.describe-metric-topic",
+      "group": "metric-topic",
+      "group_title": "Metric topic",
+      "action": "DescribeMetricTopic",
+      "resource": "metric-topic",
+      "verb": "describe",
+      "family": "metric-topic",
+      "visibility": "internal",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeMetricTopic",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "TopicId": {"type": "string"}
+          },
+          "required": ["TopicId"]
+        }
+      },
+      "runtime": {"supports_dry_run": true},
+      "output": {"policy": "envelope", "is_envelope_output": true},
+      "docs": {
+        "summary": "Describe a metric topic",
+        "source": "internal operation override",
+        "usage_constraints": "Internal operation used by the human shortcut executor."
+      },
+      "risk": {"level": "low", "error_recovery": "safe-retry"}
+    },
+    {
+      "id": "metric-topic.create",
+      "group": "metric-topic",
+      "group_title": "Metric topic",
+      "action": "CreateMetricTopic",
+      "resource": "metric-topic",
+      "verb": "create",
+      "family": "metric-topic",
+      "visibility": "internal",
+      "wire": {
+        "method": "POST",
+        "path": "/CreateMetricTopic",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "ProjectId": {"type": "string"},
+            "TopicName": {"type": "string"},
+            "Ttl": {"type": "integer"},
+            "ShardCount": {"type": "integer"},
+            "Description": {"type": "string"},
+            "AutoSplit": {"type": "boolean"},
+            "MaxSplitShard": {"type": "integer"},
+            "Tags": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "Key": {"type": "string"},
+                  "Value": {"type": "string"}
+                }
+              }
+            }
+          },
+          "required": ["ProjectId", "TopicName", "Ttl", "ShardCount"]
+        }
+      },
+      "runtime": {"supports_dry_run": true},
+      "output": {"policy": "full", "is_envelope_output": true},
+      "docs": {
+        "summary": "Create a metric topic",
+        "source": "internal operation override",
+        "usage_constraints": "Internal operation used by the human shortcut executor."
+      },
+      "risk": {"level": "high", "error_recovery": "high-risk-retry"}
+    },
+    {
+      "id": "metric-topic.modify",
+      "group": "metric-topic",
+      "group_title": "Metric topic",
+      "action": "ModifyMetricTopic",
+      "resource": "metric-topic",
+      "verb": "modify",
+      "family": "metric-topic",
+      "visibility": "internal",
+      "wire": {
+        "method": "PUT",
+        "path": "/ModifyMetricTopic",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "TopicId": {"type": "string"},
+            "TopicName": {"type": "string"},
+            "Description": {"type": "string"},
+            "Ttl": {"type": "integer"},
+            "Favourite": {"type": "boolean"},
+            "AutoSplit": {"type": "boolean"},
+            "MaxSplitShard": {"type": "integer"}
+          },
+          "required": ["TopicId"]
+        }
+      },
+      "runtime": {"supports_dry_run": true},
+      "output": {"policy": "full", "is_envelope_output": true},
+      "docs": {
+        "summary": "Modify a metric topic",
+        "source": "internal operation override",
+        "usage_constraints": "Internal operation used by the human shortcut executor."
+      },
+      "risk": {"level": "high", "error_recovery": "high-risk-retry"}
+    },
+    {
+      "id": "metric-topic.delete",
+      "group": "metric-topic",
+      "group_title": "Metric topic",
+      "action": "DeleteMetricTopic",
+      "resource": "metric-topic",
+      "verb": "delete",
+      "family": "metric-topic",
+      "visibility": "internal",
+      "wire": {
+        "method": "DELETE",
+        "path": "/DeleteMetricTopic",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "TopicId": {"type": "string"}
+          },
+          "required": ["TopicId"]
+        }
+      },
+      "runtime": {"supports_dry_run": true},
+      "output": {"policy": "full", "is_envelope_output": true},
+      "docs": {
+        "summary": "Delete a metric topic",
+        "source": "internal operation override",
+        "usage_constraints": "Internal operation used by the human shortcut executor."
+      },
+      "risk": {"level": "high", "error_recovery": "high-risk-retry"}
+    },
+    {
+      "id": "collector.describe-rules-v2",
+      "group": "collector",
+      "group_title": "Collector",
+      "action": "DescribeRulesV2",
+      "resource": "rules",
+      "verb": "describe",
+      "family": "collector",
+      "visibility": "internal",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeRulesV2",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "ProjectId": {"type": "string"},
+            "ProjectName": {"type": "string"},
+            "IamProjectName": {"type": "string"},
+            "RuleId": {"type": "string"},
+            "RuleName": {"type": "string"},
+            "TopicId": {"type": "string"},
+            "TopicName": {"type": "string"},
+            "LogType": {"type": "string"},
+            "RuleType": {"type": "integer"},
+            "Pause": {"type": "integer"},
+            "Hidden": {"type": "boolean"},
+            "PageNumber": {"type": "integer"},
+            "PageSize": {"type": "integer"}
+          }
+        }
+      },
+      "pagination": {
+        "mode": "page-number",
+        "page_number_param": "PageNumber",
+        "page_size_param": "PageSize",
+        "items_field": "Rules",
+        "total_field": "Total",
+        "default_page_size": 100,
+        "max_pages": 1000
+      },
+      "runtime": {"supports_dry_run": true},
+      "output": {"policy": "envelope", "is_envelope_output": true},
+      "docs": {
+        "summary": "Describe collector rules",
+        "source": "internal operation override",
+        "usage_constraints": "Internal operation used by the human shortcut executor."
+      },
+      "risk": {"level": "low", "error_recovery": "safe-retry"}
+    }
+  ]
+}

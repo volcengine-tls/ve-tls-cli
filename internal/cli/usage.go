@@ -14,31 +14,81 @@ func usageConfigure() string {
   tlsctl configure <command> [args]
 
 Commands:
-  set     Set a profile
-  project Manage project defaults (show/set)
-  profile Alias commands: add/use/show/list/delete
-  cred    Manage shared credentials (delete)
-  use     Set default profile
-  show    Show a profile
-  list    List profiles
-  delete  Delete a profile (or batch delete by prefix)
+  set          Set a profile
+  sso-session  Configure an enterprise SSO entry
+  sso          Bind a profile and complete the first SSO login
+  project      Manage project defaults (show/set)
+  profile      Alias commands: add/use/show/list/delete
+  cred         Manage shared credentials (delete)
+  use          Set default profile
+  show         Show a profile
+  list         List profiles
+  delete       Delete a profile (or batch delete by prefix)
+
+Authentication:
+  - Static AK/SK, RAM Role ARN, OIDC, or ECS Role: tlsctl configure set --help
+  - Console Login: tlsctl login --help
+  - First-time SSO: tlsctl configure sso-session --help, then tlsctl configure sso --help
+  - SSO re-login or logout: tlsctl sso --help
+
+Configure Set Flags:
+  --mode <ak|ramrolearn|oidc|ecsrole>  Auth mode (omit for legacy static AK/SK)
+  --account-id <id>                    Account ID for ramrolearn
+  --role-name <name>                   Role name for ramrolearn/ecsrole
+  --oidc-token-file <path>             OIDC token file path for oidc
+  --role-trn <trn>                     Role TRN for oidc
+  --disable-ssl[=true|false]           Switch RAM/OIDC STS scheme to HTTP (tri-state)
+  --ak <ak> --sk <sk>                  Static access key / secret key
+  --token <token>                      Source session/security token for ramrolearn
+  --cred-ref <name>                    Reference a shared credential
+  --region <region> --endpoint <url>   Target region and endpoint
+  --timeout-seconds <seconds>          Per-request TLS business timeout
+
+  For an existing profile, a command containing only --profile plus region,
+  endpoint, and/or timeout-seconds patches those runtime fields without changing
+  its auth mode or identity. Other commands without --mode preserve the legacy
+  static AK/SK behavior. When
+  --mode is supplied only ak/ramrolearn/oidc/ecsrole are accepted; sso and
+  console-login must use their dedicated flows (configure sso / login). Explicit
+  --mode merges only the supplied flags into the existing profile and validates
+  identity fields: ak needs AK/SK or cred-ref; ramrolearn needs source AK/SK or
+  cred-ref plus account-id+role-name; oidc needs oidc-token-file+role-trn;
+  ecsrole needs role-name. TLS region/endpoint may be supplied later.
+
+  WARNING: --disable-ssl only switches the RAM/OIDC STS assumption scheme to
+  HTTP. The endpoint URL scheme remains authoritative: an https:// endpoint still
+  uses TLS regardless of this flag. With --disable-ssl=true, RAM/OIDC
+  authentication materials are sent over plaintext HTTP to the fixed STS host
+  sts.volcengineapi.com (the STS host is not configurable). Do not enable this on
+  untrusted networks.
 
 Examples:
-  tlsctl configure set --profile default --ak <ak> --sk <sk> --endpoint https://tls-cn-beijing.volces.com
-  tlsctl configure set --profile tenant-a-sg --ak <ak> --sk <sk> --endpoint https://tls-ap-singapore-1.volces.com
-  tlsctl configure set --profile abc-bj --cred-ref ma-abc-root --ak <ak> --sk <sk> --endpoint https://tls-cn-beijing.volces.com
-  tlsctl configure set --profile abc-sg --cred-ref ma-abc-root --endpoint https://tls-ap-singapore-1.volces.com
-  tlsctl configure profile add tenant-a --ak <ak> --sk <sk> --endpoint https://tls-cn-beijing.volces.com
+  tlsctl configure set --profile default --ak <ak> --sk <sk> --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
+  tlsctl configure set --profile tenant-a-sg --ak <ak> --sk <sk> --region ap-southeast-1 --endpoint https://tls-ap-singapore-1.volces.com
+  tlsctl configure set --profile abc-bj --cred-ref ma-abc-root --ak <ak> --sk <sk> --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
+  tlsctl configure set --profile abc-sg --cred-ref ma-abc-root --region ap-southeast-1 --endpoint https://tls-ap-singapore-1.volces.com
+  tlsctl configure set --profile abc-sg --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
+  tlsctl configure set --profile ram-1 --mode ramrolearn --ak <ak> --sk <sk> --account-id 2100000000 --role-name TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
+  tlsctl configure set --profile oidc-1 --mode oidc --oidc-token-file /var/run/secrets/token --role-trn trn:iam::2100000000:role/TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
+  tlsctl configure set --profile ecs-1 --mode ecsrole --role-name TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
+  tlsctl configure set --profile default --mode ak --disable-ssl=false
+  tlsctl configure profile add tenant-a --ak <ak> --sk <sk> --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure profile use tenant-a
   tlsctl configure use default
   tlsctl configure show --profile default
   tlsctl configure project show
   tlsctl configure project set --output json --output-mode file --output-dir ./out
-  tlsctl --profile tenant-a-sg project list
+  tlsctl --profile tenant-a-sg tool exec project.describe-projects --input '{"PageSize":20}'
   tlsctl configure list
   tlsctl configure delete tenant-a-sg
   tlsctl configure delete --prefix tenant-a --yes
   tlsctl configure cred delete ma-abc-root
+
+Next:
+  tlsctl --profile <name> doctor
+  tlsctl tool list
+  tlsctl tool describe project.describe-projects
+  tlsctl --profile <name> tool exec project.describe-projects --input '{"PageSize":20}'
 
 Exit Code:
   0 success
@@ -74,26 +124,6 @@ Exit Code:
   0 success
   1 usage / invalid args
  2 runtime failure
-`)
-}
-
-func usageAPI() string {
-	return u(`Usage:
-  tlsctl api <legacy surface removed>
-
-Notes:
-  - This legacy surface is no longer routed from the main CLI entry.
-  - Use tlsctl tool ... / tlsctl raw ... instead.
-`)
-}
-
-func usageAPICall() string {
-	return u(`Usage:
-  tlsctl api call <legacy surface removed>
-
-Notes:
-  - This legacy surface is no longer routed from the main CLI entry.
-  - Use tlsctl raw --method <METHOD> --path <PATH> instead.
 `)
 }
 
@@ -310,5 +340,239 @@ Exit Code:
 
 Agent:
   - Use doctor output to decide whether to proceed or reconfigure
+`)
+}
+
+func usageLogin() string {
+	return u(`Usage:
+  tlsctl login [-p|--profile NAME] [-r|--region REGION] [--endpoint URL] [--login-endpoint URL] [--remote]
+
+概览:
+  通过 Console Login（OAuth Authorization Code + PKCE）登录并获取临时 STS 凭证。
+  默认使用本地 loopback callback 接收授权回调；--remote 用于无浏览器或远程终端场景。
+  登录态只写入 ~/.volclog（或 VOLCLOG_CONFIG 对应目录）的 login/cache，不依赖 ve 或 ~/.volcengine。
+
+Flags:
+  -p, --profile <name>       目标 profile（与全局 --profile 冲突时报错）
+  -r, --region <region>      保存到 profile 的 TLS region
+  --endpoint <url>           保存到 profile 的 TLS 业务 endpoint
+  --login-endpoint <url>     Console OAuth 根地址（默认 https://signin.volcengine.com）
+  --remote                   使用跨设备远程登录（手动输入授权码）
+
+输出:
+  - stdout 仅输出最终 JSON（profile/provider/region/endpoint/expires_at/masked_access_key）
+  - 授权 URL、prompt、浏览器提示、进度只写 stderr
+
+Next:
+  tlsctl --profile <name> doctor
+  tlsctl --profile <name> tool exec project.describe-projects --input '{"PageSize":20}'
+
+Exit Code:
+  0 success
+  1 usage / invalid args
+  2 runtime failure
+
+注意:
+  - --login-endpoint 只影响登录授权；--endpoint 始终表示 TLS 业务地址
+  - 登录地址必须是干净的 HTTPS 根地址；登录成功后会随缓存保存并用于后续刷新
+  - 省略 region/endpoint 时保留 profile 原值；新 profile 可在登录后补充
+  - 不接受 --secrets-file；不要把长期静态凭证注入交互登录进程
+  - 登录失败必须失败关闭，不会回退到环境 AK/SK
+`)
+}
+
+func usageLogout() string {
+	return u(`Usage:
+  tlsctl logout [-p|--profile NAME] [--all]
+
+概览:
+  清除 Console Login 登录态：删除 login cache 并清除 profile 中的 login-session 绑定。
+  不删除 profile，保留 TLS 配置和休眠的静态 AK/SK 字段。
+
+Flags:
+  -p, --profile <name>       清除指定 profile 的登录态
+  --all                      清除所有 mode=console-login 的 profile（不扫描 cache 目录）
+
+行为:
+  - 按 login-session 分组并稳定排序；每个 session 获取与 Provider.Retrieve 相同的 cache lock
+  - 在锁内先删除 cache，再用 config.Update 清除所有匹配 profile 的 login-session
+  - 锁序固定为 console cache -> config path；logout 返回前不释放 cache lock
+  - config patch 失败时返回可分类的 partial-failure，cache 保持已删除（fail closed）
+  - 删除不存在 cache 是幂等成功
+
+Exit Code:
+  0 success
+  1 usage / invalid args
+  2 runtime failure
+
+注意:
+  - 不接受 --secrets-file
+  - --all 不影响 AK/SK、default-chain 或其他 mode 的 profile
+`)
+}
+
+func usageSSO() string {
+	return u(`Usage:
+  tlsctl sso <command> [args]
+
+Commands:
+  login   Re-authorize an SSO session (by --profile or --sso-session)
+  logout  Clear SSO token and STS caches for a session (by --profile or --sso-session)
+
+Examples:
+  tlsctl sso login --profile prod
+  tlsctl sso login --sso-session corp --no-browser
+  tlsctl sso logout --profile prod
+  tlsctl sso logout --sso-session corp
+
+Exit Code:
+  0 success
+  1 usage / invalid args
+  2 runtime failure
+
+注意:
+  - 不接受 --secrets-file；不要把长期静态凭证注入交互登录进程
+  - 登录失败必须失败关闭，不会回退到环境 AK/SK
+`)
+}
+
+func usageSSOLogin() string {
+	return u(`Usage:
+  tlsctl sso login [--profile NAME | --sso-session NAME] [--no-browser]
+
+概览:
+  通过 SSO Device Authorization 重新授权并获取 OAuth token。
+  --profile 从 profile 解析 session/account/role；--sso-session 直接登录 session。
+  两者互斥；登录态只写入 ~/.volclog（或 VOLCLOG_CONFIG 对应目录）的 sso/cache。
+
+Flags:
+  --profile <name>           从 profile 解析 SSO session（与 --sso-session 互斥）
+  --sso-session <name>       直接登录指定 SSO session（与 --profile 互斥）
+  --no-browser               不自动打开浏览器，仅打印授权 URL
+
+输出:
+  - stdout 仅输出最终 JSON（profile/provider/sso_session/region/endpoint/sso_region/expires_at）
+  - region/endpoint 是 TLS 运行值；sso_region 是 CloudIdentity 鉴权区域
+  - 直接按 --sso-session 登录时没有目标 profile，TLS region/endpoint 为空
+  - 授权 URL、prompt、浏览器提示、进度只写 stderr
+  - 此阶段没有真实 STS AK，绝不输出 masked_access_key 或任何 OAuth token 片段
+
+Next:
+  tlsctl configure sso --help
+  tlsctl --profile <name> doctor
+  tlsctl --profile <name> tool exec project.describe-projects --input '{"PageSize":20}'
+
+Exit Code:
+  0 success
+  1 usage / invalid args
+  2 runtime failure
+
+注意:
+  - --profile 与 --sso-session 同时出现必须在任何副作用前拒绝
+  - 不接受 --secrets-file
+  - 只有显式 CLI 命令可运行 DeviceFlow；普通业务命令不得触发浏览器
+`)
+}
+
+func usageSSOLogout() string {
+	return u(`Usage:
+  tlsctl sso logout [--profile NAME | --sso-session NAME]
+
+概览:
+  清除 SSO 登录态：删除 token cache 和所有关联 STS cache，并清除绑定该 session 的
+  profile 的 sts-expiration。不删除 profile，保留 SSO session 配置、TLS 配置和休眠
+  静态字段。同时支持 --profile 与 --sso-session（有意修复上游帮助/解析偏差）。
+
+Flags:
+  --profile <name>           清除指定 profile 绑定的 SSO session
+  --sso-session <name>       清除指定 SSO session（影响所有绑定该 session 的 profile）
+
+行为:
+  - 从配置解析该 session 关联的全部 profile 和 STS key，去重并按摘要排序
+  - 获取 session token lock，再按摘要排序依次获取全部 STS locks（锁序与 Provider 相同）
+  - 持有 token lock 时尽力 revoke RefreshToken；无论远端是否成功都清本地 cache
+  - 在锁内通过 config.Update 清除所有绑定该 session 的 profile 的 sts-expiration
+  - 逆序释放 STS locks，最后释放 token lock；logout 返回后并发 Provider 不得重建 cache
+  - 远端 revoke 失败但本地清理成功：返回明确可分类的 partial failure
+
+Exit Code:
+  0 success
+  1 usage / invalid args
+  2 runtime failure
+
+注意:
+  - 不接受 --secrets-file
+  - 错误文本不得含 token/secret
+`)
+}
+
+func usageConfigureSSOSession() string {
+	return u(`Usage:
+  tlsctl configure sso-session --name NAME --start-url URL --region REGION [--registration-scopes scope1,scope2]
+
+概览:
+  保存或更新企业 SSO 入口配置（name/start-url/region/scopes）。
+  sso-session.region 是 CloudIdentity region，与 profile.region（TLS SignV4 region）
+  绝不互相覆盖。
+
+Flags:
+  --name <name>              SSO session 名称（必填）
+  --start-url <url>          SSO 用户入口 URL（必填，必须是干净的 HTTPS URL）
+  --region <region>          CloudIdentity region（必填）
+  --registration-scopes <s>  逗号分隔的 scope 列表（可选，默认 cloudidentity:account:access,offline_access）
+
+行为:
+  - 默认 scopes 使用冻结的允许值；拒绝未知 scope；空元素视为 malformed 列表并拒绝
+  - --name/--start-url/--region 每次必填；仅 --registration-scopes 省略时保留旧值
+
+Next:
+  tlsctl configure sso --help
+
+Exit Code:
+  0 success
+  1 usage / invalid args
+  2 runtime failure
+`)
+}
+
+func usageConfigureSSO() string {
+	return u(`Usage:
+  tlsctl configure sso --profile NAME --sso-session SESSION [--account-id ID] [--role-name NAME] [--region REGION] [--endpoint URL] [--no-browser]
+
+概览:
+  绑定 profile 到 SSO session 并完成首次 Device Authorization 登录。
+  profile 可以不存在；TLS endpoint/region 可一步保存，也可稍后补充。
+  不改变 CurrentProfile。
+
+Flags:
+  --profile <name>           目标 profile（与全局 --profile 冲突时报错）
+  --sso-session <name>       已配置的 SSO session 名称（必填）
+  --account-id <id>          显式指定账号（可选，省略时交互选择）
+  --role-name <name>         显式指定角色（可选，省略时交互选择）
+  --region <region>          TLS SignV4 region（不是 SSO session region）
+  --endpoint <url>           TLS 业务 endpoint
+  --no-browser               不自动打开浏览器，仅打印授权 URL
+
+行为:
+  - 把 profile 切到 mode=sso；只更新显式提供的 TLS Region/Endpoint
+  - SSO session region 仅用于 CloudIdentity，绝不写入 TLS region
+  - 保留休眠静态字段 AccessKeyID/SecretAccessKey/SecurityToken/CredRef
+  - 清除且仅清除 Console Login 的 LoginSession
+  - 写入 SSOSessionName/AccountID/RoleName
+  - 整个事务在 token lock 内完成：快照旧 token -> Login -> binding -> config commit
+  - 任意步骤失败在同一锁内精确恢复旧快照
+
+Next:
+  tlsctl --profile <name> doctor
+  tlsctl --profile <name> tool exec project.describe-projects --input '{"PageSize":20}'
+
+Exit Code:
+  0 success
+  1 usage / invalid args
+  2 runtime failure
+
+注意:
+  - 不接受 --secrets-file
+  - 登录失败必须失败关闭，不会回退到环境 AK/SK
 `)
 }

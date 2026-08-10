@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -9,6 +10,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	appruntime "github.com/volcengine-tls/ve-tls-cli/internal/app/runtime"
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 )
 
 type traceEvent struct {
@@ -25,6 +29,36 @@ type traceEvent struct {
 	RespSHA256      string   `json:"resp_body_sha256,omitempty"`
 	ErrorMessage    string   `json:"error_message,omitempty"`
 }
+
+type contextRuntimeTracer struct {
+	context *Context
+}
+
+func (t contextRuntimeTracer) TraceRequest(_ context.Context, request execution.Request) {
+	if t.context == nil {
+		return
+	}
+	t.context.traceRequest(request.Method, request.Path, request.Query, request.Body)
+}
+
+func (t contextRuntimeTracer) TraceResponse(_ context.Context, response execution.Response, elapsed time.Duration, err error) {
+	if t.context == nil {
+		return
+	}
+	if err != nil {
+		t.context.traceResponse(0, "", elapsed, nil, err)
+		return
+	}
+	t.context.traceResponse(
+		response.StatusCode,
+		response.Header.Get("x-tls-requestid"),
+		elapsed,
+		response.Body,
+		nil,
+	)
+}
+
+var _ appruntime.Tracer = contextRuntimeTracer{}
 
 func (c *Context) initTrace() error {
 	if strings.TrimSpace(c.TraceDir) == "" {
@@ -134,6 +168,28 @@ func (c *Context) tracePlan(method, path string, query map[string]string, header
 		BodySHA256:      sha256Hex(body),
 	}
 	if valid, ok := plan["valid"].(bool); ok && !valid {
+		evt.ErrorMessage = "dry-run local checks failed"
+	}
+	_ = c.writeTrace(evt)
+}
+
+func (c *Context) traceToolExecutionPlan(plan *execution.DryRunPlan) {
+	if plan == nil || strings.TrimSpace(c.TraceDir) == "" {
+		return
+	}
+	if err := c.initTrace(); err != nil {
+		return
+	}
+	evt := traceEvent{
+		TS:              time.Now().UTC().Format(time.RFC3339Nano),
+		Type:            "plan",
+		Method:          plan.Method,
+		Path:            plan.Path,
+		QueryKeys:       append([]string(nil), plan.QueryKeys...),
+		HeadersRedacted: append([]string(nil), plan.HeadersRedacted...),
+		BodySHA256:      plan.BodySHA256,
+	}
+	if !plan.Valid {
 		evt.ErrorMessage = "dry-run local checks failed"
 	}
 	_ = c.writeTrace(evt)

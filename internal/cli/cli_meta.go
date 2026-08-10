@@ -36,6 +36,9 @@ func visibleCliGroups() []cliGroupSpec {
 		{Name: "raw", Description: "原始 transport 调用入口（仅在已明确 method/path 时使用）", Primary: true},
 		{Name: "doctor", Description: "诊断环境、鉴权与配置状态", Primary: true},
 		{Name: "skill", Description: "安装或列出内置 volclog skills", Primary: true},
+		{Name: "login", Description: "Console Login 登录（本地浏览器或远程授权码）", Primary: true},
+		{Name: "logout", Description: "清除 Console Login 登录态", Primary: true},
+		{Name: "sso", Description: "SSO 设备授权登录与登出", Primary: true},
 		{Name: "project", Description: "项目 human shortcut（仅在 volclog-human 中提供）"},
 		{Name: "topic", Description: "主题 human shortcut（仅在 volclog-human 中提供）"},
 		{Name: "metric-topic", Description: "指标主题 human shortcut（仅在 volclog-human 中提供）"},
@@ -58,6 +61,8 @@ func cliGroupNames() []string {
 func cliGlobalFlagSpecs() []cliGlobalFlagSpec {
 	specs := []cliGlobalFlagSpec{
 		{Name: "--profile", Usage: "--profile <name>", Description: "配置名称", TakesValue: true},
+		{Name: "--region", Usage: "--region <region>", Description: "当前命令的 TLS Region 覆盖", TakesValue: true},
+		{Name: "--endpoint", Usage: "--endpoint <url>", Description: "当前命令的 TLS Endpoint 覆盖", TakesValue: true},
 		{Name: "--output", Usage: "--output <json|jsonl|table>", Description: "输出格式（table 适用于常用快捷 list/get、index get、log search）", TakesValue: true},
 		{Name: "--output-mode", Usage: "--output-mode <stdout|file>", Description: "输出目标", TakesValue: true},
 		{Name: "--output-dir", Usage: "--output-dir <path>", Description: "file delivery 的输出目录", TakesValue: true},
@@ -93,28 +98,6 @@ func cliGlobalFlags() []string {
 	flags := make([]string, 0, len(specs))
 	for _, spec := range specs {
 		flags = append(flags, spec.Name)
-	}
-	return flags
-}
-
-func cliGlobalFlagsWithValue() []string {
-	specs := cliGlobalFlagSpecs()
-	flags := make([]string, 0, len(specs))
-	for _, spec := range specs {
-		if spec.TakesValue {
-			flags = append(flags, spec.Name)
-		}
-	}
-	return flags
-}
-
-func cliGlobalBareFlags() []string {
-	specs := cliGlobalFlagSpecs()
-	flags := make([]string, 0, len(specs))
-	for _, spec := range specs {
-		if !spec.TakesValue {
-			flags = append(flags, spec.Name)
-		}
 	}
 	return flags
 }

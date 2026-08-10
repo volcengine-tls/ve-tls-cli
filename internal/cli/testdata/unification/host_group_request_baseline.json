@@ -1,0 +1,268 @@
+{
+  "create_flags_only": {
+    "action": "host-group.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "AutoUpdate": true,
+          "HostGroupName": "host-group-create-flags",
+          "HostGroupType": "IP",
+          "HostIdentifier": "host-group-create-identifier",
+          "HostIpList": [
+            "10.0.0.1",
+            "10.0.0.2"
+          ],
+          "IamProjectName": "host-group-create-iam-project",
+          "ServiceLogging": true,
+          "UpdateEndTime": "03:00",
+          "UpdateStartTime": "01:00"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateHostGroup",
+        "query": {}
+      }
+    }
+  },
+  "create_flags_override_request": {
+    "action": "host-group.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "AutoUpdate": false,
+          "HostGroupName": "flag-host-group",
+          "HostGroupType": "IP",
+          "HostIdentifier": "flag-identifier",
+          "HostIpList": [
+            "10.3.0.1",
+            "10.3.0.2"
+          ],
+          "IamProjectName": "flag-iam-project",
+          "ServiceLogging": false,
+          "UpdateEndTime": "08:00",
+          "UpdateStartTime": "07:00"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateHostGroup",
+        "query": {}
+      }
+    }
+  },
+  "create_request_only": {
+    "action": "host-group.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "AutoUpdate": true,
+          "HostGroupName": "request-only-host-group",
+          "HostGroupType": "Label",
+          "HostIdentifier": "request-only-identifier",
+          "HostIpList": [
+            "10.1.0.1"
+          ],
+          "IamProjectName": "request-only-iam-project",
+          "ServiceLogging": false,
+          "UpdateEndTime": "04:00",
+          "UpdateStartTime": "02:00"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateHostGroup",
+        "query": {}
+      }
+    }
+  },
+  "delete": {
+    "action": "host-group.delete",
+    "data": {
+      "request_preview": {
+        "body": {
+          "HostGroupId": "host-group-delete-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "DELETE",
+        "path": "/DeleteHostGroup",
+        "query": {}
+      }
+    }
+  },
+  "get": {
+    "action": "host-group.get",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeHostGroupV2",
+        "query": {
+          "HostGroupId": "host-group-get-id"
+        }
+      }
+    }
+  },
+  "list_all_first_request": {
+    "action": "host-group.list",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "Content-Md5",
+          "Content-Type",
+          "Host",
+          "User-Agent",
+          "X-Content-Sha256",
+          "X-Date",
+          "X-Tls-Apiversion"
+        ],
+        "method": "GET",
+        "path": "/DescribeHostGroupsV2",
+        "query": {
+          "AutoUpdate": [
+            "true"
+          ],
+          "Hidden": [
+            "false"
+          ],
+          "HostGroupName": [
+            "host-group-list-all"
+          ],
+          "PageNumber": [
+            "1"
+          ],
+          "PageSize": [
+            "17"
+          ]
+        }
+      }
+    },
+    "pagination": {
+      "merged": true,
+      "mode": "page_all",
+      "pageCount": 1,
+      "pageSize": 17
+    }
+  },
+  "list_auto_update_false": {
+    "action": "host-group.list",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeHostGroupsV2",
+        "query": {
+          "AutoUpdate": "false",
+          "HostGroupName": "auto-update-false"
+        }
+      }
+    }
+  },
+  "list_auto_update_true": {
+    "action": "host-group.list",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeHostGroupsV2",
+        "query": {
+          "AutoUpdate": "true",
+          "HostGroupName": "auto-update-true"
+        }
+      }
+    }
+  },
+  "list_auto_update_unset": {
+    "action": "host-group.list",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeHostGroupsV2",
+        "query": {
+          "HostGroupName": "auto-update-unset"
+        }
+      }
+    }
+  },
+  "list_common_flags": {
+    "action": "host-group.list",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeHostGroupsV2",
+        "query": {
+          "Hidden": "true",
+          "HostGroupId": "host-group-list-id",
+          "HostGroupName": "host-group-list-name",
+          "HostIdentifier": "host-group-list-identifier",
+          "IamProjectName": "host-group-list-iam-project",
+          "PageNumber": "3",
+          "PageSize": "25",
+          "ServiceLogging": "false"
+        }
+      }
+    }
+  },
+  "modify": {
+    "action": "host-group.modify",
+    "data": {
+      "request_preview": {
+        "body": {
+          "AutoUpdate": false,
+          "HostGroupId": "host-group-modify-id",
+          "HostGroupName": "host-group-modified",
+          "HostGroupType": "IP",
+          "HostIdentifier": "host-group-modify-identifier",
+          "HostIpList": [
+            "10.4.0.1",
+            "10.4.0.2"
+          ],
+          "IamProjectName": "host-group-modify-iam-project",
+          "ServiceLogging": false,
+          "UpdateEndTime": "10:00",
+          "UpdateStartTime": "09:00"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "PUT",
+        "path": "/ModifyHostGroup",
+        "query": {}
+      }
+    }
+  }
+}

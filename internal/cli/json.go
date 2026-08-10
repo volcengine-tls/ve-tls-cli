@@ -1,3 +1,5 @@
+//go:build human
+
 package cli
 
 import (

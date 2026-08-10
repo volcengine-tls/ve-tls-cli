@@ -23,6 +23,21 @@ test('resolveInstallPlan uses package version to build release URLs', () => {
   assert.equal(plan.binaryName, 'volclog');
 });
 
+test('resolveInstallPlan preserves prerelease identifiers in release URLs', () => {
+  const plan = resolveInstallPlan({
+    pkgVersion: '1.0.5-rc.1',
+    env: {},
+    platform: 'linux',
+    arch: 'x64',
+    packageRoot: '/tmp/pkg',
+  });
+
+  assert.equal(
+    plan.downloadURL,
+    'https://github.com/volcengine-tls/ve-tls-cli/releases/download/volclog-v1.0.5-rc.1/volclog_linux_amd64.tar.gz',
+  );
+});
+
 test('resolveInstallPlan prefers explicit download URL override', () => {
   const plan = resolveInstallPlan({
     pkgVersion: '1.0.0',

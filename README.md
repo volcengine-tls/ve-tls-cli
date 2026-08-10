@@ -1,258 +1,82 @@
-# volclog-cli
+# volclog
 
-[中文版](README_CN.md) | [English](README.md)
+[中文](README_ZH.md)
 
-The official Volcengine TLS CLI. `volclog` is the default agent and automation edition with the contract-first `tool / workflow / raw` path, while `volclog-human` keeps the human shortcut layer for frequent interactive work.
+The official Volcengine TLS CLI. `volclog` is the default agent and automation edition built around the contract-first `tool / workflow / raw` path. `volclog-human` adds the human shortcut layer for frequent interactive work while sharing the same runtime semantics.
 
-**What volclog provides**
+## Capabilities
 
-- **Agent-native contract path** — Use `tool describe/exec`, `workflow describe/exec`, and `raw` instead of guessing flags or request shapes.
-- **Dual editions** — Ship both `volclog` (agent/CI focused) and `volclog-human` (human-friendly shortcut layer) while keeping the same `tool / workflow / raw` runtime semantics.
-- **Broad TLS coverage** — Covers projects, topics, indexes, search and analysis, alarms, host groups, collectors, ETL, consumer groups, and more.
-- **Safer execution flow** — `--dry-run`, structured envelopes, trace artifacts, and file delivery make preview, validation, and recovery easier.
-- **Flexible credential setup** — Supports long-lived AK/SK and STS temporary credentials (temporary AK/SK plus session token) through local profiles, environment variables, or one-shot `--secrets-file` injection.
-- **Layered usage** — Start with `tool / workflow / raw`; use human shortcuts only when you intentionally want the full interactive layer.
+- **Contract-first path** — discover and execute TLS APIs through `tool describe/exec`, `workflow describe/exec`, and `raw` instead of guessing flags or request shapes.
+- **Dual editions** — `volclog` for agents/CI and `volclog-human` for interactive shortcuts, both with the same `tool / workflow / raw` runtime.
+- **Broad TLS coverage** — projects, topics, indexes, search and analysis, alarms, host groups, collectors, ETL, consumer groups, and more.
+- **Safer execution** — `--dry-run`, structured envelopes, trace artifacts, and file delivery for preview, validation, and recovery.
+- **Flexible credentials** — long-lived AK/SK and STS temporary credentials via local profiles, environment variables, or one-shot `--secrets-file`.
 
----
+## Quick start
 
-## Features
+Install the current stable binary from GitHub Release.
 
-| Category | Capabilities |
-| --- | --- |
-| 📁 **Project** | Create, query, update, and delete log projects |
-| 📚 **Topic** | Create, query, update, and delete log topics and manage lifecycle settings |
-| 🔍 **Index & Log** | Manage indexes, run log search, histogram preview, SQL analysis, and export large result sets |
-| 📈 **Metric Topic** | Create metric topics and query metrics through PromQL-compatible APIs |
-| 🚨 **Alarm** | Configure alarm policies, templates, and notification channels |
-| 🔄 **Consumer / Shipper** | Manage consumer groups and ship data to downstream storage systems |
-| 🛠 **ETL / Processor** | Clean, enrich, distribute, and transform logs |
-| 🌐 **Host / Collector** | Manage host groups and LogCollector rules |
-
----
-
-## Installation & Quick Start
-
-### Prerequisites
-
-Before you start, make sure you have:
-
-- A terminal environment for your operating system
-- Your Volcengine long-lived AK/SK, or a complete STS credential set consisting of temporary AK, temporary SK, and session token
-- An explicit target `region` such as `cn-beijing`
-- The matching TLS endpoint such as `https://tls-cn-beijing.volces.com`
-
-`region` must be provided explicitly. The CLI does not infer region from endpoint or hostname.
-
-### Quick Start (AI Agent)
-
-This is the recommended path for Agent, CI, and automation.
-
-Commands in this section use `volclog` by default.
-
-#### 1. Install
-
-Recommended: install the default `volclog` binary:
+On Unix:
 
 ```bash
-VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-bash scripts/install-binary.sh
+tag=volclog-v1.0.5
+base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
+curl -fsSLO "${base_url}/install-binary.sh"
+VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-You can also install the human shortcut edition explicitly:
+On Windows PowerShell:
+
+```powershell
+$tag = "volclog-v1.0.5"
+$baseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/download/$tag"
+Invoke-WebRequest -Uri "$baseUrl/install.ps1" -OutFile install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -BaseUrl $baseUrl
+$env:Path = "$env:LOCALAPPDATA\Programs\volclog;$env:Path"
+```
+
+Alternatively, install via npm (no repository checkout required):
 
 ```bash
-bash scripts/install-binary.sh --edition human
+npm install -g @volcengine-tls/volclog@latest --registry https://registry.npmjs.org/
 ```
 
-`volclog` only exposes:
+For the human edition and source installation, see [Getting Started](docs/1-Getting-Started.md).
 
-- `configure`
-- `doctor`
-- `skill`
-- `tool`
-- `workflow`
-- `raw`
-
-If you install via npm, install the default package first:
-
-```bash
-npm install -g @volcengine-tls/volclog
-```
-
-Install `@volcengine-tls/volclog-human` only if you explicitly need the human shortcut layer.
-
-#### 2. Configure And Verify
-
-Set up a local profile or inject one-shot credentials, then verify with `doctor`:
+Configure a static AK/SK profile and verify with `doctor`:
 
 ```bash
 volclog configure set \
   --profile default \
-  --ak <ak> \
-  --sk <sk> \
+  --ak '<access-key-id>' \
+  --sk '<secret-access-key>' \
   --region cn-beijing \
   --endpoint https://tls-cn-beijing.volces.com
 
-volclog doctor
+volclog --profile default doctor
 ```
 
-For stateless runs, prefer one-shot `--secrets-file` over broad environment injection. Do not combine `--profile` and `--secrets-file` in the same run.
-
-STS temporary credentials are supported. The session token cannot be used alone; it must be supplied together with the temporary AK/SK. To store a temporary credential in a profile, pass `--ak`, `--sk`, and `--token` to `configure set`. For one-shot execution without persisting the credential, set `VOLCENGINE_ACCESS_KEY_ID`, `VOLCENGINE_ACCESS_KEY_SECRET`, and `VOLCENGINE_TOKEN` through `--secrets-file` or process-scoped environment variables. See [Using STS temporary credentials](docs/cli-practical-guide.md#使用-sts-临时凭证) for complete examples and security boundaries.
-
-#### 3. Discover Contracts Before Execution
-
-Use `tool` and `workflow` to discover the contract before guessing input:
+Run your first read-only request:
 
 ```bash
-volclog tool list
-volclog tool list project
-volclog tool describe project.create
-
-volclog workflow list
-volclog workflow describe log.export
+volclog --profile default tool exec project.describe-projects
 ```
 
-Use `raw` only when the exact `method/path` is already known:
+## Documentation
 
-```bash
-volclog raw --method POST --path /CreateProject --body file://req.json
-```
+| # | Document | Description |
+| --- | --- | --- |
+| 1 | [Getting Started](docs/1-Getting-Started.md) | Install, configure credentials, and run the first request |
+| 2 | [Authentication](docs/2-Authentication.md) | AK/SK, STS, Console Login, SSO, RAM Role, OIDC, and ECS Role |
+| 3 | [Configuration](docs/3-Configuration.md) | Profiles, regions, endpoints, and output controls |
+| 4 | [Usage](docs/4-Usage.md) | `tool`, `workflow`, `raw`, dry-run, filtering, and file delivery |
+| 5 | [Practical Guide](docs/5-Practical-Guide.md) | End-to-end task walkthroughs and troubleshooting |
+| 6 | [Advanced](docs/6-Advanced.md) | Best practices, agent skills, and advanced workflows |
+| 7 | [Human Shortcuts](docs/7-Human-Shortcuts.md) | Interactive shortcut commands and common terminal workflows |
 
-`raw` also accepts `--input` as a compatibility alias for `--body`, but `--body` and `--input` must not be passed together.
+## Contributing & Security
 
-#### 4. Dry Run, Execute, And Filter
-
-Validate first, then execute:
-
-```bash
-cat >ctx.json <<'EOF'
-{
-  "region": "cn-beijing",
-  "execution": { "dry_run": true }
-}
-EOF
-
-cat >req.json <<'EOF'
-{
-  "ProjectName": "demo",
-  "Region": "cn-beijing"
-}
-EOF
-
-volclog tool exec project.create --context file://ctx.json --input file://req.json
-```
-
-For large results, prefer file delivery:
-
-```bash
-volclog --output-mode file --output-dir ./out \
-  workflow exec log.export-analysis --input file://req.json
-```
-
-For envelope projection, use `--jmes-filter` on stdout-only runs:
-
-```bash
-volclog tool exec project.describe-projects \
-  --jmes-filter "data.Projects[].{ProjectId: ProjectId, ProjectName: ProjectName}"
-```
-
-`--jmes-filter` runs on the complete CLI envelope, so paths such as `data.*`, `summary.*`, and `error.*` are valid. If the selected field exists but is `null`, stdout prints the literal `null` and the command still succeeds. Missing paths, including out-of-bounds array indexes, fail with `filter matched no value`. It cannot be combined with file delivery.
-
-### Quick Start (Human Users)
-
-If you are working directly in a terminal and want the shortcut layer, install `volclog-human`.
-
-#### 1. Install
-
-**Option 1: Download Binary (Recommended)**
-
-```bash
-VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download \
-bash scripts/install-binary.sh --edition human
-```
-
-**Option 2: Install via npm**
-
-```bash
-npm install -g @volcengine-tls/volclog-human
-```
-
-**Option 3: Install with Go**
-
-Requires Go 1.22+.
-
-```bash
-go build -tags=human -o /usr/local/bin/volclog-human ./cmd/volclog
-```
-
-**Option 4: Install from Local Source**
-
-```bash
-git clone https://github.com/volcengine-tls/ve-tls-cli.git
-cd ve-tls-cli
-VOLCLOG_EDITION=human bash scripts/install-local.sh
-```
-
-#### 2. Configure Credentials
-
-```bash
-volclog-human configure
-```
-
-#### 3. Start Using
-
-```bash
-volclog-human project list
-volclog-human topic list --project-id <your-project-id>
-```
-
-For the full shortcut layer, see [docs/cli-human-shortcuts.md](docs/cli-human-shortcuts.md).
-
----
-
-## Agent Skills
-
-The repository includes one bundled agent skill package under `skills/`:
-
-| Skill | Description |
-| --- | --- |
-| **volclog-core** | Agent-only incremental knowledge for intent routing, cross-group SOPs, runtime semantics, recovery posture, and stateless credential guidance beyond `tool describe` / `workflow describe` |
-
-Install it into your agent skill directory:
-
-```bash
-volclog skill install --dir <agent-skills-dir>
-```
-
-For one-off installs, `npx` also works:
-
-```bash
-npx @volcengine-tls/volclog skill install --dir <agent-skills-dir>
-```
-
----
-
-## Advanced & Best Practices
-
-- **Prefer `tool / workflow / raw` for agent flows** — Human shortcuts remain in `volclog-human`, but they are not the default agent path.
-- **Read the contract before execution** — Start with `tool describe` or `workflow describe`, then build `context` and `input`.
-- **Use `--dry-run` for writes** — Preview request shape and runtime selection before sending mutating calls.
-- **Use file delivery for large results** — Prefer `--output-mode file --output-dir <writable-dir>` when stdout may be too large.
-- **Understand runtime signals** — `summary.deliveryMode` tells you whether the result stayed on stdout or was written to file.
-- **Use the flat error object** — On failures, read `error.kind`, `error.code`, `error.message`, and `error.details` in that order.
-- **Keep region explicit** — Do not assume endpoint-derived region inference.
-
-Further reading:
-
-- [docs/cli-practical-guide.md](docs/cli-practical-guide.md)
-- [docs/cli-best-practices.md](docs/cli-best-practices.md)
-- [docs/cli-human-shortcuts.md](docs/cli-human-shortcuts.md)
-
----
-
-## Security and privacy
-This project takes security seriously. 
-For vulnerability reporting and supported versions, see [SECURITY.md](SECURITY.md)
-- **Security** — Avoid hardcoding plaintext AK/SK or session tokens in command arguments. Prefer local profiles, one-shot `--secrets-file`, or scoped environment injection.
-- **Region / endpoint discipline** — Always set `region` explicitly. The CLI does not infer it from endpoint or hostname.
+- **Contributing** — open an issue or pull request on GitHub. Before submitting, run the relevant checks (`go test ./...` for Go changes; `npm run test:npm` for npm packaging).
+- [SECURITY.md](https://github.com/volcengine-tls/ve-tls-cli/blob/main/SECURITY.md) — vulnerability reporting and supported versions
+- [RELEASING.md](https://github.com/volcengine-tls/ve-tls-cli/blob/main/RELEASING.md) — release process

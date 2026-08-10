@@ -17,6 +17,9 @@ func TestCliGroupsMatchCurrentEdition(t *testing.T) {
 			"tool",
 			"workflow",
 			"raw",
+			"login",
+			"logout",
+			"sso",
 			"project",
 			"topic",
 			"metric-topic",
@@ -33,7 +36,7 @@ func TestCliGroupsMatchCurrentEdition(t *testing.T) {
 			t.Fatalf("assistant shortcut group should stay hidden from top-level groups: %v", names)
 		}
 	case "volclog":
-		want := []string{"configure", "doctor", "skill", "tool", "workflow", "raw"}
+		want := []string{"configure", "doctor", "skill", "tool", "workflow", "raw", "login", "logout", "sso"}
 		if len(names) != len(want) {
 			t.Fatalf("default volclog groups = %v, want only %v", names, want)
 		}
@@ -69,7 +72,7 @@ func TestEditionRuntimeAvailability(t *testing.T) {
 			}
 		}
 	case "volclog":
-		for _, group := range []string{"configure", "doctor", "skill", "tool", "workflow", "raw"} {
+		for _, group := range []string{"configure", "doctor", "skill", "tool", "workflow", "raw", "login", "logout", "sso"} {
 			if !isGroupEnabledInCurrentEdition(group) {
 				t.Fatalf("default volclog should enable %q", group)
 			}

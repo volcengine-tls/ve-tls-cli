@@ -18,8 +18,10 @@ func shortcutCommandHelpLookup(group string) subcommandHelpLookup {
 
 func shortcutCommandUsage(spec shortcutCommandSpec) string {
 	var b strings.Builder
-	requiredParams := filterShortcutParams(spec.Params, true)
-	optionalParams := filterShortcutParams(spec.Params, false)
+	params := shortcutParams(spec.Bindings)
+	requiredParams := filterShortcutParams(params, true)
+	optionalParams := filterShortcutParams(params, false)
+	target, _ := resolveShortcutTarget(spec)
 
 	b.WriteString("Usage:\n")
 	b.WriteString("  volclog " + spec.Group + " " + spec.Command + " [flags]\n\n")
@@ -38,7 +40,7 @@ func shortcutCommandUsage(spec shortcutCommandSpec) string {
 	}
 
 	b.WriteString("Interface:\n")
-	b.WriteString("  " + strings.ToUpper(strings.TrimSpace(spec.Method)) + " " + strings.TrimSpace(spec.Path) + "\n")
+	b.WriteString("  " + strings.ToUpper(strings.TrimSpace(target.Method)) + " " + strings.TrimSpace(target.Path) + "\n")
 	b.WriteString("\n")
 
 	if shouldRenderRequiredSummary(spec, requiredParams) {
@@ -102,24 +104,24 @@ func shortcutCommandUsage(spec shortcutCommandSpec) string {
 
 func shortcutNextCommands(spec shortcutCommandSpec) []string {
 	out := make([]string, 0, 5)
-	if wf, err := resolveWorkflowByIdentity(spec.Group, spec.Command); err == nil {
+	target, err := resolveShortcutTarget(spec)
+	if err == nil && target.IsWorkflow {
+		wf := target.Workflow
 		out = append(out,
 			"volclog workflow describe "+strings.TrimSpace(wf.ID),
 			"volclog workflow exec "+strings.TrimSpace(wf.ID)+" --input file://req.json",
 		)
 	}
-	if action := toolIdentityAction(spec.Action); action != "" {
-		if _, ok := loadToolByIdentity(spec.Group, action); ok {
-			out = append(out, "volclog tool describe "+strings.TrimSpace(spec.Action))
-		}
+	if err == nil && target.IsOperation && target.Operation.Visibility == "public" {
+		out = append(out, "volclog tool describe "+strings.TrimSpace(spec.Action))
 	}
-	if strings.TrimSpace(spec.APIGroup) != "" {
-		out = append(out, "volclog tool list "+strings.TrimSpace(spec.APIGroup))
+	if err == nil && strings.TrimSpace(target.APIGroup) != "" {
+		out = append(out, "volclog tool list "+strings.TrimSpace(target.APIGroup))
 	} else {
 		out = append(out, "volclog "+strings.TrimSpace(spec.Group)+" --help")
 	}
 	out = append(out, "volclog "+spec.Group+" "+spec.Command+" --describe")
-	if spec.SupportsTemplate {
+	if spec.Presentation.SupportsTemplate {
 		out = append(out, "volclog "+spec.Group+" "+spec.Command+" --print-request-template=full")
 	}
 	return uniqueStringsKeepOrder(out)
@@ -237,7 +239,7 @@ func shortcutUsageTips(spec shortcutCommandSpec) []string {
 			"- 不要因为可选 query 参数里出现了 --project-id/--topic-id/--topic-name，就把它们当成必填。",
 		}
 	case "get", "delete", "bind-rules", "unbind-rules", "delete-host", "bind-host-groups", "unbind-host-groups":
-		if flag := firstRequiredShortcutFlag(spec.Params); flag != "" {
+		if flag := firstRequiredShortcutFlag(shortcutParams(spec.Bindings)); flag != "" {
 			return []string{
 				"- 先确认资源 ID 是否已知；未知时先回到同组的 list/get 命令。",
 				"- 当前命令的核心必填是: " + flag,

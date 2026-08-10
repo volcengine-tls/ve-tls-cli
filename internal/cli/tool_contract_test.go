@@ -23,16 +23,13 @@ func TestToolListDefaultsToGroups(t *testing.T) {
 		t.Fatalf("empty tool list output: %q", text)
 	}
 
-	catalog, err := loadToolCatalog()
-	if err != nil {
-		t.Fatalf("load tool catalog failed: %v", err)
-	}
-	if len(catalog.Tools) == 0 {
+	operations := loadToolOperations("", "", "")
+	if len(operations) == 0 {
 		t.Fatalf("expected non-empty tool catalog")
 	}
 
 	expectedGroups := map[string]struct{}{}
-	for _, tool := range catalog.Tools {
+	for _, tool := range operations {
 		g := strings.TrimSpace(tool.Group)
 		if g != "" {
 			expectedGroups[strings.ToLower(g)] = struct{}{}
@@ -72,17 +69,14 @@ func TestToolRootIdentityAliasDescribe(t *testing.T) {
 }
 
 func TestToolListFiltersByGroupAndVerb(t *testing.T) {
-	catalog, err := loadToolCatalog()
-	if err != nil {
-		t.Fatalf("load tool catalog failed: %v", err)
-	}
-	if len(catalog.Tools) == 0 {
+	operations := loadToolOperations("", "", "")
+	if len(operations) == 0 {
 		t.Fatalf("expected non-empty tool catalog")
 	}
 
 	group := ""
 	verb := ""
-	for _, tool := range catalog.Tools {
+	for _, tool := range operations {
 		if strings.TrimSpace(tool.Group) == "" {
 			continue
 		}
@@ -107,9 +101,9 @@ func TestToolListFiltersByGroupAndVerb(t *testing.T) {
 	}
 
 	expectedActionsByGroup := map[string]struct{}{}
-	for _, tool := range catalog.Tools {
+	for _, tool := range operations {
 		if strings.EqualFold(strings.TrimSpace(tool.Group), strings.TrimSpace(group)) {
-			action := strings.TrimSpace(tool.ID)
+			action := strings.TrimSpace(string(tool.ID))
 			if action != "" {
 				expectedActionsByGroup[action] = struct{}{}
 			}
@@ -134,10 +128,10 @@ func TestToolListFiltersByGroupAndVerb(t *testing.T) {
 		t.Fatalf("filtered list should not be empty")
 	}
 	expectedFiltered := map[string]struct{}{}
-	for _, tool := range catalog.Tools {
+	for _, tool := range operations {
 		if strings.EqualFold(strings.TrimSpace(tool.Group), strings.TrimSpace(group)) &&
 			strings.EqualFold(strings.TrimSpace(tool.Verb), strings.TrimSpace(verb)) {
-			action := strings.TrimSpace(tool.ID)
+			action := strings.TrimSpace(string(tool.ID))
 			if action != "" {
 				expectedFiltered[action] = struct{}{}
 			}

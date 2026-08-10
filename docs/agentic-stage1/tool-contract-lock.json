@@ -1,9 +1,0 @@
-{
-  "schema_version": 1,
-  "contract_version": "v1",
-  "tools_sha256": "37050a00008f55ace571a56973a8e351018f5988d6347e5eb5addbc70667978f",
-  "tools_count": 322,
-  "signatures_sha256": "37050a00008f55ace571a56973a8e351018f5988d6347e5eb5addbc70667978f",
-  "snapshot_path": "docs/agentic-stage1/tool-contract-snapshot.txt",
-  "updated_at": "2026-04-15"
-}

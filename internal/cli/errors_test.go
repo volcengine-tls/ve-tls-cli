@@ -3,8 +3,12 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
+
+	"github.com/volcengine-tls/ve-tls-cli/internal/auth"
+	"github.com/volcengine-tls/ve-tls-cli/internal/config"
 )
 
 func TestClassifyError_UsageMissingFlag(t *testing.T) {
@@ -305,6 +309,238 @@ func TestIndexNotExistsHintSuggestsCreateIndex(t *testing.T) {
 	}
 }
 
+// TestConsoleReauthErrorHasLoginHint proves that a Console Login reauth error
+// (wrapped with the console-login mode) is classified as kind=auth with a hint
+// exactly equal to 'volclog login --profile <name>'.
+func TestConsoleReauthErrorHasLoginHint(t *testing.T) {
+	inner := &auth.Error{
+		Kind:        auth.ReauthRequired,
+		Description: "console login cache missing; run: volclog login",
+	}
+	err := newDynamicAuthError(config.AuthModeConsoleLogin, inner)
+	p, code := classifyError(err, "", 0, "tool")
+	if code != 2 {
+		t.Fatalf("unexpected code: %d", code)
+	}
+	if p.Kind != "auth" {
+		t.Fatalf("expected kind=auth, got %q", p.Kind)
+	}
+	if p.Hint != "volclog login --profile <name>" {
+		t.Fatalf("expected hint exactly 'volclog login --profile <name>', got %q", p.Hint)
+	}
+}
+
+// TestSSOReauthErrorHasSSOLoginHint proves that an SSO reauth error (wrapped
+// with the sso mode) is classified as kind=auth with a hint exactly equal to
+// 'volclog sso login --profile <name>'.
+func TestSSOReauthErrorHasSSOLoginHint(t *testing.T) {
+	inner := &auth.Error{
+		Kind:        auth.ReauthRequired,
+		Description: "sso token cache missing; run: volclog sso login",
+	}
+	err := newDynamicAuthError(config.AuthModeSSO, inner)
+	p, code := classifyError(err, "", 0, "tool")
+	if code != 2 {
+		t.Fatalf("unexpected code: %d", code)
+	}
+	if p.Kind != "auth" {
+		t.Fatalf("expected kind=auth, got %q", p.Kind)
+	}
+	if p.Hint != "volclog sso login --profile <name>" {
+		t.Fatalf("expected hint exactly 'volclog sso login --profile <name>', got %q", p.Hint)
+	}
+}
+
+// TestPlainAuthErrorIsKindAuthWithoutModeHint proves that a plain *auth.Error
+// (not wrapped with a mode) is still classified as kind=auth, but carries no
+// mode-specific re-login hint.
+func TestPlainAuthErrorIsKindAuthWithoutModeHint(t *testing.T) {
+	err := &auth.Error{Kind: auth.ReauthRequired, Description: "reauth required"}
+	p, code := classifyError(err, "", 0, "tool")
+	if code != 2 {
+		t.Fatalf("unexpected code: %d", code)
+	}
+	if p.Kind != "auth" {
+		t.Fatalf("expected kind=auth, got %q", p.Kind)
+	}
+	if p.Hint != "" {
+		t.Fatalf("expected empty hint for plain auth.Error, got %q", p.Hint)
+	}
+}
+
+// TestAuthErrorsAreKindAuth proves that all auth.Error kinds (not just
+// ReauthRequired) are classified as kind=auth so callers can detect
+// authentication failures uniformly.
+func TestAuthErrorsAreKindAuth(t *testing.T) {
+	cases := []struct {
+		name string
+		kind auth.ErrorKind
+	}{
+		{"reauth_required", auth.ReauthRequired},
+		{"cache_missing", auth.CacheMissing},
+		{"cache_corrupt", auth.CacheCorrupt},
+		{"config_invalid", auth.ConfigInvalid},
+		{"protocol_error", auth.ProtocolError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := &auth.Error{Kind: tc.kind, Description: "test " + string(tc.kind)}
+			p, _ := classifyError(err, "", 0, "tool")
+			if p.Kind != "auth" {
+				t.Fatalf("expected kind=auth for %s, got %q", tc.name, p.Kind)
+			}
+		})
+	}
+}
+
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+// TestSentinelErrorsTakePriorityOverAuthCause proves that the stable
+// transaction/partial-failure sentinels are classified before the generic
+// dynamicAuthError/auth.Error checks, even when their cause is an *auth.Error
+// (which is production-reachable). The dedicated kind/hint must not be lost.
+func TestSentinelErrorsTakePriorityOverAuthCause(t *testing.T) {
+	// A unique canary embedded in the cause description must never leak into
+	// the classified payload, error string, or hint.
+	const causeCanary = "cause_canary_zzz_9f3a"
+	authCause := &auth.Error{Kind: auth.ProtocolError, Description: causeCanary}
+
+	cases := []struct {
+		name     string
+		err      error
+		wantKind string
+		wantHint string
+	}{
+		{
+			name:     "sso_logout_partial_with_auth_cause",
+			err:      newSSOLogoutPartialFailureError(authCause, ssoPartialRevoke),
+			wantKind: "partial_failure",
+			wantHint: "sso local token/sts cache cleared but remote revoke or config update failed",
+		},
+		{
+			name:     "sso_rollback_with_auth_cause",
+			err:      newSSORollbackFailureError(authCause, errors.New("rollback failed")),
+			wantKind: "auth",
+			wantHint: "sso login failed and token cache rollback failed",
+		},
+		{
+			name:     "console_logout_partial_with_auth_cause",
+			err:      newLogoutPartialFailureError(authCause),
+			wantKind: "partial_failure",
+			wantHint: "console login cache deleted but profile binding could not be cleared",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p, code := classifyError(tc.err, "", 0, "tool")
+			if code != 2 {
+				t.Fatalf("expected exit code 2, got %d", code)
+			}
+			if p.Kind != tc.wantKind {
+				t.Fatalf("expected kind=%q, got %q", tc.wantKind, p.Kind)
+			}
+			if !strings.Contains(p.Hint, tc.wantHint) {
+				t.Fatalf("expected hint to contain %q, got %q", tc.wantHint, p.Hint)
+			}
+			// The cause canary must not leak into the payload or hint.
+			if strings.Contains(p.Hint, causeCanary) {
+				t.Fatalf("hint leaked cause canary: %q", p.Hint)
+			}
+			if strings.Contains(tc.err.Error(), causeCanary) {
+				t.Fatalf("error string leaked cause canary: %q", tc.err.Error())
+			}
+		})
+	}
+}
+
+// TestSentinelErrorsTakePriorityOverDynamicAuthCause proves the stable
+// sentinels also win when the cause is wrapped in *dynamicAuthError (which the
+// generic auth classification would otherwise match). This guards the ordering
+// robustness even if a future code path wraps a sentinel's cause in the
+// mode-aware wrapper.
+func TestSentinelErrorsTakePriorityOverDynamicAuthCause(t *testing.T) {
+	const causeCanary = "dynamic_cause_canary_7b2c"
+	innerCause := &auth.Error{Kind: auth.ProtocolError, Description: causeCanary}
+	daeCause := newDynamicAuthError(config.AuthModeSSO, innerCause)
+
+	cases := []struct {
+		name     string
+		err      error
+		wantKind string
+		wantHint string
+	}{
+		{
+			name:     "sso_logout_partial",
+			err:      newSSOLogoutPartialFailureError(daeCause, ssoPartialRevoke),
+			wantKind: "partial_failure",
+			wantHint: "sso local token/sts cache cleared but remote revoke or config update failed",
+		},
+		{
+			name:     "sso_rollback",
+			err:      newSSORollbackFailureError(daeCause, errors.New("rollback failed")),
+			wantKind: "auth",
+			wantHint: "sso login failed and token cache rollback failed",
+		},
+		{
+			name:     "console_logout_partial",
+			err:      newLogoutPartialFailureError(daeCause),
+			wantKind: "partial_failure",
+			wantHint: "console login cache deleted but profile binding could not be cleared",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p, code := classifyError(tc.err, "", 0, "tool")
+			if code != 2 {
+				t.Fatalf("expected exit code 2, got %d", code)
+			}
+			if p.Kind != tc.wantKind {
+				t.Fatalf("expected kind=%q (sentinel must win over dynamicAuthError), got %q", tc.wantKind, p.Kind)
+			}
+			// The dedicated sentinel hint must be present; a generic re-login
+			// hint (e.g. from the dynamicAuthError branch) must not pass.
+			if !strings.Contains(p.Hint, tc.wantHint) {
+				t.Fatalf("expected hint to contain %q (sentinel branch must win), got %q", tc.wantHint, p.Hint)
+			}
+			if strings.Contains(p.Hint, causeCanary) {
+				t.Fatalf("hint leaked cause canary: %q", p.Hint)
+			}
+		})
+	}
+}
+
+// TestDynamicAuthHintsAreModeSpecific proves that each workload mode produces a
+// mode-specific hint that never suggests volclog login/sso login and never
+// contains role/TRN/token path or credential material.
+func TestDynamicAuthHintsAreModeSpecific(t *testing.T) {
+	cases := []struct {
+		mode string
+		want string
+	}{
+		{config.AuthModeRamRoleARN, "source credential"},
+		{config.AuthModeOIDC, "token file"},
+		{config.AuthModeECSRole, "IMDS"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.mode, func(t *testing.T) {
+			hint := dynamicReauthHint(tc.mode)
+			if !strings.Contains(hint, tc.want) {
+				t.Fatalf("hint=%q, want it to contain %q", hint, tc.want)
+			}
+			if strings.Contains(hint, "sso login") || strings.Contains(hint, "volclog login") {
+				t.Fatalf("hint=%q must not suggest sso/login for workload mode", hint)
+			}
+		})
+	}
+	// SSO and Console hints remain exactly as before.
+	if got := dynamicReauthHint(config.AuthModeSSO); got != "volclog sso login --profile <name>" {
+		t.Fatalf("SSO hint=%q, want unchanged", got)
+	}
+	if got := dynamicReauthHint(config.AuthModeConsoleLogin); got != "volclog login --profile <name>" {
+		t.Fatalf("Console hint=%q, want unchanged", got)
+	}
+}

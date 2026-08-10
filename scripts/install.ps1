@@ -27,15 +27,25 @@ try {
   $zipPath = Join-Path $tmp.FullName $pkg
   Invoke-WebRequest -Uri $url -OutFile $zipPath
 
+  $shaPath = Join-Path $tmp.FullName ($pkg + ".sha256")
+  $checksumDownloaded = $false
   try {
-    $shaPath = Join-Path $tmp.FullName ($pkg + ".sha256")
     Invoke-WebRequest -Uri $shaUrl -OutFile $shaPath
-    $expected = (Get-Content $shaPath -Raw).Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries)[0].Trim()
+    $checksumDownloaded = $true
+  } catch {
+    Write-Warning ("checksum unavailable; installing without verification: " + $shaUrl)
+  }
+
+  if ($checksumDownloaded) {
+    $checksumContent = (Get-Content $shaPath -Raw).Trim()
+    $expected = ($checksumContent -split "\s+")[0]
+    if ([string]::IsNullOrWhiteSpace($expected)) {
+      throw "invalid sha256 file"
+    }
     $actual = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($expected.ToLowerInvariant() -ne $actual) {
       throw "sha256 mismatch"
     }
-  } catch {
   }
 
   Expand-Archive -Path $zipPath -DestinationPath $tmp.FullName -Force

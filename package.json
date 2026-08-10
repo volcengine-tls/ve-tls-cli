@@ -1,6 +1,6 @@
 {
   "name": "@volcengine-tls/volclog",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "description": "Volcengine TLS CLI default agent-first edition with bundled Agent skill installer",
   "license": "Apache-2.0",
   "bin": {
@@ -10,18 +10,24 @@
     "npm/bin",
     "npm/lib",
     "npm/scripts",
+    "docs",
     "README.md",
-    "README_CN.md",
+    "README_ZH.md",
     "LICENSE"
   ],
   "scripts": {
     "postinstall": "node npm/scripts/postinstall.js",
+    "prepublishOnly": "node scripts/check-npm-publish.mjs",
     "test:npm": "node --test npm/test/*.test.js",
     "pack:npm": "npm pack .",
-    "pack:npm:human": "npm pack ./npm/human-package"
+    "pack:npm:human": "npm pack ./npm/human-package",
+    "publish:npm": "npm publish --registry https://registry.npmjs.org/ --tag latest --access public .",
+    "publish:npm:human": "npm publish --registry https://registry.npmjs.org/ --tag latest --access public ./npm/human-package"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "tag": "latest",
+    "registry": "https://registry.npmjs.org/"
   },
   "engines": {
     "node": ">=18"

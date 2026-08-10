@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "contract_version": "v1",
+  "digest_algorithm": "sha256/go-json-v1",
+  "catalog_digest": "7c8c5322d5780aa31c23bbeda927da280d2cb7bf4a83215f7c7392d32534ac21",
+  "operation_count": 131,
+  "generation_mode": "bootstrap",
+  "inputs": [
+    {
+      "name": "contract_catalog",
+      "path": "internal/contract/catalog.go",
+      "sha256": "199dee89a8dcf44384e4cbb2ac607fab30367bbe4ff050cea48d1c2ef6dd19ed"
+    },
+    {
+      "name": "contract_digest",
+      "path": "internal/contract/digest.go",
+      "sha256": "6d2f3f38b24bf7257f1b7bba43c5a9d2b5d74a45f671121072470fad7f712a5f"
+    },
+    {
+      "name": "contract_schema",
+      "path": "internal/contract/schema.go",
+      "sha256": "8dda52294110b4b18450e80dcc7790aac3cdd939ef3a022fe7f9bebb788ec0a3"
+    },
+    {
+      "name": "contract_types",
+      "path": "internal/contract/types.go",
+      "sha256": "c00e0b47bb93f73a9f1d0b44c00671a31a645f5627046acd89c758f41dfeb68d"
+    },
+    {
+      "name": "generator_catalog_v2",
+      "path": "internal/openapigen/catalog_v2.go",
+      "sha256": "313e8f6522687f4894254d81bd9f7b972787166289cb3271b679342b33a7bf2a"
+    },
+    {
+      "name": "generator_internal_operations",
+      "path": "internal/openapigen/internal_operations.go",
+      "sha256": "941679ef8f53955755390286790047ab783a030d2ce589838477232c534af816"
+    },
+    {
+      "name": "generator_main",
+      "path": "internal/openapigen/main.go",
+      "sha256": "4459dcc7ef4703411933f857718f9ea6d96ec633b71e62a8225c2e6ae8d71815"
+    },
+    {
+      "name": "generator_source_operations",
+      "path": "internal/openapigen/source_operations.go",
+      "sha256": "fd515d696aed376fa857ec071a59d9cea6ea8eb750c9ea12184bb10e43e287c2"
+    },
+    {
+      "name": "override_internal_operations",
+      "path": "contracts/overrides/internal_operations.json",
+      "sha256": "913390273713f988ed58f4bed3b92f067d92366e1715169fec5a149f13584bd7"
+    }
+  ]
+}
