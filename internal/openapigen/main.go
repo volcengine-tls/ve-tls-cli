@@ -97,6 +97,8 @@ func main() {
 	outOperationCatalogLock := flag.String("out-operation-catalog-lock", "contracts/operation-catalog-v2-lock.json", "output file for operation catalog v2 generation lock")
 	internalOperationsPath := flag.String("internal-operation-overrides", "contracts/overrides/internal_operations.json", "path to internal operation overrides")
 	mergeInternalOnly := flag.Bool("merge-internal-operations-only", false, "merge internal operation overrides into the checked-in catalog without external source inputs")
+	supplementalOperationsPath := flag.String("supplemental-operation-overrides", "contracts/overrides/supplemental_operations.json", "path to supplemental public or internal operation overrides")
+	mergeSupplementalOnly := flag.Bool("merge-supplemental-operations-only", false, "merge supplemental operation overrides into the checked-in catalog without external source inputs")
 	lockRoot := flag.String("lock-root", ".", "root used to make generation lock input paths relative")
 	groupKeyMapping := flag.String("group-key-mapping", "contracts/agentic-stage1/group_key_mapping.yaml", "path to group key mapping yaml")
 	swaggerTagMapping := flag.String("swagger-tag-mapping", "repos/日志服务/_swagger_tag_mapping.yaml", "path to swagger tag title mapping yaml")
@@ -108,11 +110,25 @@ func main() {
 	contractVersion := flag.String("contract-version", "v1", "operation contract version")
 	flag.Parse()
 
+	if *mergeInternalOnly && *mergeSupplementalOnly {
+		fatal(errors.New("--merge-internal-operations-only and --merge-supplemental-operations-only cannot be used together"))
+	}
 	if *mergeInternalOnly {
 		if err := mergeInternalOperationsIntoCheckedInCatalog(
 			*outOperationCatalog,
 			*outOperationCatalogLock,
 			*internalOperationsPath,
+			*lockRoot,
+		); err != nil {
+			fatal(err)
+		}
+		return
+	}
+	if *mergeSupplementalOnly {
+		if err := mergeSupplementalOperationsIntoCheckedInCatalog(
+			*outOperationCatalog,
+			*outOperationCatalogLock,
+			*supplementalOperationsPath,
 			*lockRoot,
 		); err != nil {
 			fatal(err)
@@ -155,25 +171,35 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	supplementalOperations, err := loadSupplementalOperationOverrides(*supplementalOperationsPath)
+	if err != nil {
+		fatal(err)
+	}
+	operationCatalog, err = mergeSupplementalOperations(operationCatalog, supplementalOperations)
+	if err != nil {
+		fatal(err)
+	}
 
 	lock, err := buildOperationCatalogLock(*lockRoot, "source", operationCatalog, map[string]string{
-		"api_doc_root":                  *apiDocRoot,
-		"contract_catalog":              "internal/contract/catalog.go",
-		"contract_digest":               "internal/contract/digest.go",
-		"contract_schema":               "internal/contract/schema.go",
-		"contract_types":                "internal/contract/types.go",
-		"generator_catalog_v2":          "internal/openapigen/catalog_v2.go",
-		"generator_internal_operations": "internal/openapigen/internal_operations.go",
-		"generator_main":                "internal/openapigen/main.go",
-		"generator_source_operations":   "internal/openapigen/source_operations.go",
-		"group_key_mapping":             *groupKeyMapping,
-		"override_internal_operations":  *internalOperationsPath,
-		"override_output_policy":        *toolOutputPolicyOverridesPath,
-		"override_recovery":             *toolRecoveryOverridesPath,
-		"override_risk":                 *toolRiskOverridesPath,
-		"override_usage_constraints":    *toolUsageConstraintsPath,
-		"spec":                          *spec,
-		"swagger_tag_mapping":           *swaggerTagMapping,
+		"api_doc_root":                      *apiDocRoot,
+		"contract_catalog":                  "internal/contract/catalog.go",
+		"contract_digest":                   "internal/contract/digest.go",
+		"contract_schema":                   "internal/contract/schema.go",
+		"contract_types":                    "internal/contract/types.go",
+		"generator_catalog_v2":              "internal/openapigen/catalog_v2.go",
+		"generator_internal_operations":     "internal/openapigen/internal_operations.go",
+		"generator_supplemental_operations": "internal/openapigen/supplemental_operations.go",
+		"generator_main":                    "internal/openapigen/main.go",
+		"generator_source_operations":       "internal/openapigen/source_operations.go",
+		"group_key_mapping":                 *groupKeyMapping,
+		"override_internal_operations":      *internalOperationsPath,
+		"override_supplemental_operations":  *supplementalOperationsPath,
+		"override_output_policy":            *toolOutputPolicyOverridesPath,
+		"override_recovery":                 *toolRecoveryOverridesPath,
+		"override_risk":                     *toolRiskOverridesPath,
+		"override_usage_constraints":        *toolUsageConstraintsPath,
+		"spec":                              *spec,
+		"swagger_tag_mapping":               *swaggerTagMapping,
 	})
 	if err != nil {
 		fatal(err)

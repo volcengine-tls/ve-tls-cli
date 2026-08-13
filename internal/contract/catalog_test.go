@@ -8,12 +8,12 @@ import (
 	"testing"
 )
 
-func TestEmbeddedCatalogHasUnifiedSchemasAnd131Operations(t *testing.T) {
+func TestEmbeddedCatalogHasUnifiedSchemasAnd140Operations(t *testing.T) {
 	catalog, err := LoadEmbedded()
 	if err != nil {
 		t.Fatalf("LoadEmbedded: %v", err)
 	}
-	if got, want := len(catalog.Operations), 131; got != want {
+	if got, want := len(catalog.Operations), 140; got != want {
 		t.Fatalf("operation count=%d, want %d", got, want)
 	}
 	if err := Validate(catalog); err != nil {

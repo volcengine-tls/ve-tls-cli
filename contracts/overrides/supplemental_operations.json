@@ -1,0 +1,1870 @@
+{
+  "operations": [
+    {
+      "id": "account.active",
+      "group": "account",
+      "group_title": "账号管理",
+      "action": "ActiveTlsAccount",
+      "resource": "tls-account",
+      "verb": "active",
+      "family": "account",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/ActiveTlsAccount",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {},
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ActiveTlsAccount",
+        "source": "log-service account API",
+        "usage_constraints": "This operation activates the TLS account and writes account state. Do not retry automatically after an ambiguous failure; call account.get first to reconcile the current status."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "collector.extract",
+      "group": "collector",
+      "group_title": "采集配置管理",
+      "action": "ExtractLogSample",
+      "resource": "log-sample",
+      "verb": "extract",
+      "family": "collector",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/ExtractLogSample",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "BeginRegex": {
+              "type": "string",
+              "description": "Regular expression that identifies the first line of a multiline log. Pass an empty string when only LogRegex is used."
+            },
+            "LogRegex": {
+              "type": "string",
+              "description": "Regular expression that matches and extracts the complete log. Pass an empty string when only BeginRegex is used."
+            },
+            "LogSample": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 3000,
+              "description": "Log sample to validate. A non-empty BeginRegex requires a multiline sample."
+            }
+          },
+          "required": [
+            "BeginRegex",
+            "LogRegex",
+            "LogSample"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ExtractLogSample",
+        "source": "log-service rule API",
+        "usage_constraints": "BeginRegex and LogRegex keys are both required, and at least one value must be non-empty. This is a non-persistent validation operation."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "collector.generate-begin-regex",
+      "group": "collector",
+      "group_title": "采集配置管理",
+      "action": "GenerateBeginRegex",
+      "resource": "begin-regex",
+      "verb": "generate",
+      "family": "collector",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/GenerateBeginRegex",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "LogSample": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 3000,
+              "description": "Single-line log sample used to generate a beginning-line regular expression."
+            }
+          },
+          "required": [
+            "LogSample"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "GenerateBeginRegex",
+        "source": "log-service regex API",
+        "usage_constraints": "This is a non-persistent configuration helper. Validate the generated expression with representative samples before saving a collector rule."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "collector.generate-log-regex",
+      "group": "collector",
+      "group_title": "采集配置管理",
+      "action": "GenerateLogRegex",
+      "resource": "log-regex",
+      "verb": "generate",
+      "family": "collector",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/GenerateLogRegex",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "End": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Comma-separated exclusive end offsets paired with Start."
+            },
+            "LogSample": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 3000,
+              "description": "Log sample used to generate the extraction regular expression."
+            },
+            "Multiline": {
+              "type": "boolean",
+              "description": "Whether LogSample represents a multiline log."
+            },
+            "Start": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Comma-separated inclusive start offsets paired with End. Each pair selects a [start,end) substring."
+            }
+          },
+          "required": [
+            "End",
+            "LogSample",
+            "Start"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "GenerateLogRegex",
+        "source": "log-service regex API",
+        "usage_constraints": "Start and End must contain the same number of ordered, non-overlapping offsets within LogSample. This operation does not persist the generated expression."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "collector.parse-path",
+      "group": "collector",
+      "group_title": "采集配置管理",
+      "action": "ParsePath",
+      "resource": "path",
+      "verb": "parse",
+      "family": "collector",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/ParsePath",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "PathSample": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Absolute path sample. Wildcards '*', '?' and '**' are not allowed."
+            },
+            "Regex": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Valid regular expression whose capture groups extract values from PathSample."
+            }
+          },
+          "required": [
+            "PathSample",
+            "Regex"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ParsePath",
+        "source": "log-service rule API",
+        "usage_constraints": "PathSample must be absolute and contain no wildcard characters. This is a non-persistent validation operation."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "collector.parse-time",
+      "group": "collector",
+      "group_title": "采集配置管理",
+      "action": "ParseTime",
+      "resource": "time",
+      "verb": "parse",
+      "family": "collector",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/ParseTime",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "EnableNanosecond": {
+              "type": "boolean",
+              "description": "Return a nanosecond timestamp when true; otherwise return milliseconds."
+            },
+            "TimeFormat": {
+              "type": "string",
+              "minLength": 1,
+              "description": "strptime-compatible format used to parse TimeSample."
+            },
+            "TimeSample": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Timestamp sample to parse."
+            },
+            "TimeZone": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Timezone such as Local, Etc/GMT+12, or GMT-12:00."
+            }
+          },
+          "required": [
+            "TimeFormat",
+            "TimeSample",
+            "TimeZone"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ParseTime",
+        "source": "log-service rule API",
+        "usage_constraints": "Timestamp units depend on EnableNanosecond: true returns nanoseconds and false returns milliseconds. No configuration is persisted."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "collector.split",
+      "group": "collector",
+      "group_title": "采集配置管理",
+      "action": "SplitWithQuote",
+      "resource": "quoted-log-sample",
+      "verb": "split",
+      "family": "collector",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/SplitWithQuote",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "Delimiter": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Delimiter used to split LogSample."
+            },
+            "LogSample": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 3000,
+              "description": "Log sample to split."
+            },
+            "Quote": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional quote marker. Content enclosed by this marker is not split."
+            }
+          },
+          "required": [
+            "Delimiter",
+            "LogSample"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "SplitWithQuote",
+        "source": "log-service rule API",
+        "usage_constraints": "If Quote is present it must be non-empty and must not occur in Delimiter. This is a non-persistent validation operation."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "log.describe-latest-log",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "DescribeLatestLog",
+      "resource": "latest-log",
+      "verb": "describe",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/DescribeLatestLog",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "topicId": {
+              "type": "string",
+              "minLength": 1,
+              "description": "TLS topic ID. The wire field intentionally uses lower camel case."
+            }
+          },
+          "required": [
+            "topicId"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeLatestLog",
+        "source": "log-service log API",
+        "usage_constraints": "This operation reads the latest available log sample for a topic. Treat returned log fields as potentially sensitive."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "log.preview",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "PreviewDelimiterLog",
+      "resource": "delimiter-log",
+      "verb": "preview",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/PreviewDelimiterLog",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "delimiter": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Full-text index delimiters. Escape special characters as required by TLS."
+            },
+            "log": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 600,
+              "description": "Example log used for the delimiter preview."
+            },
+            "topicId": {
+              "type": "string",
+              "minLength": 1,
+              "description": "TLS topic ID. The wire field intentionally uses lower camel case."
+            }
+          },
+          "required": [
+            "delimiter",
+            "log",
+            "topicId"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "PreviewDelimiterLog",
+        "source": "log-service log API",
+        "usage_constraints": "This operation validates topic ownership and invokes the backend analyzer, but does not persist index configuration. Limit retries for transient backend failures."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "retry"
+      }
+    },
+    {
+      "id": "processor.exec-processor",
+      "group": "processor",
+      "group_title": "数据处理器",
+      "action": "ExecProcessor",
+      "resource": "processor",
+      "verb": "create",
+      "family": "processor",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/ExecProcessor",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "DSLContent": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000,
+              "description": "Processor DSL or SPL content to validate against LogSample."
+            },
+            "ExecAction": {
+              "type": "string",
+              "enum": [
+                "debug"
+              ],
+              "description": "Execution action. The backend currently accepts only debug."
+            },
+            "LogSample": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Example log object passed to the processor debugger."
+            },
+            "ProcessorDSLType": {
+              "type": "string",
+              "enum": [
+                "dsl",
+                "spl"
+              ],
+              "description": "Processor language. This field is required by backend Validate even though the generated Swagger omits it from required."
+            },
+            "ProcessorType": {
+              "type": "string",
+              "enum": [
+                "ingester",
+                "consumer"
+              ]
+            }
+          },
+          "required": [
+            "DSLContent",
+            "ExecAction",
+            "LogSample",
+            "ProcessorDSLType",
+            "ProcessorType"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ExecProcessor",
+        "source": "log-service processor API",
+        "usage_constraints": "This operation compiles and runs a processor against a sample without persisting processor state. Inspect ExecStatus even when HTTP status is 200; failed executions return ExecStatus=failed with Error."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "log-back-flow.create",
+      "group": "log-back-flow",
+      "group_title": "数据回流",
+      "action": "CreateLogBackFlowTask",
+      "resource": "log-back-flow-task",
+      "verb": "create",
+      "family": "log-back-flow",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/CreateLogBackFlowTask",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "BackFlowEndTime": {
+              "description": "回流结束时间 单位为秒（可选参数 nil 表示持续回流）",
+              "type": "integer"
+            },
+            "BackFlowStartTime": {
+              "description": "回流开始时间 单位为秒",
+              "type": "integer",
+              "minimum": 1
+            },
+            "Description": {
+              "description": "任务描述: 不支持<>、'、\\、\\\\; 长度为0～64个字符。",
+              "type": "string",
+              "maxLength": 64
+            },
+            "ETLTaskInfo": {
+              "description": "ETL任务信息",
+              "properties": {
+                "Script": {
+                  "description": "加工脚本",
+                  "type": "string"
+                },
+                "TargetResources": {
+                  "description": "目标输出的topic",
+                  "items": {
+                    "properties": {
+                      "Alias": {
+                        "type": "string"
+                      },
+                      "Endpoint": {
+                        "type": "string"
+                      },
+                      "ProxyPoint": {
+                        "type": "string"
+                      },
+                      "Region": {
+                        "type": "string"
+                      },
+                      "RoleTrn": {
+                        "type": "string"
+                      },
+                      "ServiceTrn": {
+                        "type": "string"
+                      },
+                      "TopicId": {
+                        "description": "别名",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "Alias",
+                      "Region",
+                      "TopicId"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "Script",
+                "TargetResources"
+              ],
+              "type": "object"
+            },
+            "IamProjectName": {
+              "description": "访问控制项目名称。",
+              "type": "string"
+            },
+            "LogBackFlowTaskSource": {
+              "description": "数据源信息",
+              "properties": {
+                "LogBackFlowTaskTopicSource": {
+                  "description": "任务详情。",
+                  "properties": {
+                    "ProjectId": {
+                      "description": "日志主题所属的日志项目ID。",
+                      "type": "string"
+                    },
+                    "TopicID": {
+                      "description": "日志主题ID",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "ProjectId",
+                    "TopicID"
+                  ]
+                },
+                "SourceType": {
+                  "description": "任务源类型",
+                  "type": "string",
+                  "enum": [
+                    "Topic"
+                  ]
+                }
+              },
+              "type": "object",
+              "required": [
+                "LogBackFlowTaskTopicSource",
+                "SourceType"
+              ]
+            },
+            "QueryParams": {
+              "properties": {
+                "Asc": {
+                  "description": "是否升序",
+                  "type": "boolean"
+                },
+                "Fields": {
+                  "description": "要查询的字段",
+                  "items": {
+                    "properties": {
+                      "Alias": {
+                        "type": "string"
+                      },
+                      "Column": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "Filters": {
+                  "description": "要查询的条件 条件之间关系默认为 AND",
+                  "items": {
+                    "properties": {
+                      "Field": {
+                        "description": "列名",
+                        "type": "string"
+                      },
+                      "Operator": {
+                        "description": "比较符号：\">\", \"<\", \"=\", \"IN\", \"NOT IN\", \"NULL\", \"NOT NULL\" 等, \"NULL\" (注意 \"NOT NULL\" 没有对应值)",
+                        "type": "string"
+                      },
+                      "Value": {
+                        "description": "比较操作符号对应的单值"
+                      },
+                      "Values": {
+                        "description": "in/not in对应的多值列表",
+                        "items": {},
+                        "type": "array"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "Limit": {
+                  "description": "要查询的条数",
+                  "type": "integer"
+                },
+                "Order": {
+                  "description": "排序字段，空时默认 Start",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "ShipperToAgentLoopInfo": {
+              "description": "回流任务配置 传空表示不进行回流",
+              "properties": {
+                "ContentInfo": {
+                  "properties": {
+                    "CsvInfo": {
+                      "description": "csv格式日志内容配置。",
+                      "properties": {
+                        "Delimiter": {
+                          "description": "分隔符，支持填入逗号、制表符、竖线、分号、空格。",
+                          "type": "string"
+                        },
+                        "EscapeChar": {
+                          "description": "转义符，字段内容包含分隔符时，使用转义符包裹该字段，当前仅支持单引号，双引号，空字符。",
+                          "type": "string"
+                        },
+                        "Keys": {
+                          "description": "每列key的名字。\n- 仅支持字母、数字和_-./，并且不支持以(_)开头。\n- 同一个索引中key名称唯一。\n- 长度为1-128。",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "NonFieldContent": {
+                          "description": "无效字段填充内容，长度为0-128。",
+                          "type": "string"
+                        },
+                        "PrintHeader": {
+                          "description": "首行是否打印key。",
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "Delimiter",
+                        "EscapeChar",
+                        "Keys",
+                        "NonFieldContent",
+                        "PrintHeader"
+                      ],
+                      "type": "object"
+                    },
+                    "Format": {
+                      "description": "日志内容解析格式，当前投递 tos 支持 json/csv/parquet；投递 kafka 支持 original(原文)、json。",
+                      "enum": [
+                        "json",
+                        "csv",
+                        "parquet",
+                        "original"
+                      ],
+                      "type": "string"
+                    },
+                    "JsonInfo": {
+                      "description": "json格式日志内容配置。",
+                      "properties": {
+                        "Enable": {
+                          "description": "启用标志。",
+                          "type": "boolean"
+                        },
+                        "Escape": {
+                          "description": "是否转义",
+                          "type": "boolean"
+                        },
+                        "Keys": {
+                          "description": "投递日志字段，目前支持：\n__content__(必选)、__source__、__path__、__time__、__image_name__、__container_name__、__pod_name__、__pod_uid__、\n__namespace__、 __tag____client_ip__、__tag____receive_time__",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "Enable"
+                      ],
+                      "type": "object"
+                    },
+                    "ParquetInfo": {
+                      "description": "parquet格式日志内容配置。",
+                      "properties": {
+                        "Fields": {
+                          "items": {
+                            "properties": {
+                              "Key": {
+                                "type": "string"
+                              },
+                              "TransType": {
+                                "enum": [
+                                  "string",
+                                  "int32",
+                                  "int64",
+                                  "float",
+                                  "double",
+                                  "boolean"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "Key",
+                              "TransType"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "Fields"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "EvaluationSetShipperInfo": {
+                  "properties": {
+                    "AllowPartialAdd": {
+                      "description": "写入评测集数据时是否允许部分成功。",
+                      "type": "boolean"
+                    },
+                    "BatchSize": {
+                      "description": "单次写入评测集 item 的最大条数。",
+                      "type": "integer"
+                    },
+                    "BizCategory": {
+                      "description": "评测集业务分类。",
+                      "type": "string"
+                    },
+                    "EvaluationSetDescription": {
+                      "description": "评测集描述。",
+                      "type": "string"
+                    },
+                    "EvaluationSetId": {
+                      "description": "已有评测集 ID。未指定时，投递任务将按 EvaluationSetName 和 EvaluationSetSchema 创建评测集。",
+                      "type": "string"
+                    },
+                    "EvaluationSetName": {
+                      "description": "评测集名称。",
+                      "type": "string"
+                    },
+                    "EvaluationSetSchema": {
+                      "description": "创建评测集时使用的字段 schema。",
+                      "properties": {
+                        "FieldSchemas": {
+                          "items": {
+                            "properties": {
+                              "ContentType": {
+                                "type": "string"
+                              },
+                              "DefaultDisplayFormat": {
+                                "type": "integer"
+                              },
+                              "Description": {
+                                "type": "string"
+                              },
+                              "IsRequired": {
+                                "type": "boolean"
+                              },
+                              "Key": {
+                                "type": "string"
+                              },
+                              "Name": {
+                                "type": "string"
+                              },
+                              "TextSchema": {
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "FieldMappings": {
+                      "description": "TLS 日志字段到评测集字段的映射。",
+                      "items": {
+                        "properties": {
+                          "Source": {
+                            "type": "string"
+                          },
+                          "Target": {
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "ItemKeyField": {
+                      "description": "作为评测集 item_key 的 TLS 日志字段。",
+                      "type": "string"
+                    },
+                    "ProjectName": {
+                      "description": "AgentLoop 项目名称。",
+                      "type": "string"
+                    },
+                    "SkipInvalidItems": {
+                      "description": "写入评测集数据时是否跳过非法数据。",
+                      "type": "boolean"
+                    },
+                    "WorkspaceId": {
+                      "description": "评测集所属空间 ID。",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "WorkspaceId"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "ShipperToTosInfo": {
+              "description": "投递任务配置 传空表示不进行投递",
+              "properties": {
+                "ContentInfo": {
+                  "description": "回流的内容格式配置",
+                  "properties": {
+                    "CsvInfo": {
+                      "description": "csv格式日志内容配置。",
+                      "properties": {
+                        "Delimiter": {
+                          "description": "分隔符，支持填入逗号、制表符、竖线、分号、空格。",
+                          "type": "string"
+                        },
+                        "EscapeChar": {
+                          "description": "转义符，字段内容包含分隔符时，使用转义符包裹该字段，当前仅支持单引号，双引号，空字符。",
+                          "type": "string"
+                        },
+                        "Keys": {
+                          "description": "每列key的名字。\n- 仅支持字母、数字和_-./，并且不支持以(_)开头。\n- 同一个索引中key名称唯一。\n- 长度为1-128。",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "NonFieldContent": {
+                          "description": "无效字段填充内容，长度为0-128。",
+                          "type": "string"
+                        },
+                        "PrintHeader": {
+                          "description": "首行是否打印key。",
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "Delimiter",
+                        "EscapeChar",
+                        "Keys",
+                        "NonFieldContent",
+                        "PrintHeader"
+                      ],
+                      "type": "object"
+                    },
+                    "Format": {
+                      "description": "日志内容解析格式，当前投递 tos 支持 json/csv/parquet；投递 kafka 支持 original(原文)、json。",
+                      "enum": [
+                        "json",
+                        "csv",
+                        "parquet",
+                        "original"
+                      ],
+                      "type": "string"
+                    },
+                    "JsonInfo": {
+                      "description": "json格式日志内容配置。",
+                      "properties": {
+                        "Enable": {
+                          "description": "启用标志。",
+                          "type": "boolean"
+                        },
+                        "Escape": {
+                          "description": "是否转义",
+                          "type": "boolean"
+                        },
+                        "Keys": {
+                          "description": "投递日志字段，目前支持：\n__content__(必选)、__source__、__path__、__time__、__image_name__、__container_name__、__pod_name__、__pod_uid__、\n__namespace__、 __tag____client_ip__、__tag____receive_time__",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "Enable"
+                      ],
+                      "type": "object"
+                    },
+                    "ParquetInfo": {
+                      "description": "parquet格式日志内容配置。",
+                      "properties": {
+                        "Fields": {
+                          "items": {
+                            "properties": {
+                              "Key": {
+                                "type": "string"
+                              },
+                              "TransType": {
+                                "enum": [
+                                  "string",
+                                  "int32",
+                                  "int64",
+                                  "float",
+                                  "double",
+                                  "boolean"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "Key",
+                              "TransType"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "Fields"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "TosShipperInfo": {
+                  "description": "投递到Tos相关信息",
+                  "properties": {
+                    "Bucket": {
+                      "description": "对象存储桶名称。\n- 只能包含数字、横线（-）、字母a-z。\n- 开始和结尾只能是数字或字母。\n- 长度在3-63个字符之内。",
+                      "type": "string"
+                    },
+                    "Compress": {
+                      "description": "压缩格式，当前仅支持snappy,gzip,lz4,none。",
+                      "enum": [
+                        "snappy",
+                        "gzip",
+                        "lz4",
+                        "none"
+                      ],
+                      "type": "string"
+                    },
+                    "EnablePartitionKV": {
+                      "type": "boolean"
+                    },
+                    "Endpoint": {
+                      "description": "代理集群接入目标域名，对外api不暴露此参数",
+                      "type": "string"
+                    },
+                    "Interval": {
+                      "description": "投递时间间隔，单位为秒，取值范围为300-900。",
+                      "type": "integer"
+                    },
+                    "MaxSize": {
+                      "description": "投递原文的单个对象最大容量，单位为MB，取值范围为5-256。",
+                      "type": "integer"
+                    },
+                    "PartitionFormat": {
+                      "description": "投递日志的分区规则。\n- 参考c语言的strftime函数对于format参数的说明：https://man7.org/linux/man-pages/man3/strptime.3.html\n- 不能以正斜线（/）或者反斜线（\\）开头",
+                      "type": "string"
+                    },
+                    "PartitionFromValue": {
+                      "properties": {
+                        "Key": {
+                          "type": "string"
+                        },
+                        "Position": {
+                          "enum": [
+                            "before_time",
+                            "after_time"
+                          ],
+                          "type": "string"
+                        },
+                        "Regex": {
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Prefix": {
+                      "description": "投递对象存储桶中的前缀目录。\n- 不能以正斜线（/）或者反斜线（\\）开头，且不能使用连续的正斜线（/）。\n- 不能以..作为文件夹名称。\n- 同一存储桶中，文件夹不允许重名。",
+                      "type": "string"
+                    },
+                    "ProxyPoint": {
+                      "description": "代理集群接入点，对外api不暴露此参数",
+                      "type": "string"
+                    },
+                    "Region": {
+                      "description": "投递对象存储桶所在区域，对外api不暴露此参数",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "Bucket"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "TaskName": {
+              "description": "任务名称",
+              "type": "string",
+              "maxLength": 50
+            }
+          },
+          "required": [
+            "BackFlowStartTime",
+            "ETLTaskInfo",
+            "LogBackFlowTaskSource",
+            "TaskName"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "CreateLogBackFlowTask",
+        "source": "数据回流",
+        "usage_constraints": "ETLTaskInfo and BackFlowStartTime are required by server validation. SourceType currently accepts only Topic. ShipperToTosInfo and ShipperToAgentLoopInfo are mutually exclusive. BackFlowStartTime and BackFlowEndTime are Unix seconds; BackFlowEndTime must not precede the start or be in the future. This operation persists a task and initializes related ETL and shipper resources; do not automatically retry an ambiguous failure."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "log-back-flow.delete",
+      "group": "log-back-flow",
+      "group_title": "数据回流",
+      "action": "DeleteLogBackFlowTask",
+      "resource": "log-back-flow-task",
+      "verb": "delete",
+      "family": "log-back-flow",
+      "visibility": "public",
+      "wire": {
+        "method": "DELETE",
+        "path": "/DeleteLogBackFlowTask",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "TaskId": {
+              "description": "任务ID",
+              "type": "string"
+            }
+          },
+          "required": [
+            "TaskId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DeleteLogBackFlowTask",
+        "source": "数据回流",
+        "usage_constraints": "TaskId is required. Deletion removes the backflow task and its related ETL or shipper resources; do not automatically retry an ambiguous failure."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "log-back-flow.describe",
+      "group": "log-back-flow",
+      "group_title": "数据回流",
+      "action": "DescribeLogBackFlowTasks",
+      "resource": "log-back-flow-tasks",
+      "verb": "describe",
+      "family": "log-back-flow",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeLogBackFlowTasks",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "properties": {
+            "EtlTaskID": {
+              "description": "EtlTaskID，ETL任务ID。",
+              "type": "string"
+            },
+            "PageNumber": {
+              "description": "分页，默认从1开始。",
+              "type": "integer"
+            },
+            "PageSize": {
+              "description": "分页大小限制，默认为20，最大为100。",
+              "type": "integer"
+            },
+            "ShipperId": {
+              "description": "ShipperId，投递任务ID。",
+              "type": "string"
+            },
+            "Status": {
+              "description": "Status，回流任务状态。",
+              "type": "integer",
+              "enum": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5
+              ]
+            },
+            "TaskId": {
+              "description": "TaskId，回流任务ID。",
+              "type": "string"
+            },
+            "TaskName": {
+              "description": "TaskName，回流任务名称。",
+              "type": "string"
+            },
+            "TopicIDList": {
+              "description": "TopicID列表，基于该列表筛选。",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "pagination": {
+        "mode": "page-number",
+        "page_number_param": "PageNumber",
+        "page_size_param": "PageSize",
+        "items_field": "LogBackFlowTasks",
+        "total_field": "Total",
+        "default_page_size": 100,
+        "max_pages": 1000
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "envelope",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeLogBackFlowTasks",
+        "source": "数据回流",
+        "usage_constraints": "EtlTaskID is the server query parameter for filtering by ETL task. Status accepts numeric values 0 through 5. ScheduleSQLTaskId is not accepted by the current server implementation."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "log-back-flow.modify",
+      "group": "log-back-flow",
+      "group_title": "数据回流",
+      "action": "ModifyLogBackFlowTask",
+      "resource": "log-back-flow-task",
+      "verb": "modify",
+      "family": "log-back-flow",
+      "visibility": "public",
+      "wire": {
+        "method": "PUT",
+        "path": "/ModifyLogBackFlowTask",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "ETLTaskInfo": {
+              "description": "ETL任务信息",
+              "properties": {
+                "Script": {
+                  "description": "加工脚本",
+                  "type": "string"
+                },
+                "TargetResources": {
+                  "description": "目标输出的topic",
+                  "items": {
+                    "properties": {
+                      "Alias": {
+                        "type": "string"
+                      },
+                      "Endpoint": {
+                        "type": "string"
+                      },
+                      "ProxyPoint": {
+                        "type": "string"
+                      },
+                      "Region": {
+                        "type": "string"
+                      },
+                      "RoleTrn": {
+                        "type": "string"
+                      },
+                      "ServiceTrn": {
+                        "type": "string"
+                      },
+                      "TopicId": {
+                        "description": "别名",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "Alias",
+                      "Region",
+                      "TopicId"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "Script",
+                "TargetResources"
+              ],
+              "type": "object"
+            },
+            "QueryParams": {
+              "properties": {
+                "Asc": {
+                  "description": "是否升序",
+                  "type": "boolean"
+                },
+                "Fields": {
+                  "description": "要查询的字段",
+                  "items": {
+                    "properties": {
+                      "Alias": {
+                        "type": "string"
+                      },
+                      "Column": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "Filters": {
+                  "description": "要查询的条件 条件之间关系默认为 AND",
+                  "items": {
+                    "properties": {
+                      "Field": {
+                        "description": "列名",
+                        "type": "string"
+                      },
+                      "Operator": {
+                        "description": "比较符号：\">\", \"<\", \"=\", \"IN\", \"NOT IN\", \"NULL\", \"NOT NULL\" 等, \"NULL\" (注意 \"NOT NULL\" 没有对应值)",
+                        "type": "string"
+                      },
+                      "Value": {
+                        "description": "比较操作符号对应的单值"
+                      },
+                      "Values": {
+                        "description": "in/not in对应的多值列表",
+                        "items": {},
+                        "type": "array"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "Limit": {
+                  "description": "要查询的条数",
+                  "type": "integer"
+                },
+                "Order": {
+                  "description": "排序字段，空时默认 Start",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "ShipperToAgentLoopInfo": {
+              "properties": {
+                "ContentInfo": {
+                  "properties": {
+                    "CsvInfo": {
+                      "description": "csv格式日志内容配置。",
+                      "properties": {
+                        "Delimiter": {
+                          "description": "分隔符，支持填入逗号、制表符、竖线、分号、空格。",
+                          "type": "string"
+                        },
+                        "EscapeChar": {
+                          "description": "转义符，字段内容包含分隔符时，使用转义符包裹该字段，当前仅支持单引号，双引号，空字符。",
+                          "type": "string"
+                        },
+                        "Keys": {
+                          "description": "每列key的名字。\n- 仅支持字母、数字和_-./，并且不支持以(_)开头。\n- 同一个索引中key名称唯一。\n- 长度为1-128。",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "NonFieldContent": {
+                          "description": "无效字段填充内容，长度为0-128。",
+                          "type": "string"
+                        },
+                        "PrintHeader": {
+                          "description": "首行是否打印key。",
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "Delimiter",
+                        "EscapeChar",
+                        "Keys",
+                        "NonFieldContent",
+                        "PrintHeader"
+                      ],
+                      "type": "object"
+                    },
+                    "Format": {
+                      "description": "日志内容解析格式，当前投递 tos 支持 json/csv/parquet；投递 kafka 支持 original(原文)、json。",
+                      "enum": [
+                        "json",
+                        "csv",
+                        "parquet",
+                        "original"
+                      ],
+                      "type": "string"
+                    },
+                    "JsonInfo": {
+                      "description": "json格式日志内容配置。",
+                      "properties": {
+                        "Enable": {
+                          "description": "启用标志。",
+                          "type": "boolean"
+                        },
+                        "Escape": {
+                          "description": "是否转义",
+                          "type": "boolean"
+                        },
+                        "Keys": {
+                          "description": "投递日志字段，目前支持：\n__content__(必选)、__source__、__path__、__time__、__image_name__、__container_name__、__pod_name__、__pod_uid__、\n__namespace__、 __tag____client_ip__、__tag____receive_time__",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "Enable"
+                      ],
+                      "type": "object"
+                    },
+                    "ParquetInfo": {
+                      "description": "parquet格式日志内容配置。",
+                      "properties": {
+                        "Fields": {
+                          "items": {
+                            "properties": {
+                              "Key": {
+                                "type": "string"
+                              },
+                              "TransType": {
+                                "enum": [
+                                  "string",
+                                  "int32",
+                                  "int64",
+                                  "float",
+                                  "double",
+                                  "boolean"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "Key",
+                              "TransType"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "Fields"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "EvaluationSetShipperInfo": {
+                  "properties": {
+                    "AllowPartialAdd": {
+                      "description": "写入评测集数据时是否允许部分成功。",
+                      "type": "boolean"
+                    },
+                    "BatchSize": {
+                      "description": "单次写入评测集 item 的最大条数。",
+                      "type": "integer"
+                    },
+                    "BizCategory": {
+                      "description": "评测集业务分类。",
+                      "type": "string"
+                    },
+                    "EvaluationSetDescription": {
+                      "description": "评测集描述。",
+                      "type": "string"
+                    },
+                    "EvaluationSetId": {
+                      "description": "已有评测集 ID。未指定时，投递任务将按 EvaluationSetName 和 EvaluationSetSchema 创建评测集。",
+                      "type": "string"
+                    },
+                    "EvaluationSetName": {
+                      "description": "评测集名称。",
+                      "type": "string"
+                    },
+                    "EvaluationSetSchema": {
+                      "description": "创建评测集时使用的字段 schema。",
+                      "properties": {
+                        "FieldSchemas": {
+                          "items": {
+                            "properties": {
+                              "ContentType": {
+                                "type": "string"
+                              },
+                              "DefaultDisplayFormat": {
+                                "type": "integer"
+                              },
+                              "Description": {
+                                "type": "string"
+                              },
+                              "IsRequired": {
+                                "type": "boolean"
+                              },
+                              "Key": {
+                                "type": "string"
+                              },
+                              "Name": {
+                                "type": "string"
+                              },
+                              "TextSchema": {
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "FieldMappings": {
+                      "description": "TLS 日志字段到评测集字段的映射。",
+                      "items": {
+                        "properties": {
+                          "Source": {
+                            "type": "string"
+                          },
+                          "Target": {
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "ItemKeyField": {
+                      "description": "作为评测集 item_key 的 TLS 日志字段。",
+                      "type": "string"
+                    },
+                    "ProjectName": {
+                      "description": "AgentLoop 项目名称。",
+                      "type": "string"
+                    },
+                    "SkipInvalidItems": {
+                      "description": "写入评测集数据时是否跳过非法数据。",
+                      "type": "boolean"
+                    },
+                    "WorkspaceId": {
+                      "description": "评测集所属空间 ID。",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "WorkspaceId"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "ShipperToTosInfo": {
+              "description": "投递任务配置 传空表示不进行投递",
+              "properties": {
+                "ContentInfo": {
+                  "description": "回流的内容格式配置",
+                  "properties": {
+                    "CsvInfo": {
+                      "description": "csv格式日志内容配置。",
+                      "properties": {
+                        "Delimiter": {
+                          "description": "分隔符，支持填入逗号、制表符、竖线、分号、空格。",
+                          "type": "string"
+                        },
+                        "EscapeChar": {
+                          "description": "转义符，字段内容包含分隔符时，使用转义符包裹该字段，当前仅支持单引号，双引号，空字符。",
+                          "type": "string"
+                        },
+                        "Keys": {
+                          "description": "每列key的名字。\n- 仅支持字母、数字和_-./，并且不支持以(_)开头。\n- 同一个索引中key名称唯一。\n- 长度为1-128。",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "NonFieldContent": {
+                          "description": "无效字段填充内容，长度为0-128。",
+                          "type": "string"
+                        },
+                        "PrintHeader": {
+                          "description": "首行是否打印key。",
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "Delimiter",
+                        "EscapeChar",
+                        "Keys",
+                        "NonFieldContent",
+                        "PrintHeader"
+                      ],
+                      "type": "object"
+                    },
+                    "Format": {
+                      "description": "日志内容解析格式，当前投递 tos 支持 json/csv/parquet；投递 kafka 支持 original(原文)、json。",
+                      "enum": [
+                        "json",
+                        "csv",
+                        "parquet",
+                        "original"
+                      ],
+                      "type": "string"
+                    },
+                    "JsonInfo": {
+                      "description": "json格式日志内容配置。",
+                      "properties": {
+                        "Enable": {
+                          "description": "启用标志。",
+                          "type": "boolean"
+                        },
+                        "Escape": {
+                          "description": "是否转义",
+                          "type": "boolean"
+                        },
+                        "Keys": {
+                          "description": "投递日志字段，目前支持：\n__content__(必选)、__source__、__path__、__time__、__image_name__、__container_name__、__pod_name__、__pod_uid__、\n__namespace__、 __tag____client_ip__、__tag____receive_time__",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "Enable"
+                      ],
+                      "type": "object"
+                    },
+                    "ParquetInfo": {
+                      "description": "parquet格式日志内容配置。",
+                      "properties": {
+                        "Fields": {
+                          "items": {
+                            "properties": {
+                              "Key": {
+                                "type": "string"
+                              },
+                              "TransType": {
+                                "enum": [
+                                  "string",
+                                  "int32",
+                                  "int64",
+                                  "float",
+                                  "double",
+                                  "boolean"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "Key",
+                              "TransType"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "Fields"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
+                "TosShipperInfo": {
+                  "description": "投递到Tos相关信息",
+                  "properties": {
+                    "Bucket": {
+                      "description": "对象存储桶名称。\n- 只能包含数字、横线（-）、字母a-z。\n- 开始和结尾只能是数字或字母。\n- 长度在3-63个字符之内。",
+                      "type": "string"
+                    },
+                    "Compress": {
+                      "description": "压缩格式，当前仅支持snappy,gzip,lz4,none。",
+                      "enum": [
+                        "snappy",
+                        "gzip",
+                        "lz4",
+                        "none"
+                      ],
+                      "type": "string"
+                    },
+                    "EnablePartitionKV": {
+                      "type": "boolean"
+                    },
+                    "Endpoint": {
+                      "description": "代理集群接入目标域名，对外api不暴露此参数",
+                      "type": "string"
+                    },
+                    "Interval": {
+                      "description": "投递时间间隔，单位为秒，取值范围为300-900。",
+                      "type": "integer"
+                    },
+                    "MaxSize": {
+                      "description": "投递原文的单个对象最大容量，单位为MB，取值范围为5-256。",
+                      "type": "integer"
+                    },
+                    "PartitionFormat": {
+                      "description": "投递日志的分区规则。\n- 参考c语言的strftime函数对于format参数的说明：https://man7.org/linux/man-pages/man3/strptime.3.html\n- 不能以正斜线（/）或者反斜线（\\）开头",
+                      "type": "string"
+                    },
+                    "PartitionFromValue": {
+                      "properties": {
+                        "Key": {
+                          "type": "string"
+                        },
+                        "Position": {
+                          "enum": [
+                            "before_time",
+                            "after_time"
+                          ],
+                          "type": "string"
+                        },
+                        "Regex": {
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Prefix": {
+                      "description": "投递对象存储桶中的前缀目录。\n- 不能以正斜线（/）或者反斜线（\\）开头，且不能使用连续的正斜线（/）。\n- 不能以..作为文件夹名称。\n- 同一存储桶中，文件夹不允许重名。",
+                      "type": "string"
+                    },
+                    "ProxyPoint": {
+                      "description": "代理集群接入点，对外api不暴露此参数",
+                      "type": "string"
+                    },
+                    "Region": {
+                      "description": "投递对象存储桶所在区域，对外api不暴露此参数",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "Bucket"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "TaskId": {
+              "description": "任务ID",
+              "type": "string"
+            }
+          },
+          "required": [
+            "TaskId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ModifyLogBackFlowTask",
+        "source": "数据回流",
+        "usage_constraints": "TaskId is required. ETLTaskInfo, ShipperToTosInfo, and ShipperToAgentLoopInfo follow the current server request model; ShipperToTosInfo and ShipperToAgentLoopInfo are mutually exclusive. ScheduleSqlTaskInfo is not accepted. This operation mutates the ETL or shipper resources associated with the backflow task."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    }
+  ]
+}

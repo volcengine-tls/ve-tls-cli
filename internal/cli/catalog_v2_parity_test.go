@@ -10,16 +10,16 @@ import (
 	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
 )
 
-func TestOperationCatalogV2PreservesAll125PublicLegacyContractsAndDigests(t *testing.T) {
+func TestOperationCatalogV2TracksAllPublicContractDigests(t *testing.T) {
 	catalog, err := contract.LoadEmbedded()
 	if err != nil {
 		t.Fatalf("load operation catalog v2: %v", err)
 	}
-	if got, want := len(catalog.Operations), 131; got != want {
+	if got, want := len(catalog.Operations), 140; got != want {
 		t.Fatalf("catalog v2 count=%d, want %d", got, want)
 	}
 	publicOperations := loadToolOperations("", "", "")
-	if got, want := len(publicOperations), 125; got != want {
+	if got, want := len(publicOperations), 134; got != want {
 		t.Fatalf("public operation count=%d, want %d", got, want)
 	}
 
