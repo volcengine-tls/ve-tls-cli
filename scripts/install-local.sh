@@ -7,14 +7,14 @@ BIN_NAME="${BIN_NAME:-}"
 PREFIX="${PREFIX:-$HOME/.local}"
 DEST_DIR="${DEST_DIR:-$PREFIX/bin}"
 
-build_tags=()
+build_args=()
 case "$EDITION" in
   default|"")
     SRC_BIN_NAME="volclog"
     ;;
   human)
     SRC_BIN_NAME="volclog-human"
-    build_tags=(-tags=human)
+    build_args=(-tags=human)
     ;;
   *)
     echo "invalid VOLCLOG_EDITION: $EDITION" >&2
@@ -24,6 +24,7 @@ esac
 
 BIN_NAME="${BIN_NAME:-$SRC_BIN_NAME}"
 DEST="$DEST_DIR/$BIN_NAME"
+build_args+=( -o "$DEST" ./cmd/volclog )
 
 if ! command -v go >/dev/null 2>&1; then
   echo "go not found. use one of:" >&2
@@ -35,7 +36,16 @@ fi
 mkdir -p "$DEST_DIR"
 
 cd "$ROOT"
-go build "${build_tags[@]}" -o "$DEST" ./cmd/volclog
+if [[ "$(uname -s)" == "Darwin" && "$(go env GOOS)" == "darwin" ]]; then
+  # Go 1.22's internal linker can emit a Mach-O binary without LC_UUID on
+  # newer macOS versions. dyld rejects that binary before main starts.
+  export CGO_ENABLED=1
+  export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
+  # Go 1.22 does not key every cgo cache entry by deployment target. Rebuild
+  # all packages so an earlier build for a newer macOS cannot leak in.
+  build_args=(-a -ldflags=-linkmode=external "${build_args[@]}")
+fi
+go build "${build_args[@]}"
 
 echo "installed: $DEST"
 echo "version:"

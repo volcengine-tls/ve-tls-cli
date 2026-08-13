@@ -5,6 +5,9 @@
 - Add standalone Console Login, SSO, RAM Role ARN, OIDC, and ECS Role authentication while preserving legacy AK/SK and manual STS behavior.
 - Unify explicit TLS region, endpoint, and timeout configuration across authentication modes, with safer runtime validation and authentication help discovery.
 - Unify agent and human execution around one generated Operation catalog and reusable Executor while preserving the legacy tool contract surface.
+- Expose TLS account activation and collector configuration validation helpers, including regex generation, sample parsing, delimiter preview, latest-log inspection, and corrected processor debug contracts.
+- Align log-back-flow contracts to the current server model, including ETL and AgentLoop evaluation-set delivery fields and removal of retired scheduled-SQL inputs.
+- Build local and release macOS binaries with the external Go linker so generated Mach-O executables contain the `LC_UUID` required by dyld, while keeping the deployment target at macOS 11.0.
 - Remove unreachable and duplicated CLI/catalog code, harden runtime boundaries, and retain default and human quality gates.
 - Publish verified Unix and Windows binary installers and support stable npm installation for both `volclog` and `volclog-human`.
 

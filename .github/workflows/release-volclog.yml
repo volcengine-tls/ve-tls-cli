@@ -11,25 +11,47 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      GOFLAGS: ${{ matrix.goflags }}
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macosx_deployment_target }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - goos: linux
             goarch: amd64
+            runner: ubuntu-latest
+            cgo_enabled: "0"
+            goflags: ""
           - goos: linux
             goarch: arm64
+            runner: ubuntu-latest
+            cgo_enabled: "0"
+            goflags: ""
           - goos: darwin
             goarch: amd64
+            runner: macos-15
+            cgo_enabled: "1"
+            goflags: "-ldflags=-linkmode=external"
+            macosx_deployment_target: "11.0"
           - goos: darwin
             goarch: arm64
+            runner: macos-15
+            cgo_enabled: "1"
+            goflags: "-ldflags=-linkmode=external"
+            macosx_deployment_target: "11.0"
           - goos: windows
             goarch: amd64
+            runner: ubuntu-latest
+            cgo_enabled: "0"
+            goflags: ""
           - goos: windows
             goarch: arm64
+            runner: ubuntu-latest
+            cgo_enabled: "0"
+            goflags: ""
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -56,7 +78,7 @@ jobs:
           npm run test:npm --silent
       - name: Build
         env:
-          CGO_ENABLED: "0"
+          CGO_ENABLED: ${{ matrix.cgo_enabled }}
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
@@ -69,16 +91,31 @@ jobs:
           fi
           for edition in default human; do
             bin_name="volclog"
-            build_tags=()
+            build_args=()
             if [ "$edition" = "human" ]; then
               bin_name="volclog-human"
-              build_tags=(-tags=human)
+              build_args=(-tags=human)
             fi
             out="dist/$bin_name"
             if [ "$GOOS" = "windows" ]; then
               out="${out}.exe"
             fi
-            go build -trimpath "${build_tags[@]}" -ldflags "-s -w -X github.com/volcengine-tls/ve-tls-cli/internal/version.Version=${version}" -o "$out" ./cmd/volclog
+            ldflags="-s -w -X github.com/volcengine-tls/ve-tls-cli/internal/version.Version=${version}"
+            if [ "$GOOS" = "darwin" ]; then
+              ldflags="$ldflags -linkmode=external"
+              build_args+=( -a )
+            fi
+            build_args+=( -trimpath -ldflags "$ldflags" -o "$out" ./cmd/volclog )
+            go build "${build_args[@]}"
+
+            if [ "$GOOS" = "darwin" ]; then
+              otool -l "$out" | grep -q 'cmd LC_UUID'
+              minos="$(otool -l "$out" | awk '
+                $1 == "cmd" && $2 == "LC_BUILD_VERSION" { in_build_version = 1; next }
+                in_build_version && $1 == "minos" { print $2; exit }
+              ')"
+              test "$minos" = "$MACOSX_DEPLOYMENT_TARGET"
+            fi
 
             pkg_dir="$(mktemp -d)"
             cp "$out" "$pkg_dir/"
@@ -90,7 +127,11 @@ jobs:
               (cd "$pkg_dir" && tar -czf "$pkg" "$(basename "$out")")
             fi
             mv "$pkg_dir/$pkg" "dist/$pkg"
-            (cd dist && sha256sum "$pkg" > "${pkg}.sha256")
+            if command -v sha256sum >/dev/null 2>&1; then
+              (cd dist && sha256sum "$pkg" > "${pkg}.sha256")
+            else
+              (cd dist && shasum -a 256 "$pkg" > "${pkg}.sha256")
+            fi
             rm -rf "$pkg_dir"
           done
       - name: Upload artifacts
