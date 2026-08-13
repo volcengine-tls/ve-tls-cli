@@ -44,10 +44,14 @@ func (t contextExecutionTransport) Do(ctx context.Context, request execution.Req
 		response tlsapi.Response
 		err      error
 	)
+	path, pathErr := execution.AppendMultiQuery(request.Path, request.QueryMulti)
+	if pathErr != nil {
+		return execution.Response{}, pathErr
+	}
 	if contextual, ok := t.raw.(contextualRawExecutionContext); ok {
 		// Context.doRaw delegates to runtime.Transport, which already owns the
 		// request/response copies. Avoid cloning the production path twice.
-		response, err = contextual.doRaw(ctx, request.Method, request.Path, request.Query, request.Header, request.Body)
+		response, err = contextual.doRaw(ctx, request.Method, path, request.Query, request.Header, request.Body)
 		return execution.Response{
 			StatusCode: response.StatusCode,
 			Header:     response.Header,
@@ -56,7 +60,7 @@ func (t contextExecutionTransport) Do(ctx context.Context, request execution.Req
 	} else {
 		response, err = t.raw.DoRaw(
 			request.Method,
-			request.Path,
+			path,
 			cloneExecutionStringMap(request.Query),
 			cloneExecutionStringMap(request.Header),
 			append([]byte(nil), request.Body...),

@@ -26,6 +26,9 @@ Before running a tool or workflow, inspect its contract so you know the required
 ```bash
 volclog tool list
 volclog tool list project
+volclog tool list app
+volclog tool list log-app
+volclog tool list trace
 volclog tool list --verb create --format json
 volclog tool describe project.describe-projects
 volclog tool describe project.create --view full
@@ -38,8 +41,10 @@ volclog tool describe project.create --view full
 ```bash
 volclog workflow list
 volclog workflow list log
+volclog workflow list app
 volclog workflow list --format json
 volclog workflow describe log.export
+volclog workflow describe app.resolve-resources
 ```
 
 `workflow list` takes the group as a positional argument and supports `--format text|json`. `workflow describe <group.command>` shows the workflow's kind, source, input schema, context schema, execution schema, recommended global flags, and guidance.
@@ -110,6 +115,22 @@ volclog --profile default workflow exec log.export \
 ```
 
 Before running a workflow, use `workflow list` or `workflow describe` to confirm that the workflow ID is available in the current installation.
+
+### 4.3 App resource-resolution workflows
+
+The `app`, `log-app`, and `trace` groups expose atomic public API calls. Use `tool list <group>` and `tool describe <group.action> --view full` for their current contracts. Use the workflows below only when the task must expand relationships across `DescribeApp`, `DescribeLogApp`, and `DescribeTraceInstance`:
+
+```bash
+volclog workflow exec app.resolve-resources \
+  --input '{"AppId":"YOUR_APP_ID"}'
+
+volclog workflow exec app.resolve-topic-ids \
+  --input '{"AppId":"YOUR_APP_ID"}'
+```
+
+- `app.resolve-resources` returns normalized `App`, `Nodes`, `Edges`, `LogAppIds`, `TraceInstanceIds`, and `TopicIds`. Non-LogApp applications retain generic `AppResource` nodes instead of guessed semantics.
+- `app.resolve-topic-ids` only supports `AppType=LogApp` and returns first-seen, deduplicated `TopicIds`; Trace resources contribute both Trace and Dependency topics.
+- Expansion never routes across Regions automatically and never returns a partial result after a dependent call fails. `--dry-run` shows the dependent steps, but resource IDs and Region checks still require live responses.
 
 ## 5. `raw`
 

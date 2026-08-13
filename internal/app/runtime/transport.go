@@ -24,10 +24,14 @@ func NewTransport(source ClientSource) *Transport {
 
 // Do implements execution.Transport and preserves the caller's context.
 func (t *Transport) Do(ctx context.Context, request execution.Request) (execution.Response, error) {
+	path, err := execution.AppendMultiQuery(request.Path, request.QueryMulti)
+	if err != nil {
+		return execution.Response{}, err
+	}
 	response, err := t.DoRaw(
 		ctx,
 		request.Method,
-		request.Path,
+		path,
 		cloneStringMap(request.Query),
 		cloneStringMap(request.Header),
 		append([]byte(nil), request.Body...),

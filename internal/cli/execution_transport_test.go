@@ -89,20 +89,22 @@ func TestContextExecutionTransportCopiesRequestAndResponseBuffers(t *testing.T) 
 	raw := &capturingRawExecutionContext{}
 	transport := newContextExecutionTransport(raw)
 	request := execution.Request{
-		Method: "POST",
-		Path:   "/CreateProject",
-		Query:  map[string]string{"a": "1"},
-		Header: map[string]string{"X-Test": "yes"},
-		Body:   []byte(`{"name":"demo"}`),
+		Method:     "POST",
+		Path:       "/CreateProject",
+		Query:      map[string]string{"a": "1"},
+		QueryMulti: map[string][]string{"SpanIds": {"span-1", "span-2"}},
+		Header:     map[string]string{"X-Test": "yes"},
+		Body:       []byte(`{"name":"demo"}`),
 	}
 	response, err := transport.Do(context.Background(), request)
 	if err != nil {
 		t.Fatalf("Do: %v", err)
 	}
 	request.Query["a"] = "changed"
+	request.QueryMulti["SpanIds"][0] = "changed"
 	request.Header["X-Test"] = "changed"
 	request.Body[0] = '!'
-	if raw.query["a"] != "1" || raw.header["X-Test"] != "yes" || raw.body[0] != '{' {
+	if raw.query["a"] != "1" || raw.path != "/CreateProject?SpanIds=span-1&SpanIds=span-2" || raw.header["X-Test"] != "yes" || raw.body[0] != '{' {
 		t.Fatalf("adapter retained caller-owned request: query=%#v header=%#v body=%q", raw.query, raw.header, raw.body)
 	}
 	response.Header.Set("X-Test", "changed")
@@ -128,6 +130,7 @@ func TestContextExecutionTransportRejectsNilRawContext(t *testing.T) {
 }
 
 type capturingRawExecutionContext struct {
+	path     string
 	query    map[string]string
 	header   map[string]string
 	body     []byte
@@ -164,11 +167,12 @@ func (c *contextAwareRawExecutionContext) doRaw(
 
 func (c *capturingRawExecutionContext) DoRaw(
 	_ string,
-	_ string,
+	path string,
 	query map[string]string,
 	header map[string]string,
 	body []byte,
 ) (tlsapi.Response, error) {
+	c.path = path
 	c.query = query
 	c.header = header
 	c.body = body

@@ -90,3 +90,29 @@ Stop when:
 
 Notes:
 - Read the stdout notice or written envelope and stop once the expected output shape is confirmed.
+
+## Resolve Application Resources
+
+1. `workflow describe app.resolve-resources`
+2. `workflow exec app.resolve-resources --input '{"AppId":"..."}'`
+
+Stop when:
+- `data.Nodes` and `data.Edges` expose the resource relationships needed by the caller, or
+- the workflow rejects cross-Region expansion or a malformed downstream resource
+
+Notes:
+- For `AppType=LogApp`, the workflow expands LogApp resources and Trace instances; for other App types it preserves opaque `AppResource` nodes instead of guessing their semantics.
+- The workflow includes both `TraceTopicId` and `DependencyTopicId`, preserves first-seen order, deduplicates IDs, and returns no partial graph after a failed dependent call.
+
+## Resolve LogApp Topic IDs
+
+1. `workflow describe app.resolve-topic-ids`
+2. `workflow exec app.resolve-topic-ids --input '{"AppId":"..."}'`
+
+Stop when:
+- `data.TopicIds` returns the deduplicated Topic ID list, or
+- `error.kind=unsupported_feature` reports that the App is not a LogApp
+
+Notes:
+- On a non-LogApp result, follow `error.hint` and switch to `app.resolve-resources`; do not infer Topic IDs from opaque resources.
+- Do not manually add `NeedLogAppTopics=true`; the workflow traverses `RelatedResourceList` so Trace dependency topics are retained.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -16,6 +17,7 @@ type Request struct {
 	Method     string
 	Path       string
 	Query      map[string]string
+	QueryMulti map[string][]string
 	Header     map[string]string
 	Body       []byte
 	BodyFormat BodyFormat
@@ -48,14 +50,57 @@ func BuildRequest(operation contract.Operation, input Input) (Request, error) {
 	if err != nil {
 		return Request{}, err
 	}
+	query, queryMulti := queryMaps(input.Query)
 	return Request{
 		Method:     method,
 		Path:       path,
-		Query:      stringMap(input.Query),
+		Query:      query,
+		QueryMulti: queryMulti,
 		Header:     stringMap(input.Header),
 		Body:       body,
 		BodyFormat: format,
 	}, nil
+}
+
+func queryMaps(src map[string]any) (map[string]string, map[string][]string) {
+	single := make(map[string]string, len(src))
+	multi := make(map[string][]string)
+	for key, value := range src {
+		key = strings.TrimSpace(key)
+		switch typed := value.(type) {
+		case []any:
+			values := make([]string, len(typed))
+			for index, item := range typed {
+				values[index] = stringifyValue(item)
+			}
+			multi[key] = values
+		case []string:
+			multi[key] = append([]string(nil), typed...)
+		default:
+			single[key] = stringifyValue(value)
+		}
+	}
+	return single, multi
+}
+
+// AppendMultiQuery appends repeated query parameters to path without changing
+// scalar query handling. Callers can still pass the scalar map to tlsapi.Client.
+func AppendMultiQuery(path string, values map[string][]string) (string, error) {
+	if len(values) == 0 {
+		return path, nil
+	}
+	parsed, err := url.Parse(path)
+	if err != nil {
+		return "", err
+	}
+	query := parsed.Query()
+	for key, items := range values {
+		for _, item := range items {
+			query.Add(key, item)
+		}
+	}
+	parsed.RawQuery = query.Encode()
+	return parsed.String(), nil
 }
 
 func payloadBytes(payload Payload, wireFormat string) ([]byte, BodyFormat, error) {
@@ -116,10 +161,22 @@ func cloneRequest(request Request) Request {
 		Method:     request.Method,
 		Path:       request.Path,
 		Query:      cloneStringMap(request.Query),
+		QueryMulti: cloneMultiStringMap(request.QueryMulti),
 		Header:     cloneStringMap(request.Header),
 		Body:       append([]byte(nil), request.Body...),
 		BodyFormat: request.BodyFormat,
 	}
+}
+
+func cloneMultiStringMap(src map[string][]string) map[string][]string {
+	if src == nil {
+		return map[string][]string{}
+	}
+	out := make(map[string][]string, len(src))
+	for key, values := range src {
+		out[key] = append([]string(nil), values...)
+	}
+	return out
 }
 
 func cloneStringMap(src map[string]string) map[string]string {
@@ -133,11 +190,29 @@ func cloneStringMap(src map[string]string) map[string]string {
 	return out
 }
 
-func sortedMapKeys(src map[string]string) []string {
-	out := make([]string, 0, len(src))
-	for key := range src {
-		out = append(out, strings.TrimSpace(key))
+func sortedQueryKeys(single map[string]string, multi map[string][]string) []string {
+	keys := make(map[string]struct{}, len(single)+len(multi))
+	for key := range single {
+		keys[strings.TrimSpace(key)] = struct{}{}
+	}
+	for key := range multi {
+		keys[strings.TrimSpace(key)] = struct{}{}
+	}
+	out := make([]string, 0, len(keys))
+	for key := range keys {
+		out = append(out, key)
 	}
 	sort.Strings(out)
+	return out
+}
+
+func previewQuery(single map[string]string, multi map[string][]string) map[string]any {
+	out := make(map[string]any, len(single)+len(multi))
+	for key, value := range single {
+		out[key] = value
+	}
+	for key, values := range multi {
+		out[key] = append([]string(nil), values...)
+	}
 	return out
 }

@@ -65,9 +65,21 @@ func (t *TracingTransport) Do(ctx context.Context, request execution.Request) (e
 
 func cloneExecutionRequest(request execution.Request) execution.Request {
 	request.Query = cloneStringMap(request.Query)
+	request.QueryMulti = cloneMultiStringMap(request.QueryMulti)
 	request.Header = cloneStringMap(request.Header)
 	request.Body = append([]byte(nil), request.Body...)
 	return request
+}
+
+func cloneMultiStringMap(source map[string][]string) map[string][]string {
+	if source == nil {
+		return map[string][]string{}
+	}
+	cloned := make(map[string][]string, len(source))
+	for key, values := range source {
+		cloned[key] = append([]string(nil), values...)
+	}
+	return cloned
 }
 
 func cloneExecutionResponse(response execution.Response) execution.Response {

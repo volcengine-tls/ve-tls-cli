@@ -20,24 +20,24 @@
 
 ## 版本号与 Tag 规则
 
-- 正式版使用 Tag：`volclog-vX.Y.Z`（例如 `volclog-v1.0.5`）
-- 预发布版使用标准 SemVer Tag：`volclog-vX.Y.Z-rc.N`（例如 `volclog-v1.0.5-rc.3`）
+- 正式版使用 Tag：`volclog-vX.Y.Z`（例如 `volclog-v1.0.6`）
+- 预发布版使用标准 SemVer Tag：`volclog-vX.Y.Z-rc.N`（例如 `volclog-v1.0.6-rc.3`）
 - RC 存在问题时递增 `rc.N`；验证完成后再发布不带预发布后缀的正式版。
 - Release workflow 会将 `${GITHUB_REF_NAME}` 注入到二进制版本号中：
-  - RC：`volclog --version` 输出 `volclog volclog-v1.0.5-rc.3`
-  - 正式版：`volclog --version` 输出 `volclog volclog-v1.0.5`
+  - RC：`volclog --version` 输出 `volclog volclog-v1.0.6-rc.3`
+  - 正式版：`volclog --version` 输出 `volclog volclog-v1.0.6`
   
 版本建议：
 - `0.0.0` 通常用于开发态占位（不建议作为对外发布版本号）
-- npm 包版本不带 `volclog-v` 前缀，例如 `1.0.5-rc.3`。
+- npm 包版本不带 `volclog-v` 前缀，例如 `1.0.6-rc.3`。
 - RC npm 包必须使用 `rc` dist-tag，正式版必须使用 `latest`；发布门禁会按版本号自动校验。
 
 ## 发布流程（GitHub Actions）
 
 ### 1) 打 Tag 并推送
 ```bash
-git tag volclog-v1.0.5
-git push origin volclog-v1.0.5
+git tag volclog-v1.0.6
+git push origin volclog-v1.0.6
 ```
 
 ### 2) 等待工作流完成
@@ -51,14 +51,14 @@ git push origin volclog-v1.0.5
 
 以下命令适用于已经包含安装脚本资产的 Release。安装指定 RC：
 ```bash
-tag="volclog-v1.0.5-rc.3"
+tag="volclog-v1.0.6-rc.3"
 base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
 curl -fsSLO "${base_url}/install-binary.sh"
 VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh
 ~/.local/bin/volclog --version
 ```
 
-正式 `v1.0.5` 发布、`latest` 已包含安装脚本资产后：
+正式 `v1.0.6` 发布、`latest` 已包含安装脚本资产后：
 ```bash
 curl -fsSLO https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download/install-binary.sh
 VOLCLOG_BASE_URL="https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download" bash install-binary.sh
@@ -67,7 +67,7 @@ VOLCLOG_BASE_URL="https://github.com/volcengine-tls/ve-tls-cli/releases/latest/d
 
 Windows 安装（示例）：
 ```powershell
-$tag = "volclog-v1.0.5-rc.3"
+$tag = "volclog-v1.0.6-rc.3"
 $baseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/download/$tag"
 Invoke-WebRequest -Uri "$baseUrl/install.ps1" -OutFile install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -BaseUrl $baseUrl

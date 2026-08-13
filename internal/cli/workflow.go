@@ -269,7 +269,7 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 	}
 	defer cleanup()
 
-	out, err := dispatchWorkflowExec(ctx, spec, workflowArgs)
+	out, err := dispatchWorkflowExec(ctx, spec, input, workflowArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -425,8 +425,12 @@ func workflowInputValue(input map[string]any, rawName string) (any, bool) {
 	return nil, false
 }
 
-func dispatchWorkflowExec(ctx *Context, spec workflowCatalog, args []string) (any, error) {
+func dispatchWorkflowExec(ctx *Context, spec workflowCatalog, input map[string]any, args []string) (any, error) {
 	switch spec.ID {
+	case appResolveResourcesWorkflowID:
+		return appResolveResources(ctx, input)
+	case appResolveTopicIDsWorkflowID:
+		return appResolveTopicIDs(ctx, input)
 	case "log.ingest":
 		return logIngest(ctx, args)
 	case "log.export":

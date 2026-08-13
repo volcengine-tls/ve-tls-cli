@@ -12,6 +12,15 @@ import (
 
 func classifyError(err error, requestID string, statusCode int, group string) (errPayload, int) {
 	msg := strings.TrimSpace(err.Error())
+	var unsupported *unsupportedFeatureError
+	if errors.As(err, &unsupported) {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "unsupported_feature",
+			Hint:       strings.TrimSpace(unsupported.hint),
+		}, 1
+	}
 	var removed *removedCommandError
 	if errors.As(err, &removed) {
 		hint := strings.TrimSpace(removed.Hint)

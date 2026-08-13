@@ -5,6 +5,20 @@ Use this file only for runtime semantics, recovery posture, and credential handl
 Do not use this file to reopen surface selection once routing is already clear.
 This file refines the quick recovery map in `SKILL.md`; it does not override the main skill's default first response.
 
+## Contents
+
+- [Runtime Signals](#runtime-signals)
+- [Contract View And Recovery Precedence](#contract-view-and-recovery-precedence)
+- [Dry-Run Scope](#dry-run-scope)
+- [Envelope Filtering](#envelope-filtering)
+- [Search, Histogram, And Analysis](#search-histogram-and-analysis)
+- [Error Object](#error-object)
+- [Profile And Credential Selection](#profile-and-credential-selection)
+- [Doctor Boundary](#doctor-boundary)
+- [Thin Client Boundary](#thin-client-boundary)
+- [Recovery Signals](#recovery-signals)
+- [Known Traps](#known-traps)
+
 ## Runtime Signals
 
 Read these signals in this order after routing is already clear:
@@ -27,6 +41,15 @@ Key rules:
 - If auto spill fails because no writable directory was provided, rerun with `--output-dir <writable-dir>` instead of inventing a filename.
 - `tool / workflow / raw` write a full JSON envelope when file delivery is used, even if stdout format preference was `jsonl`.
 - `log.export` and `log.export-analysis` are the exception: their files contain exported data rows, while stdout keeps the envelope and points to the file through `artifacts`.
+
+## Contract View And Recovery Precedence
+
+- Use compact `tool describe` output for discovery and ordinary flat requests.
+- Run `volclog tool describe <group.action> --view full` before authoring nested objects or whenever an expected optional field is absent from compact output.
+- Treat full view as the request-authoring schema; do not infer omitted optional fields from compact view.
+- Read `risk`, `recovery`, and `usage_constraints` before executing or recovering a mutating operation. These operation-specific fields override the generic recovery tables in this skill.
+- Interpret `high-risk-retry` as “retrying is high risk,” not as permission to retry automatically.
+- After an ambiguous high-risk result, use a get/describe/list reconciliation action only when the contract names one. If it does not, stop and escalate with the request ID and business error evidence.
 
 ## Dry-Run Scope
 
@@ -109,13 +132,6 @@ Hard rule:
 - Environment credentials override profile resolution. If a stateless run must target a specific local profile, use host-generated secrets files instead of sandbox-wide env injection.
 - `--profile`/`context.profile` and `--secrets-file`/`context.secrets_file` are mutually exclusive runtime selectors; conflicting selectors fail fast instead of silently overriding each other.
 
-### Dynamic Auth Mode (SSO / Console Login)
-
-- Discover the auth mode via `volclog doctor` (offline) or by reading the profile `mode` field (`mode=sso` / `mode=console-login` for dynamic; no `mode` or `mode=ak` for static).
-- On `ReauthRequired`, recover with the mode-matching command: `volclog login --profile NAME` (Console Login) or `volclog sso login --profile NAME` (SSO).
-- Do not run login as an automatic retry; surface the `ReauthRequired` error to the user and wait for explicit re-login.
-- Do not manually copy tokens/cache from `~/.volcengine`; volclog uses an independently managed state root and lifecycle and does not read `~/.volcengine` at runtime; even where some cache schema/filenames are upstream-compatible, manual cache copying is not supported.
-
 ## Doctor Boundary
 
 - `volclog doctor` is for host/runtime diagnosis: credentials, config, selector visibility, endpoint reachability, and similar local setup issues.
@@ -153,7 +169,7 @@ When the command already failed, follow the smallest next action:
 | `jmes filter returned literal null` | Treat literal `null` as a successful projection result; only debug further if the command returned a real filter error instead. |
 | `401 Unauthorized` | Run `volclog doctor`, then inspect credentials, region, and endpoint. |
 | `403 Forbidden` | Check tenant/profile alignment first, then verify resource permissions before retrying. |
-| `error.kind=server` or `5xx` | Read `error.code`, `error.requestId`, and `error.statusCode` first. Retry with backoff only for transient server failures; otherwise escalate with those identifiers. |
+| `error.kind=server` or `5xx` | Read `error.code`, `error.requestId`, and `error.statusCode` first. Retry with backoff only when the operation contract permits it and the failure is clearly transient; otherwise reconcile or escalate with those identifiers. |
 | `IndexNotExists` | Inspect or create the index, then wait for readiness before retrying search. |
 | `TopicAlreadyExist` | Re-list topics in the target project, then switch to get or modify instead of repeating create. |
 | `ProjectAlreadyExist` | Re-list projects, then switch to get or modify instead of repeating create. |
@@ -178,3 +194,6 @@ When the command already failed, follow the smallest next action:
 - `thin-client-does-not-judge-business-semantics`: if there was no local validation, decode, or filesystem error, debug the query semantics and time window before blaming the CLI.
 - `env-creds-override-profile`: process-wide environment credentials override local profile resolution.
 - `profile-and-secrets-file-are-exclusive`: choose exactly one runtime selector family, not both `profile` and `secrets_file`.
+- `high-risk-retry-is-not-auto-retry`: ambiguous high-risk outcomes require contract-named reconciliation or escalation, never an automatic replay.
+- `compact-describe-can-omit-optional-fields`: use `tool describe --view full` before authoring nested optional configuration.
+- `topic-resolution-is-logapp-only`: if `app.resolve-topic-ids` reports `unsupported_feature`, follow its hint and use `app.resolve-resources`; do not guess Topic IDs for opaque resources.

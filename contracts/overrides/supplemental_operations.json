@@ -1865,6 +1865,2020 @@
         "level": "high",
         "error_recovery": "high-risk-retry"
       }
+    },
+    {
+      "id": "app.create",
+      "group": "app",
+      "group_title": "应用与模板",
+      "action": "CreateApp",
+      "resource": "app",
+      "verb": "create",
+      "family": "app",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/CreateApp",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "AppName": {
+              "description": "应用名称",
+              "type": "string"
+            },
+            "AppType": {
+              "description": "应用类型",
+              "enum": [
+                "LogApp",
+                "Dashboard",
+                "CloudLens"
+              ],
+              "type": "string"
+            },
+            "CloudLensReq": {
+              "description": "AppType == CloudLens 时必填",
+              "properties": {},
+              "type": "object"
+            },
+            "DashboardReqs": {
+              "description": "AppType == Dashboard 时必填",
+              "items": {
+                "properties": {
+                  "EnvInfo": {
+                    "description": "模板资源对应的topicId",
+                    "properties": {
+                      "EnvMappings": {
+                        "description": "可以不填，默认使用key==alias的映射关系",
+                        "items": {
+                          "properties": {
+                            "Key": {
+                              "description": "模板环境变量里对应的Key名称",
+                              "type": "string"
+                            },
+                            "KeyAlias": {
+                              "description": "模板环境变量里对应的Key的映射字段名称",
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "ProjectId": {
+                        "description": "模板资源要求的项目Id",
+                        "type": "string"
+                      },
+                      "TopicID": {
+                        "description": "模板资源对应的topicId",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ProjectId",
+                      "TopicID"
+                    ],
+                    "type": "object"
+                  },
+                  "ResourceDescription": {
+                    "description": "创建的资源描述",
+                    "type": "string"
+                  },
+                  "ResourceName": {
+                    "description": "创建的资源名称",
+                    "type": "string"
+                  },
+                  "TemplateId": {
+                    "description": "模板Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "EnvInfo",
+                  "ResourceName",
+                  "TemplateId"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "LogAppReq": {
+              "description": "AppType == LogApp 时必填",
+              "properties": {
+                "Description": {
+                  "description": "APP描述信息：不支持<>、'、\\、\\\\；长度为0-256个字符。",
+                  "type": "string"
+                },
+                "LogAppName": {
+                  "description": "APP的名称:名称必须唯一，不能与Region下其他名称冲突;名称只能由小写字母、数字、中文和短划线（-） 组成; 必须以小写字母、数字或者中文开头和结尾; 名称的长度在3-63个字符以内。",
+                  "type": "string"
+                },
+                "LogAppType": {
+                  "description": "日志应用类型",
+                  "enum": [
+                    "LLM",
+                    "MQTT",
+                    "CLMAAS",
+                    "RLTrace",
+                    "OpenClaw",
+                    "HermesAgent"
+                  ],
+                  "type": "string"
+                },
+                "ProjectId": {
+                  "description": "日志主题所属的日志项目uuid。",
+                  "type": "string"
+                },
+                "RelatedResourceList": {
+                  "description": "需要关联的资源列表，最多支持20个，不传则依据LogAppMarket配置创建默认关联",
+                  "items": {
+                    "properties": {
+                      "DisplayName": {
+                        "description": "关联资源展示名称",
+                        "type": "string"
+                      },
+                      "Region": {
+                        "description": "关联资源所在Region标识",
+                        "type": "string"
+                      },
+                      "ResourceID": {
+                        "description": "关联资源ID",
+                        "type": "string"
+                      },
+                      "ResourceName": {
+                        "description": "关联资源名称",
+                        "type": "string"
+                      },
+                      "ResourceType": {
+                        "description": "关联资源类型",
+                        "enum": [
+                          0,
+                          1,
+                          2
+                        ],
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "ResourceType",
+                      "ResourceID",
+                      "ResourceName",
+                      "Region"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 20,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "LogAppName",
+                "LogAppType",
+                "ProjectId"
+              ],
+              "type": "object"
+            },
+            "TemplateId": {
+              "description": "使用的模板的ID",
+              "type": "string"
+            }
+          },
+          "required": [
+            "AppName",
+            "AppType",
+            "TemplateId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "CreateApp",
+        "source": "log-service server API",
+        "usage_constraints": "AppName, AppType, and TemplateId are required. AppType=LogApp requires LogAppReq; AppType=Dashboard requires DashboardReqs; AppType=CloudLens requires CloudLensReq. This operation may create multiple resources and must not be retried after an ambiguous failure."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "app.delete",
+      "group": "app",
+      "group_title": "应用与模板",
+      "action": "DeleteApp",
+      "resource": "app",
+      "verb": "delete",
+      "family": "app",
+      "visibility": "public",
+      "wire": {
+        "method": "DELETE",
+        "path": "/DeleteApp",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "properties": {
+            "AppId": {
+              "description": "应用ID",
+              "type": "string"
+            }
+          },
+          "required": [
+            "AppId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DeleteApp",
+        "source": "log-service server API",
+        "usage_constraints": "AppId is required. This operation deletes an App and must not be retried after an ambiguous failure without reconciliation."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "app.describe",
+      "group": "app",
+      "group_title": "应用与模板",
+      "action": "DescribeApp",
+      "resource": "app",
+      "verb": "describe",
+      "family": "app",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeApp",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "properties": {
+            "AppId": {
+              "description": "应用ID",
+              "type": "string"
+            }
+          },
+          "required": [
+            "AppId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeApp",
+        "source": "log-service server API",
+        "usage_constraints": "AppId is required."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "app.describe-apps",
+      "group": "app",
+      "group_title": "应用与模板",
+      "action": "DescribeApps",
+      "resource": "app",
+      "verb": "describe",
+      "family": "app",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeApps",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "properties": {
+            "AppID": {
+              "description": "应用ID",
+              "type": "string"
+            },
+            "AppName": {
+              "description": "应用名称",
+              "type": "string"
+            },
+            "AppType": {
+              "description": "应用类型",
+              "enum": [
+                "LogApp",
+                "Dashboard",
+                "CloudLens"
+              ],
+              "type": "string"
+            },
+            "ForkedTemplateId": {
+              "description": "模板ID",
+              "type": "string"
+            },
+            "ForkedTemplateName": {
+              "description": "模板名称",
+              "type": "string"
+            },
+            "Order": {
+              "description": "排序顺序",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            },
+            "PageNumber": {
+              "description": "分页页码",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "PageSize": {
+              "description": "页面大小",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "ProductName": {
+              "description": "云产品名称",
+              "enum": [
+                "TLS",
+                "TOS",
+                "DBW",
+                "EBS",
+                "ALB",
+                "CLB",
+                "CDN",
+                "VKE"
+              ],
+              "type": "string"
+            },
+            "SortBy": {
+              "description": "排序字段",
+              "enum": [
+                "create_timestamp",
+                "update_timestamp"
+              ],
+              "type": "string"
+            },
+            "Tags": {
+              "description": "标签",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "pagination": {
+        "mode": "page-number",
+        "page_number_param": "PageNumber",
+        "page_size_param": "PageSize",
+        "items_field": "apps",
+        "total_field": "total",
+        "default_page_size": 100,
+        "max_pages": 1000
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeApps",
+        "source": "log-service server API",
+        "usage_constraints": "AppID is the exact list-filter query spelling; DescribeApp/DeleteApp use AppId. AppType is a single enum value. Tags is a JSON-encoded string array. PageNumber and PageSize are external page-number pagination parameters; PageSize is at most 100."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "app.describe-template",
+      "group": "app",
+      "group_title": "应用与模板",
+      "action": "DescribeTemplate",
+      "resource": "template",
+      "verb": "describe",
+      "family": "app",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeTemplate",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "properties": {
+            "TemplateId": {
+              "description": "模板ID",
+              "type": "string"
+            }
+          },
+          "required": [
+            "TemplateId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeTemplate",
+        "source": "log-service server API",
+        "usage_constraints": "TemplateId is required."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "app.describe-templates",
+      "group": "app",
+      "group_title": "应用与模板",
+      "action": "DescribeTemplates",
+      "resource": "template",
+      "verb": "describe",
+      "family": "app",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeTemplates",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "properties": {
+            "AllowOnlyOnce": {
+              "description": "是否仅能使用一次",
+              "type": "boolean"
+            },
+            "Contributor": {
+              "description": "贡献者",
+              "type": "string"
+            },
+            "Order": {
+              "description": "排序顺序",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            },
+            "PageNumber": {
+              "description": "分页页码",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "PageSize": {
+              "description": "页面大小",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "SortBy": {
+              "description": "排序字段",
+              "enum": [
+                "create_timestamp",
+                "update_timestamp"
+              ],
+              "type": "string"
+            },
+            "Tags": {
+              "description": "标签",
+              "type": "string"
+            },
+            "TemplateId": {
+              "description": "模板ID",
+              "type": "string"
+            },
+            "TemplateName": {
+              "description": "模板名称",
+              "type": "string"
+            },
+            "TemplateType": {
+              "description": "模板类型",
+              "enum": [
+                "LogApp",
+                "Dashboard",
+                "CloudLens"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "pagination": {
+        "mode": "page-number",
+        "page_number_param": "PageNumber",
+        "page_size_param": "PageSize",
+        "items_field": "Templates",
+        "total_field": "Total",
+        "default_page_size": 100,
+        "max_pages": 1000
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeTemplates",
+        "source": "log-service server API",
+        "usage_constraints": "Tags is a JSON-encoded string array. PageNumber and PageSize are external page-number pagination parameters; PageSize is at most 100."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "app.modify",
+      "group": "app",
+      "group_title": "应用与模板",
+      "action": "ModifyApp",
+      "resource": "app",
+      "verb": "modify",
+      "family": "app",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/ModifyApp",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "AppId": {
+              "description": "应用ID: 应用的唯一标识符",
+              "type": "string"
+            },
+            "AppName": {
+              "description": "可以修改应用的名称",
+              "type": "string"
+            },
+            "Description": {
+              "description": "应用描述: 应用的详细描述",
+              "type": "string"
+            },
+            "Resources": {
+              "description": "应用资源: 应用关联的资源列表",
+              "items": {
+                "properties": {
+                  "Id": {
+                    "description": "资源的id\n如果 App 是 LogApp，那么 Id 就是 LogAppID\n如果 App 是 Dashboard，那么 Id 就是 DashboardID",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "AppId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ModifyApp",
+        "source": "log-service server API",
+        "usage_constraints": "AppId is required. AppName, Description, and Resources are optional mutations."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "log-app.create",
+      "group": "log-app",
+      "group_title": "日志应用",
+      "action": "CreateLogApp",
+      "resource": "log-app",
+      "verb": "create",
+      "family": "log-app",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/CreateLogApp",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "Description": {
+              "description": "APP描述信息：不支持<>、'、\\、\\\\；长度为0-256个字符。",
+              "type": "string"
+            },
+            "LogAppName": {
+              "description": "APP的名称:名称必须唯一，不能与Region下其他名称冲突;名称只能由小写字母、数字、中文和短划线（-） 组成; 必须以小写字母、数字或者中文开头和结尾; 名称的长度在3-63个字符以内。",
+              "type": "string"
+            },
+            "LogAppType": {
+              "description": "日志应用类型",
+              "enum": [
+                "LLM",
+                "MQTT",
+                "CLMAAS",
+                "RLTrace",
+                "OpenClaw",
+                "HermesAgent"
+              ],
+              "type": "string"
+            },
+            "ProjectId": {
+              "description": "日志主题所属的日志项目uuid。",
+              "type": "string"
+            },
+            "RelatedResourceList": {
+              "description": "需要关联的资源列表，最多支持20个，不传则依据LogAppMarket配置创建默认关联",
+              "items": {
+                "properties": {
+                  "DisplayName": {
+                    "description": "关联资源展示名称",
+                    "type": "string"
+                  },
+                  "Region": {
+                    "description": "关联资源所在Region标识",
+                    "type": "string"
+                  },
+                  "ResourceID": {
+                    "description": "关联资源ID",
+                    "type": "string"
+                  },
+                  "ResourceName": {
+                    "description": "关联资源名称",
+                    "type": "string"
+                  },
+                  "ResourceType": {
+                    "description": "关联资源类型",
+                    "enum": [
+                      0,
+                      1,
+                      2
+                    ],
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "ResourceType",
+                  "ResourceID",
+                  "ResourceName",
+                  "Region"
+                ],
+                "type": "object"
+              },
+              "maxItems": 20,
+              "type": "array"
+            }
+          },
+          "required": [
+            "LogAppName",
+            "LogAppType",
+            "ProjectId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "CreateLogApp",
+        "source": "log-service server API",
+        "usage_constraints": "RelatedResourceList supports at most 20 items. Each item requires ResourceType (0 Trace, 1 log Topic, 2 metric Topic), ResourceID, ResourceName, and Region."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "log-app.delete",
+      "group": "log-app",
+      "group_title": "日志应用",
+      "action": "DeleteLogApp",
+      "resource": "log-app",
+      "verb": "delete",
+      "family": "log-app",
+      "visibility": "public",
+      "wire": {
+        "method": "DELETE",
+        "path": "/DeleteLogApp",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "LogAppId": {
+              "description": "日志应用ID。",
+              "type": "string"
+            }
+          },
+          "required": [
+            "LogAppId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DeleteLogApp",
+        "source": "log-service server API",
+        "usage_constraints": "This operation deletes a LogApp. Do not retry automatically after an ambiguous failure; call DescribeLogApp to reconcile state."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "log-app.describe",
+      "group": "log-app",
+      "group_title": "日志应用",
+      "action": "DescribeLogApp",
+      "resource": "log-app",
+      "verb": "describe",
+      "family": "log-app",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeLogApp",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "properties": {
+            "LogAppId": {
+              "description": "日志应用id",
+              "type": "string"
+            },
+            "NeedLogAppTopics": {
+              "description": "是否需要返回日志应用的资源信息",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "LogAppId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeLogApp",
+        "source": "log-service server API",
+        "usage_constraints": "NeedLogAppTopics optionally asks the server for derived topic information. Resource-resolution workflows intentionally traverse RelatedResourceList instead so Trace dependency topics are not lost."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "log-app.describe-dashboard",
+      "group": "log-app",
+      "group_title": "日志应用",
+      "action": "DescribeLogAppDashboard",
+      "resource": "dashboard",
+      "verb": "describe",
+      "family": "log-app",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeLogAppDashboard",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "properties": {
+            "LogAppId": {
+              "description": "日志应用id",
+              "type": "string"
+            },
+            "TemplateId": {
+              "description": "dashboard模板id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "LogAppId",
+            "TemplateId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeLogAppDashboard",
+        "source": "log-service server API",
+        "usage_constraints": "LogAppId and TemplateId are required."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "log-app.describe-dashboard-templates",
+      "group": "log-app",
+      "group_title": "日志应用",
+      "action": "DescribeLogAppDashboardTemplates",
+      "resource": "dashboard-template",
+      "verb": "describe",
+      "family": "log-app",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeLogAppDashboardTemplates",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "properties": {
+            "LogAppId": {
+              "description": "日志应用id",
+              "type": "string"
+            },
+            "LogAppTabIndex": {
+              "description": "dashboard的tab",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "LogAppId",
+            "LogAppTabIndex"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeLogAppDashboardTemplates",
+        "source": "log-service server API",
+        "usage_constraints": "LogAppId and LogAppTabIndex are required."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "log-app.describe-log-apps",
+      "group": "log-app",
+      "group_title": "日志应用",
+      "action": "DescribeLogApps",
+      "resource": "log-app",
+      "verb": "describe",
+      "family": "log-app",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeLogApps",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "properties": {
+            "CsAccountChannel": {
+              "description": "CSAccount",
+              "type": "string"
+            },
+            "LogAppId": {
+              "description": "日志应用ID，作为模糊查询使用。",
+              "type": "string"
+            },
+            "LogAppName": {
+              "description": "日志应用名称，作为模糊查询使用。LogAppName和LogAppId只能提供一个。",
+              "type": "string"
+            },
+            "LogAppType": {
+              "description": "日志应用的类型。",
+              "type": "string"
+            },
+            "PageNumber": {
+              "description": "分页，默认从1开始。",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "PageSize": {
+              "description": "分页大小限制，默认为20，最大为100。",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "ProjectId": {
+              "description": "日志项目ID",
+              "type": "string"
+            },
+            "ProjectName": {
+              "description": "日志项目名称。",
+              "type": "string"
+            },
+            "Status": {
+              "description": "日志应用的状态。",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "pagination": {
+        "mode": "page-number",
+        "page_number_param": "PageNumber",
+        "page_size_param": "PageSize",
+        "items_field": "LogApps",
+        "total_field": "Total",
+        "default_page_size": 100,
+        "max_pages": 1000
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeLogApps",
+        "source": "log-service server API",
+        "usage_constraints": "PageNumber and PageSize are external page-number pagination parameters; PageSize is at most 100. LogAppName and LogAppId are mutually exclusive filters."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "log-app.describe-market",
+      "group": "log-app",
+      "group_title": "日志应用",
+      "action": "DescribeLogAppMarket",
+      "resource": "market",
+      "verb": "describe",
+      "family": "log-app",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeLogAppMarket",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "properties": {
+            "LogAppType": {
+              "description": "日志应用的类型。",
+              "enum": [
+                "LLM",
+                "MQTT",
+                "CLMAAS",
+                "RLTrace",
+                "OpenClaw",
+                "HermesAgent"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "LogAppType"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeLogAppMarket",
+        "source": "log-service server API",
+        "usage_constraints": "LogAppType is required and must be one of LLM, MQTT, CLMAAS, RLTrace, OpenClaw, or HermesAgent."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "log-app.describe-session",
+      "group": "log-app",
+      "group_title": "日志应用",
+      "action": "DescribeLogAppSession",
+      "resource": "session",
+      "verb": "describe",
+      "family": "log-app",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/DescribeLogAppSession",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "EndTime": {
+              "description": "会话结束时间",
+              "type": "integer"
+            },
+            "LogAppId": {
+              "description": "日志应用ID。",
+              "type": "string"
+            },
+            "SessionId": {
+              "description": "会话ID。",
+              "type": "string"
+            },
+            "StartTime": {
+              "description": "会话开始时间",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "LogAppId",
+            "SessionId",
+            "StartTime",
+            "EndTime"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeLogAppSession",
+        "source": "log-service server API",
+        "usage_constraints": "StartTime and EndTime are required Unix microsecond timestamps and StartTime must be less than EndTime."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "log-app.describe-sessions",
+      "group": "log-app",
+      "group_title": "日志应用",
+      "action": "DescribeLogAppSessions",
+      "resource": "session",
+      "verb": "describe",
+      "family": "log-app",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/DescribeLogAppSessions",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "LogAppId": {
+              "description": "日志应用ID。",
+              "type": "string"
+            },
+            "Query": {
+              "description": "查询条件",
+              "properties": {
+                "Asc": {
+                  "description": "是否升序",
+                  "type": "boolean"
+                },
+                "Attributes": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Attributes中字段为key， value为该字段可能得取值\n其中会话ID：gen_ai.session.id\nInput：input.value",
+                  "properties": {},
+                  "type": "object"
+                },
+                "EndTime": {
+                  "description": "查询结束时间点。微秒时间戳",
+                  "type": "integer"
+                },
+                "Limit": {
+                  "type": "integer"
+                },
+                "Offset": {
+                  "type": "integer"
+                },
+                "Order": {
+                  "description": "排序字段: Start、End、Duration、Attributes中显示添加开启统计的索引，如Attributes.request_id",
+                  "type": "string"
+                },
+                "StartTime": {
+                  "description": "查询开始时间点。微秒时间戳",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "EndTime",
+                "Limit",
+                "Offset",
+                "StartTime"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "LogAppId",
+            "Query"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeLogAppSessions",
+        "source": "log-service server API",
+        "usage_constraints": "Query.StartTime and Query.EndTime are Unix microsecond timestamps. Query requires Offset and Limit, and StartTime must be less than EndTime."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "log-app.describe-trace",
+      "group": "log-app",
+      "group_title": "日志应用",
+      "action": "DescribeLogAppTrace",
+      "resource": "trace",
+      "verb": "describe",
+      "family": "log-app",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/DescribeLogAppTrace",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "LogAppId": {
+              "description": "日志应用ID",
+              "type": "string"
+            },
+            "TraceId": {
+              "description": "Trace ID",
+              "type": "string"
+            }
+          },
+          "required": [
+            "LogAppId",
+            "TraceId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeLogAppTrace",
+        "source": "log-service server API",
+        "usage_constraints": "LogAppId and TraceId are required."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "log-app.modify",
+      "group": "log-app",
+      "group_title": "日志应用",
+      "action": "ModifyLogApp",
+      "resource": "log-app",
+      "verb": "modify",
+      "family": "log-app",
+      "visibility": "public",
+      "wire": {
+        "method": "PUT",
+        "path": "/ModifyLogApp",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "Description": {
+              "description": "日志主题描述信息：不支持<>、'、\\、\\\\；长度为0-256个字符。",
+              "type": "string"
+            },
+            "LogAppId": {
+              "description": "日志应用ID。",
+              "type": "string"
+            },
+            "RelatedResourceList": {
+              "description": "修改后的关联资源列表，最多支持20个，不传则不修改关联资源",
+              "items": {
+                "properties": {
+                  "DisplayName": {
+                    "description": "关联资源展示名称",
+                    "type": "string"
+                  },
+                  "Region": {
+                    "description": "关联资源所在Region标识",
+                    "type": "string"
+                  },
+                  "ResourceID": {
+                    "description": "关联资源ID",
+                    "type": "string"
+                  },
+                  "ResourceName": {
+                    "description": "关联资源名称",
+                    "type": "string"
+                  },
+                  "ResourceType": {
+                    "description": "关联资源类型",
+                    "enum": [
+                      0,
+                      1,
+                      2
+                    ],
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "ResourceType",
+                  "ResourceID",
+                  "ResourceName",
+                  "Region"
+                ],
+                "type": "object"
+              },
+              "maxItems": 20,
+              "type": "array"
+            }
+          },
+          "required": [
+            "LogAppId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ModifyLogApp",
+        "source": "log-service server API",
+        "usage_constraints": "RelatedResourceList is optional; when supplied it replaces the associations and supports at most 20 validated resources. This operation mutates the LogApp."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "log-app.search-spans",
+      "group": "log-app",
+      "group_title": "日志应用",
+      "action": "SearchLogAppSpans",
+      "resource": "span",
+      "verb": "search",
+      "family": "log-app",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/SearchLogAppSpans",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "EndTime": {
+              "description": "Unix millisecond timestamp",
+              "type": "integer"
+            },
+            "LogAppId": {
+              "description": "日志应用ID",
+              "type": "string"
+            },
+            "Query": {
+              "description": "查询条件",
+              "properties": {
+                "Asc": {
+                  "description": "是否升序",
+                  "type": "boolean"
+                },
+                "Attributes": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Attributes中字段为key， value为该字段可能得取值",
+                  "properties": {},
+                  "type": "object"
+                },
+                "DurationMax": {
+                  "description": "Duration的最大值，单位为微秒",
+                  "type": "integer"
+                },
+                "DurationMin": {
+                  "description": "Duration的最小值，单位为微秒",
+                  "type": "integer"
+                },
+                "Fields": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Aggregate operations",
+                  "properties": {},
+                  "type": "object"
+                },
+                "Kind": {
+                  "description": "类型",
+                  "type": "string"
+                },
+                "Limit": {
+                  "description": "Limit",
+                  "maximum": 100,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "Offset": {
+                  "description": "Offset",
+                  "type": "integer"
+                },
+                "OperationName": {
+                  "description": "操作名称",
+                  "type": "string"
+                },
+                "Order": {
+                  "description": "排序字段: Kind、Name、ServiceName、Start、End、Duration、Attributes中显式添加开启统计的索引，如Attributes.request_id",
+                  "type": "string"
+                },
+                "ServiceName": {
+                  "description": "服务名称",
+                  "type": "string"
+                },
+                "StartTimeMax": {
+                  "description": "Span最大开始时间的微秒时间戳",
+                  "type": "integer"
+                },
+                "StartTimeMin": {
+                  "description": "Span最小开始时间的微秒时间戳",
+                  "type": "integer"
+                },
+                "StatusCode": {
+                  "description": "Trace状态",
+                  "type": "string"
+                },
+                "TraceIds": {
+                  "description": "Trace ID",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 20,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "TraceIds"
+              ],
+              "type": "object"
+            },
+            "StartTime": {
+              "description": "Unix millisecond timestamp",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "EndTime",
+            "LogAppId",
+            "Query",
+            "StartTime"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "SearchLogAppSpans",
+        "source": "log-service server API",
+        "usage_constraints": "StartTime and EndTime are Unix millisecond timestamps. Nested Query time and duration filters use microseconds. Query.TraceIds must contain 1-20 IDs and Query.Limit must be 1-100."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "log-app.search-traces",
+      "group": "log-app",
+      "group_title": "日志应用",
+      "action": "SearchLogAppTraces",
+      "resource": "trace",
+      "verb": "search",
+      "family": "log-app",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/SearchLogAppTraces",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "LogAppId": {
+              "description": "日志应用ID",
+              "type": "string"
+            },
+            "Query": {
+              "description": "查询条件",
+              "properties": {
+                "Asc": {
+                  "description": "是否升序",
+                  "type": "boolean"
+                },
+                "Attributes": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Attributes中字段为key， value为该字段可能得取值",
+                  "properties": {},
+                  "type": "object"
+                },
+                "DurationMax": {
+                  "description": "Duration的最大值，单位为微秒",
+                  "type": "integer"
+                },
+                "DurationMin": {
+                  "description": "Duration的最小值，单位为微秒",
+                  "type": "integer"
+                },
+                "Kind": {
+                  "description": "类型",
+                  "type": "string"
+                },
+                "Limit": {
+                  "description": "Limit",
+                  "maximum": 100,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "Offset": {
+                  "description": "Offset",
+                  "type": "integer"
+                },
+                "OperationName": {
+                  "description": "操作名称",
+                  "type": "string"
+                },
+                "Order": {
+                  "description": "排序字段: Kind、Name、ServiceName、Start、End、Duration、Attributes中显式添加开启统计的索引，如Attributes.request_id",
+                  "type": "string"
+                },
+                "ServiceName": {
+                  "description": "服务名称",
+                  "type": "string"
+                },
+                "StartTimeMax": {
+                  "description": "Span最大开始时间的微秒时间戳",
+                  "type": "integer"
+                },
+                "StartTimeMin": {
+                  "description": "Span最小开始时间的微秒时间戳",
+                  "type": "integer"
+                },
+                "StatusCode": {
+                  "description": "Trace状态",
+                  "type": "string"
+                },
+                "TraceId": {
+                  "description": "Trace ID",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "LogAppId",
+            "Query"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "SearchLogAppTraces",
+        "source": "log-service server API",
+        "usage_constraints": "Query.StartTimeMin, Query.StartTimeMax, Query.DurationMin, and Query.DurationMax use microseconds. Query.Limit must be 1-100 when supplied."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "trace.delete-scores",
+      "group": "trace",
+      "group_title": "Trace 与大模型观测",
+      "action": "DeleteTraceScores",
+      "resource": "trace-score",
+      "verb": "delete",
+      "family": "trace",
+      "visibility": "public",
+      "wire": {
+        "method": "DELETE",
+        "path": "/DeleteTraceScores",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "ScoreScope": {
+              "enum": [
+                "Session",
+                "Trace"
+              ],
+              "type": "string"
+            },
+            "SessionId": {
+              "type": "string"
+            },
+            "SpanIds": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "TopicId": {
+              "type": "string"
+            },
+            "TraceId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "ScoreScope",
+            "TopicId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DeleteTraceScores",
+        "source": "log-service server API",
+        "usage_constraints": "ScoreScope=Session requires SessionId; ScoreScope=Trace requires TraceId and optionally SpanIds. This operation deletes score records and must not be retried after an ambiguous failure without reconciliation."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "trace.describe-scores",
+      "group": "trace",
+      "group_title": "Trace 与大模型观测",
+      "action": "DescribeTraceScores",
+      "resource": "trace-score",
+      "verb": "describe",
+      "family": "trace",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeTraceScores",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "properties": {
+            "PageNumber": {
+              "description": "页码，默认 1；PageNumber × PageSize 不得超过 10000",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "PageSize": {
+              "description": "每页数量，默认 20，最大 100",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "ScoreScope": {
+              "description": "评分范围",
+              "enum": [
+                "Session",
+                "Trace"
+              ],
+              "type": "string"
+            },
+            "SessionId": {
+              "description": "Session ID，Session Scope 必填",
+              "type": "string"
+            },
+            "SpanIds": {
+              "description": "Span ID 列表，仅 Trace Scope 使用；不传表示查询该 Trace 的全部评分",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "TopicId": {
+              "description": "用户目标 Topic ID",
+              "type": "string"
+            },
+            "TraceId": {
+              "description": "Trace ID，Trace Scope 必填",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ScoreScope",
+            "TopicId"
+          ],
+          "type": "object"
+        }
+      },
+      "pagination": {
+        "mode": "page-number",
+        "page_number_param": "PageNumber",
+        "page_size_param": "PageSize",
+        "items_field": "TraceScores",
+        "total_field": "Total",
+        "default_page_size": 100,
+        "max_pages": 100
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeTraceScores",
+        "source": "log-service server API",
+        "usage_constraints": "ScoreScope=Session requires SessionId; ScoreScope=Trace requires TraceId and accepts repeated SpanIds query parameters. PageSize is at most 100 and PageNumber*PageSize must not exceed 10000."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "trace.modify-scores",
+      "group": "trace",
+      "group_title": "Trace 与大模型观测",
+      "action": "ModifyTraceScores",
+      "resource": "trace-score",
+      "verb": "modify",
+      "family": "trace",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/ModifyTraceScores",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "TopicId": {
+              "type": "string"
+            },
+            "TraceScores": {
+              "items": {
+                "properties": {
+                  "Comment": {
+                    "type": "string"
+                  },
+                  "ScoreScope": {
+                    "enum": [
+                      "Session",
+                      "Trace"
+                    ],
+                    "type": "string"
+                  },
+                  "ScoreValue": {
+                    "type": "string"
+                  },
+                  "ScoreValueType": {
+                    "default": "String",
+                    "enum": [
+                      "String",
+                      "Double"
+                    ],
+                    "type": "string"
+                  },
+                  "SessionId": {
+                    "type": "string"
+                  },
+                  "SpanIds": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "TraceId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "ScoreScope",
+                  "ScoreValue"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "required": [
+            "TopicId",
+            "TraceScores"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ModifyTraceScores",
+        "source": "log-service server API",
+        "usage_constraints": "TraceScores must be non-empty. ScoreScope=Session requires SessionId; ScoreScope=Trace requires TraceId and optionally SpanIds. ScoreValueType defaults to String; Double requires a finite numeric ScoreValue. This operation mutates score records and must not be retried after an ambiguous failure without reconciliation."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "trace.search-spans",
+      "group": "trace",
+      "group_title": "Trace 与大模型观测",
+      "action": "SearchSpans",
+      "resource": "span",
+      "verb": "search",
+      "family": "trace",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/SearchSpans",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "EndTime": {
+              "description": "Unix millisecond timestamp",
+              "type": "integer"
+            },
+            "Query": {
+              "description": "查询条件",
+              "properties": {
+                "Asc": {
+                  "description": "是否升序",
+                  "type": "boolean"
+                },
+                "Attributes": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Attributes中字段为key， value为该字段可能得取值",
+                  "properties": {},
+                  "type": "object"
+                },
+                "DurationMax": {
+                  "description": "Duration的最大值，单位为微秒",
+                  "type": "integer"
+                },
+                "DurationMin": {
+                  "description": "Duration的最小值，单位为微秒",
+                  "type": "integer"
+                },
+                "Fields": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Aggregate operations",
+                  "properties": {},
+                  "type": "object"
+                },
+                "Kind": {
+                  "description": "类型",
+                  "type": "string"
+                },
+                "Limit": {
+                  "description": "Limit",
+                  "maximum": 100,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "Offset": {
+                  "description": "Offset",
+                  "type": "integer"
+                },
+                "OperationName": {
+                  "description": "操作名称",
+                  "type": "string"
+                },
+                "Order": {
+                  "description": "排序字段: Kind、Name、ServiceName、Start、End、Duration、Attributes中显式添加开启统计的索引，如Attributes.request_id",
+                  "type": "string"
+                },
+                "ServiceName": {
+                  "description": "服务名称",
+                  "type": "string"
+                },
+                "StartTimeMax": {
+                  "description": "Span最大开始时间的微秒时间戳",
+                  "type": "integer"
+                },
+                "StartTimeMin": {
+                  "description": "Span最小开始时间的微秒时间戳",
+                  "type": "integer"
+                },
+                "StatusCode": {
+                  "description": "Trace状态",
+                  "type": "string"
+                },
+                "TraceIds": {
+                  "description": "Trace ID",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 20,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "TraceIds"
+              ],
+              "type": "object"
+            },
+            "StartTime": {
+              "description": "Unix millisecond timestamp",
+              "type": "integer"
+            },
+            "TraceInstanceId": {
+              "description": "Trace实例ID",
+              "type": "string"
+            }
+          },
+          "required": [
+            "EndTime",
+            "Query",
+            "StartTime",
+            "TraceInstanceId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "SearchSpans",
+        "source": "log-service server API",
+        "usage_constraints": "StartTime and EndTime are Unix millisecond timestamps. Query.StartTimeMin, Query.StartTimeMax, Query.DurationMin, and Query.DurationMax use microseconds. Query.TraceIds must contain 1-20 IDs and Query.Limit must be 1-100."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
     }
   ]
 }
