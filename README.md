@@ -11,6 +11,7 @@ The official Volcengine TLS CLI. `volclog` is the default agent and automation e
 - **Broad TLS coverage** — projects, topics, indexes, search and analysis, alarms, host groups, collectors, ETL, consumer groups, and more.
 - **Safer execution** — `--dry-run`, structured envelopes, trace artifacts, and file delivery for preview, validation, and recovery.
 - **Flexible credentials** — long-lived AK/SK and STS temporary credentials via local profiles, environment variables, or one-shot `--secrets-file`.
+- **Bundled Agent skills** — install the generic `volclog-core` workflow or the specialized `tls-logcollector` configuration and verification workflow directly from the CLI.
 
 ## Quick start
 

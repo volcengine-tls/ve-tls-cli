@@ -73,6 +73,21 @@ If `ResultStatus=incomplete`, narrow the time range and rerun before trusting co
 
 Use `skill list` and `skill install --name <name> --dir <dir>` only after verifying their exact syntax with `--help`. Follow the discover → describe → dry-run → execute order: inspect the contract, validate locally, then send.
 
+The 1.0.6 build bundles two skills:
+
+- `volclog-core`: the generic contract-first runtime, routing, delivery, and recovery model.
+- `tls-logcollector`: LogCollector collection design, non-persistent sample validation, TLS resource reconciliation, Linux/Kubernetes deployment guidance, and end-to-end verification.
+
+Install only the skill needed by the target agent, or omit `--name` to install all bundled skills:
+
+```bash
+volclog skill list
+volclog skill install --name volclog-core --dir <agent-skills-dir>
+volclog skill install --name tls-logcollector --dir <agent-skills-dir>
+```
+
+`tls-logcollector` complements rather than replaces `volclog-core`. It uses the current `tool describe` contract and the non-persistent collector, index-preview, and processor-debug helpers before any collector-rule write. Its temporary self-log POC path is opt-in because broad or recursive self-collection can amplify ingestion.
+
 For automation: pass `--profile` (or `--secrets-file`) explicitly, use deterministic file output (`--output-mode file --output-dir <dir>`) for large results, and never persist plaintext credentials in scripts.
 
 Identity determinism: in static AK mode, a complete `VOLCENGINE_ACCESS_KEY_ID` + `VOLCENGINE_ACCESS_KEY_SECRET` environment pair bypasses the explicitly selected profile. Automation that intends to use a static profile must remove unintended static credential environment variables, or use a controlled complete `--secrets-file` as the intended identity source. Dynamic provider modes ignore environment AK/SK. See [Configuration](3-Configuration.md) section 5 for the exact precedence.

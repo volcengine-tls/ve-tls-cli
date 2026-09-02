@@ -188,6 +188,96 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 	}
 }
 
+func TestTLSLogCollectorBundledSkillCoversConfigurationWorkflow(t *testing.T) {
+	root, err := Root()
+	if err != nil {
+		t.Fatalf("root: %v", err)
+	}
+	read := func(path string) string {
+		data, err := fs.ReadFile(root, path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		return string(data)
+	}
+
+	skill := read("tls-logcollector/SKILL.md")
+	for _, want := range []string{
+		"name: tls-logcollector",
+		"Use `volclog-core` as the generic CLI operating model",
+		"tool describe <group.action> --view full",
+		"references/config-validation.md",
+		"references/tls-resources.md",
+		"references/linux-host.md",
+		"references/kubernetes-daemonset.md",
+		"references/kubernetes-controller.md",
+		"references/verification.md",
+		"Do not automatically collect LogCollector's own logs.",
+		"Installation success is not collection success.",
+	} {
+		if !strings.Contains(skill, want) {
+			t.Fatalf("tls-logcollector SKILL.md missing %q", want)
+		}
+	}
+
+	validation := read("tls-logcollector/references/config-validation.md")
+	for _, want := range []string{
+		"collector.extract",
+		"collector.generate-begin-regex",
+		"collector.generate-log-regex",
+		"collector.split",
+		"collector.parse-path",
+		"collector.parse-time",
+		"log.preview",
+		"processor.exec-processor",
+		"Dry-run only validates the local request contract.",
+		"Inspect `ExecStatus` even after HTTP 200",
+	} {
+		if !strings.Contains(validation, want) {
+			t.Fatalf("config-validation.md missing %q", want)
+		}
+	}
+
+	resources := read("tls-logcollector/references/tls-resources.md")
+	for _, want := range []string{
+		"project.describe-projects",
+		"topic.describe-topics",
+		"host-group.describe-host-groups-v2",
+		"collector.describe-rules",
+		"collector.apply-rule-to-host-groups",
+		"does not accept `TopicId`",
+	} {
+		if !strings.Contains(resources, want) {
+			t.Fatalf("tls-resources.md missing %q", want)
+		}
+	}
+
+	verification := read("tls-logcollector/references/verification.md")
+	for _, want := range []string{
+		"collector.describe-rule-v2",
+		"host-group.describe-hosts",
+		"host-group.describe-host-group-rules",
+		"log.search",
+		"Topic ingestion",
+	} {
+		if !strings.Contains(verification, want) {
+			t.Fatalf("verification.md missing %q", want)
+		}
+	}
+
+	for _, path := range []string{
+		"tls-logcollector/agents/openai.yaml",
+		"tls-logcollector/references/linux-host.md",
+		"tls-logcollector/references/kubernetes-daemonset.md",
+		"tls-logcollector/references/kubernetes-controller.md",
+		"tls-logcollector/references/verification.md",
+	} {
+		if strings.TrimSpace(read(path)) == "" {
+			t.Fatalf("bundled file is empty: %s", path)
+		}
+	}
+}
+
 func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 	type manifest struct {
 		Skill         string            `yaml:"skill"`
