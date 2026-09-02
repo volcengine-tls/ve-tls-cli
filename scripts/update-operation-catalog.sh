@@ -78,6 +78,7 @@ GO_BIN="${GO:-go}"
   --tool-output-policy-overrides "$OVERRIDES_ROOT/output_policy.yaml" \
   --tool-usage-constraints-overrides "$OVERRIDES_ROOT/usage_constraints.yaml" \
   --internal-operation-overrides "$OVERRIDES_ROOT/internal_operations.json" \
+  --supplemental-operation-overrides "$OVERRIDES_ROOT/supplemental_operations.json" \
   --out-operation-catalog internal/contract/generated_catalog.json \
   --out-operation-catalog-lock contracts/operation-catalog-v2-lock.json \
   --lock-root .

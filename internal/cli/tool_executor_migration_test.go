@@ -19,8 +19,8 @@ import (
 
 func TestToolCatalogLoadsEmbeddedV2OperationsWithoutChangingLegacyDigest(t *testing.T) {
 	operations := loadToolOperations("", "", "")
-	if got := len(operations); got != 125 {
-		t.Fatalf("tool count=%d, want 125", got)
+	if got := len(operations); got != 158 {
+		t.Fatalf("tool count=%d, want 158", got)
 	}
 	operationCatalog, err := contract.LoadEmbedded()
 	if err != nil {

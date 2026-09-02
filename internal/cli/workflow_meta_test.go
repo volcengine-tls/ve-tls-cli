@@ -35,6 +35,53 @@ func TestWorkflowCatalogSourceMatchesCurrentWorkflowMetadata(t *testing.T) {
 	got := workflowCatalogSource()
 	want := []workflowCatalog{
 		{
+			ID:          appResolveResourcesWorkflowID,
+			Group:       "app",
+			Command:     "resolve-resources",
+			Action:      appResolveResourcesWorkflowID,
+			Summary:     "解析 App 关联资源图",
+			Description: "读取 App 资源；LogApp 类型继续展开 LogApp、Trace 实例及日志/Metric/Trace Topic，其他类型保留为通用 AppResource 节点。",
+			Method:      "GET",
+			Path:        "/DescribeApp + /DescribeLogApp + /DescribeTraceInstance",
+			InputMode:   "flat AppId input; sequential API orchestration",
+			APIGroup:    "app",
+			OperationIDs: []string{
+				appDescribeOperationID,
+				appDescribeLogAppOperationID,
+				appDescribeTraceInstanceOperationID,
+			},
+			Source: "cli_workflow",
+			Notes: []string{
+				"AppType=LogApp 时展开 ResourceType=0/1/2；其他 AppType 返回不透明 AppResource 节点，不猜测资源语义。",
+				"展开时要求 App、RelatedResourceList 与执行 Region 一致；workflow 不会自动跨 Region 路由。",
+				"Trace 实例同时解析 TraceTopicId 和 DependencyTopicId；ID 按首次出现顺序去重。",
+				"任一底层 API 或响应校验失败时立即停止，不返回部分成功结果。",
+			},
+		},
+		{
+			ID:          appResolveTopicIDsWorkflowID,
+			Group:       "app",
+			Command:     "resolve-topic-ids",
+			Action:      appResolveTopicIDsWorkflowID,
+			Summary:     "获取 App 关联的 TopicID 列表",
+			Description: "复用 App 资源图解析，仅允许 AppType=LogApp，并输出日志、Metric、Trace 与 Trace 依赖 TopicID。",
+			Method:      "GET",
+			Path:        "/DescribeApp + /DescribeLogApp + /DescribeTraceInstance",
+			InputMode:   "flat AppId input; sequential API orchestration",
+			APIGroup:    "app",
+			OperationIDs: []string{
+				appDescribeOperationID,
+				appDescribeLogAppOperationID,
+				appDescribeTraceInstanceOperationID,
+			},
+			Source: "cli_workflow",
+			Notes: []string{
+				"仅支持 AppType=LogApp；其他 AppType 会直接失败。",
+				"不使用 DescribeLogApp.NeedLogAppTopics，而是遍历 RelatedResourceList，避免遗漏 Trace DependencyTopicId。",
+				"TopicID 按首次出现顺序去重；任一底层 API 失败时立即停止，不返回部分成功结果。",
+			},
+		},
+		{
 			ID:                  "log.export",
 			Group:               "log",
 			Command:             "export",
@@ -160,9 +207,11 @@ func TestWorkflowCatalogSourceMatchesCurrentWorkflowMetadata(t *testing.T) {
 
 func TestWorkflowBackedByDerivesOperationActions(t *testing.T) {
 	want := map[string][]string{
-		"log.export":          {"SearchLogs"},
-		"log.export-analysis": {"SearchLogs"},
-		"log.ingest":          {"PutLogs"},
+		appResolveResourcesWorkflowID: {"DescribeApp", "DescribeLogApp", "DescribeTraceInstance"},
+		appResolveTopicIDsWorkflowID:  {"DescribeApp", "DescribeLogApp", "DescribeTraceInstance"},
+		"log.export":                  {"SearchLogs"},
+		"log.export-analysis":         {"SearchLogs"},
+		"log.ingest":                  {"PutLogs"},
 	}
 	for _, workflow := range workflowCatalogSource() {
 		got, err := workflowBackedBy(workflow)
@@ -177,9 +226,11 @@ func TestWorkflowBackedByDerivesOperationActions(t *testing.T) {
 
 func TestWorkflowDescribeOutputDerivesBackedBy(t *testing.T) {
 	want := map[string][]string{
-		"log.export":          {"SearchLogs"},
-		"log.export-analysis": {"SearchLogs"},
-		"log.ingest":          {"PutLogs"},
+		appResolveResourcesWorkflowID: {"DescribeApp", "DescribeLogApp", "DescribeTraceInstance"},
+		appResolveTopicIDsWorkflowID:  {"DescribeApp", "DescribeLogApp", "DescribeTraceInstance"},
+		"log.export":                  {"SearchLogs"},
+		"log.export-analysis":         {"SearchLogs"},
+		"log.ingest":                  {"PutLogs"},
 	}
 	for _, workflow := range workflowCatalogSource() {
 		out, err := workflowDescribeOutput(workflow)
@@ -205,6 +256,10 @@ func TestWorkflowBackedByRejectsUnknownOperation(t *testing.T) {
 
 func wantWorkflowParams(id string) []apiCapParam {
 	switch id {
+	case appResolveResourcesWorkflowID, appResolveTopicIDsWorkflowID:
+		return []apiCapParam{
+			{Name: "AppId", CLIFlag: "--app-id", In: "query", Required: true, Type: "string"},
+		}
 	case "log.export":
 		return []apiCapParam{
 			{Name: "TopicId", CLIFlag: "--topic-id", In: "body", Required: true, Type: "string"},

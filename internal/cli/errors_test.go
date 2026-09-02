@@ -207,6 +207,19 @@ func TestClassifyError_PageAllUnsupportedIsUnsupportedFeature(t *testing.T) {
 	}
 }
 
+func TestClassifyError_TypedUnsupportedFeature(t *testing.T) {
+	payload, code := classifyError(
+		newUnsupportedFeatureError("feature is unavailable", "use the generic resolver"),
+		"", 0, "workflow",
+	)
+	if code != 1 || payload.Kind != "unsupported_feature" {
+		t.Fatalf("unexpected classification: code=%d payload=%#v", code, payload)
+	}
+	if payload.Hint != "use the generic resolver" {
+		t.Fatalf("unexpected hint: %q", payload.Hint)
+	}
+}
+
 func TestClassifyError_MissingWritableOutputDirIsFilesystem(t *testing.T) {
 	p, code := classifyError(errString("missing writable output_dir"), "", 0, "raw")
 	if code != 2 {

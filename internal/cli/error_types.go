@@ -19,6 +19,20 @@ type removedCommandError struct {
 	Hint    string
 }
 
+type unsupportedFeatureError struct {
+	message string
+	hint    string
+}
+
+func (e *unsupportedFeatureError) Error() string { return strings.TrimSpace(e.message) }
+
+func newUnsupportedFeatureError(message, hint string) error {
+	return &unsupportedFeatureError{
+		message: strings.TrimSpace(message),
+		hint:    strings.TrimSpace(hint),
+	}
+}
+
 func (e *removedCommandError) Error() string {
 	return "legacy command removed: " + strings.TrimSpace(e.Command)
 }

@@ -26,6 +26,9 @@
 ```bash
 volclog tool list
 volclog tool list project
+volclog tool list app
+volclog tool list log-app
+volclog tool list trace
 volclog tool list --verb create --format json
 volclog tool describe project.describe-projects
 volclog tool describe project.create --view full
@@ -38,8 +41,10 @@ volclog tool describe project.create --view full
 ```bash
 volclog workflow list
 volclog workflow list log
+volclog workflow list app
 volclog workflow list --format json
 volclog workflow describe log.export
+volclog workflow describe app.resolve-resources
 ```
 
 `workflow list` 将组作为位置参数，并支持 `--format text|json`。`workflow describe <group.command>` 显示工作流的类型、来源、输入模式、上下文模式、执行模式、推荐的全局标志和指导。
@@ -110,6 +115,22 @@ volclog --profile default workflow exec log.export \
 ```
 
 在运行工作流之前，请使用 `workflow list` 或 `workflow describe` 确认该工作流 ID 在当前安装中可用。
+
+### 4.3 App 资源解析工作流
+
+`app`、`log-app` 和 `trace` 组提供单次公开 API 的原子能力；先用 `tool list <group>` 和 `tool describe <group.action> --view full` 获取当前契约。只有在需要跨 `DescribeApp`、`DescribeLogApp` 和 `DescribeTraceInstance` 展开关系时才使用下面的 workflow：
+
+```bash
+volclog workflow exec app.resolve-resources \
+  --input '{"AppId":"YOUR_APP_ID"}'
+
+volclog workflow exec app.resolve-topic-ids \
+  --input '{"AppId":"YOUR_APP_ID"}'
+```
+
+- `app.resolve-resources` 返回规范化的 `App`、`Nodes`、`Edges`、`LogAppIds`、`TraceInstanceIds` 和 `TopicIds`。非 LogApp 应用保留为通用 `AppResource` 节点，不猜测资源语义。
+- `app.resolve-topic-ids` 仅支持 `AppType=LogApp`，返回按首次出现顺序去重的 `TopicIds`；Trace 资源同时包含 Trace Topic 和 Dependency Topic。
+- 展开过程不自动跨 Region 路由；任一依赖调用失败时不会返回部分结果。先用 `--dry-run` 可查看依赖步骤，但资源 ID 和 Region 校验仍需实际响应。
 
 ## 5. `raw`
 

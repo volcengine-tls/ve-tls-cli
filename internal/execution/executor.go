@@ -149,13 +149,13 @@ func buildDryRunPlan(invocation Invocation, preview, encoded Request) *DryRunPla
 		Type:            "plan",
 		Method:          strings.ToUpper(strings.TrimSpace(encoded.Method)),
 		Path:            strings.TrimSpace(encoded.Path),
-		QueryKeys:       sortedMapKeys(encoded.Query),
+		QueryKeys:       sortedQueryKeys(encoded.Query, encoded.QueryMulti),
 		HeadersRedacted: redactedHeaderKeys(encoded.Header),
 		BodySHA256:      hex.EncodeToString(sum[:]),
 		Checks:          checks,
 		Valid:           valid,
 		RequestPreview: map[string]any{
-			"query": cloneStringMap(preview.Query),
+			"query": previewQuery(preview.Query, preview.QueryMulti),
 		},
 	}
 	if body, ok := previewBody(preview); ok {

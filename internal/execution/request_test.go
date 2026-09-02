@@ -33,9 +33,12 @@ func TestBuildRequestResolvesPathAndConvertsQueryHeaderAndBody(t *testing.T) {
 		t.Fatalf("method/path = %s %s", got.Method, got.Path)
 	}
 	if want := map[string]string{
-		"Bool": "true", "Count": "3", "Tags": `["a","b"]`, "Empty": "",
+		"Bool": "true", "Count": "3", "Empty": "",
 	}; !reflect.DeepEqual(got.Query, want) {
 		t.Fatalf("query = %#v, want %#v", got.Query, want)
+	}
+	if want := map[string][]string{"Tags": {"a", "b"}}; !reflect.DeepEqual(got.QueryMulti, want) {
+		t.Fatalf("multi query = %#v, want %#v", got.QueryMulti, want)
 	}
 	if !reflect.DeepEqual(got.Header, map[string]string{"X-Test": "false"}) {
 		t.Fatalf("header = %#v", got.Header)
@@ -49,6 +52,18 @@ func TestBuildRequestResolvesPathAndConvertsQueryHeaderAndBody(t *testing.T) {
 	}
 	if !reflect.DeepEqual(input, snapshot) {
 		t.Fatalf("BuildRequest mutated input: got %#v want %#v", input, snapshot)
+	}
+}
+
+func TestAppendMultiQueryPreservesExistingQueryAndRepeatsValues(t *testing.T) {
+	got, err := AppendMultiQuery("/DescribeTraceScores?Fixed=yes", map[string][]string{
+		"SpanIds": {"span-1", "span 2"},
+	})
+	if err != nil {
+		t.Fatalf("AppendMultiQuery: %v", err)
+	}
+	if got != "/DescribeTraceScores?Fixed=yes&SpanIds=span-1&SpanIds=span+2" {
+		t.Fatalf("path = %q", got)
 	}
 }
 

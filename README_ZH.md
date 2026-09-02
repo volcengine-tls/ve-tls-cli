@@ -11,6 +11,7 @@
 - **TLS 覆盖范围广泛** — 覆盖项目、主题、索引、检索分析、告警、机器组、采集规则、ETL、消费组等主要领域。
 - **执行路径更安全** — `--dry-run`、结构化 envelope、trace 工件与 file delivery 让预检查、验证和恢复更直接。
 - **凭证接入更灵活** — 同时支持长期 AK/SK 和 STS 临时凭证，可通过本地 profile、环境变量或一次性的 `--secrets-file` 注入。
+- **内置 Agent Skill** — 可直接从 CLI 安装通用的 `volclog-core`，或面向采集配置与验收的 `tls-logcollector` 专项 Skill。
 
 ## 快速开始
 
@@ -19,7 +20,7 @@
 Unix：
 
 ```bash
-tag=volclog-v1.0.5
+tag=volclog-v1.0.6
 base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
 curl -fsSLO "${base_url}/install-binary.sh"
 VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh
@@ -29,7 +30,7 @@ export PATH="$HOME/.local/bin:$PATH"
 Windows PowerShell：
 
 ```powershell
-$tag = "volclog-v1.0.5"
+$tag = "volclog-v1.0.6"
 $baseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/download/$tag"
 Invoke-WebRequest -Uri "$baseUrl/install.ps1" -OutFile install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -BaseUrl $baseUrl

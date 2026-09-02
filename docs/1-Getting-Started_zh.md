@@ -28,7 +28,7 @@ Unix 安装脚本需要 `curl`、`tar`，以及 `sha256sum` 或 `shasum` 之一�
 从目标 Release 下载安装脚本，可在任意目录运行：
 
 ```bash
-tag=volclog-v1.0.5
+tag=volclog-v1.0.6
 base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
 curl -fsSLO "${base_url}/install-binary.sh"
 VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh
@@ -43,7 +43,7 @@ export PATH="$HOME/.local/bin:$PATH"
 如需安装人工交互版，加上 `--edition human`：
 
 ```bash
-tag=volclog-v1.0.5
+tag=volclog-v1.0.6
 base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
 curl -fsSLO "${base_url}/install-binary.sh"
 VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh --edition human
@@ -52,7 +52,7 @@ VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh --edition human
 在 Windows 上，从目标 Release 下载 PowerShell 安装脚本：
 
 ```powershell
-$tag = "volclog-v1.0.5"
+$tag = "volclog-v1.0.6"
 $baseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/download/$tag"
 Invoke-WebRequest -Uri "$baseUrl/install.ps1" -OutFile install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -BaseUrl $baseUrl

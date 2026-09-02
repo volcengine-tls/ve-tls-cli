@@ -11,7 +11,7 @@ const rootPackage = require(path.join(repoRoot, 'package.json'));
 const humanPackage = require(path.join(repoRoot, 'npm', 'human-package', 'package.json'));
 
 test('stable release metadata stays aligned across Go and npm packages', () => {
-  const version = '1.0.5';
+  const version = '1.0.6';
   const releaseTag = `volclog-v${version}`;
   const goVersion = fs.readFileSync(
     path.join(repoRoot, 'internal', 'version', 'version.go'),
@@ -81,19 +81,19 @@ test('PowerShell installer does not swallow checksum mismatches', () => {
 test('npm publish guard keeps stable and release candidate dist-tags separate', () => {
   const script = path.join(repoRoot, 'scripts', 'check-npm-publish.mjs');
   const stableLatest = spawnSync(process.execPath, [script], {
-    env: { ...process.env, npm_package_version: '1.0.5', npm_config_tag: 'latest' },
+    env: { ...process.env, npm_package_version: '1.0.6', npm_config_tag: 'latest' },
     encoding: 'utf8',
   });
   const stableRC = spawnSync(process.execPath, [script], {
-    env: { ...process.env, npm_package_version: '1.0.5', npm_config_tag: 'rc' },
+    env: { ...process.env, npm_package_version: '1.0.6', npm_config_tag: 'rc' },
     encoding: 'utf8',
   });
   const rcLatest = spawnSync(process.execPath, [script], {
-    env: { ...process.env, npm_package_version: '1.0.6-rc.1', npm_config_tag: 'latest' },
+    env: { ...process.env, npm_package_version: '1.0.7-rc.1', npm_config_tag: 'latest' },
     encoding: 'utf8',
   });
   const rc = spawnSync(process.execPath, [script], {
-    env: { ...process.env, npm_package_version: '1.0.6-rc.1', npm_config_tag: 'rc' },
+    env: { ...process.env, npm_package_version: '1.0.7-rc.1', npm_config_tag: 'rc' },
     encoding: 'utf8',
   });
 

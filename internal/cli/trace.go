@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -90,12 +91,20 @@ func (c *Context) traceRequest(method, path string, query map[string]string, bod
 	if err := c.initTrace(); err != nil {
 		return
 	}
-	keys := make([]string, 0, len(query))
+	path, pathQueryKeys := tracePath(path)
+	keySet := make(map[string]struct{}, len(query)+len(pathQueryKeys))
 	for k := range query {
 		kk := strings.TrimSpace(k)
 		if kk != "" {
-			keys = append(keys, kk)
+			keySet[kk] = struct{}{}
 		}
+	}
+	for _, key := range pathQueryKeys {
+		keySet[key] = struct{}{}
+	}
+	keys := make([]string, 0, len(keySet))
+	for key := range keySet {
+		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	evt := traceEvent{
@@ -108,6 +117,23 @@ func (c *Context) traceRequest(method, path string, query map[string]string, bod
 		BodySHA256:      sha256Hex(body),
 	}
 	_ = c.writeTrace(evt)
+}
+
+func tracePath(raw string) (string, []string) {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.RawQuery == "" {
+		return raw, nil
+	}
+	keys := make([]string, 0, len(parsed.Query()))
+	for key := range parsed.Query() {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	parsed.RawQuery = ""
+	return parsed.String(), keys
 }
 
 func (c *Context) traceResponse(status int, requestID string, elapsed time.Duration, body []byte, err error) {

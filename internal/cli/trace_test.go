@@ -61,6 +61,22 @@ func TestNormalizeTraceRedactValue(t *testing.T) {
 	}
 }
 
+func TestTracePathRedactsRepeatedQueryValues(t *testing.T) {
+	gotPath, gotKeys := tracePath("/DescribeTraceScores?SpanIds=span-secret-1&SpanIds=span-secret-2&TopicId=topic-secret")
+	if gotPath != "/DescribeTraceScores" {
+		t.Fatalf("trace path=%q, want query-free path", gotPath)
+	}
+	wantKeys := []string{"SpanIds", "TopicId"}
+	if len(gotKeys) != len(wantKeys) {
+		t.Fatalf("trace query keys=%v, want %v", gotKeys, wantKeys)
+	}
+	for index := range wantKeys {
+		if gotKeys[index] != wantKeys[index] {
+			t.Fatalf("trace query keys=%v, want %v", gotKeys, wantKeys)
+		}
+	}
+}
+
 // TestTraceDynamicRequestFailureDoesNotLeakSecrets proves that when a dynamic
 // request fails (provider Retrieve error), the trace file does not contain
 // canary secrets. The trace must only store the redacted error message, never

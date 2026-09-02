@@ -73,6 +73,21 @@ CLI 校验本地契约形状（输入模式、必填字段）并将请求传输�
 
 仅在用 `--help` 确认确切语法后，才使用 `skill list` 和 `skill install --name <name> --dir <dir>`。遵循 发现 → 描述 → 预执行 → 执行 的顺序：检查契约、本地校验、然后发送。
 
+1.0.6 内置两个 Skill：
+
+- `volclog-core`：通用的契约优先运行时、路由、交付和恢复模型。
+- `tls-logcollector`：LogCollector 采集设计、非持久化样本校验、TLS 资源对账、Linux/Kubernetes 部署指导及端到端验收。
+
+可只安装目标 Agent 所需的 Skill；省略 `--name` 则安装全部内置 Skill：
+
+```bash
+volclog skill list
+volclog skill install --name volclog-core --dir <agent-skills-dir>
+volclog skill install --name tls-logcollector --dir <agent-skills-dir>
+```
+
+`tls-logcollector` 是对 `volclog-core` 的补充而不是替代。它要求以当前 `tool describe` 契约为准，并在写入采集规则前使用非持久化的采集解析、索引分词预览和 Processor 调试接口。临时采集 LogCollector 自身日志的 POC 必须显式启用，因为宽泛或递归的自采集可能放大入流。
+
 对于自动化：显式传入 `--profile`（或 `--secrets-file`），对大结果使用确定性文件输出（`--output-mode file --output-dir <dir>`），且永远不要在脚本中持久化明文凭证。
 
 身份确定性：在静态 AK 模式下，完整的 `VOLCENGINE_ACCESS_KEY_ID` + `VOLCENGINE_ACCESS_KEY_SECRET` 环境对会绕过显式选择的配置档。打算使用静态配置档的自动化必须移除意外的静态凭证环境变量，或使用受控的完整 `--secrets-file` 作为预期的身份来源。动态提供者模式会忽略环境 AK/SK。确切的优先级见 [配置](3-Configuration_zh.md) 第 5 节。

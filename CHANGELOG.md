@@ -1,5 +1,16 @@
 # Changelog
 
+## volclog-v1.0.6
+
+- Bundle the `tls-logcollector` Agent skill for contract-first LogCollector resource setup, parser and processor validation, Linux or Kubernetes deployment guidance, and end-to-end heartbeat, binding, and ingestion verification.
+- Expose TLS account activation and collector configuration validation helpers, including regex generation, sample parsing, delimiter preview, latest-log inspection, and corrected processor debug contracts.
+- Align log-back-flow contracts to the current server model, including ETL and AgentLoop evaluation-set delivery fields and removal of retired scheduled-SQL inputs.
+- Add 24 atomic App, LogApp, Trace span-search, and TraceScore operations aligned to the pinned log-service server implementation.
+- Add `app.resolve-resources` and `app.resolve-topic-ids` workflows for normalized App resource traversal and deduplicated LogApp Topic resolution.
+- Preserve repeated query parameters such as `DescribeTraceScores.SpanIds` through execution, runtime transport, and redacted tracing.
+- Document the supplemental-operation source revision and symbol mapping, and update the bundled `volclog-core` routing and SOP guidance.
+- Build local and release macOS binaries with the external Go linker so generated Mach-O executables contain the `LC_UUID` required by dyld, while keeping the deployment target at macOS 11.0.
+
 ## volclog-v1.0.5
 
 - Add standalone Console Login, SSO, RAM Role ARN, OIDC, and ECS Role authentication while preserving legacy AK/SK and manual STS behavior.

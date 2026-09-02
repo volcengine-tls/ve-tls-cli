@@ -208,7 +208,7 @@ func TestMergeInternalOperationsIntoCheckedInCatalogUpdatesLock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load regenerated catalog: %v", err)
 	}
-	if got, want := len(catalog.Operations), 131; got != want {
+	if got, want := len(catalog.Operations), 164; got != want {
 		t.Fatalf("regenerated operations=%d, want %d", got, want)
 	}
 	raw, err = os.ReadFile(lockPath)

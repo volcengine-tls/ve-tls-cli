@@ -1,6 +1,6 @@
 ---
 name: volclog-core
-description: Use when operating volclog in agent or CI sessions and you need a contract-first workflow for runtime selector resolution, discover/describe/exec routing, envelope reading, large-result delivery, and error recovery without guessing commands, flags, or shortcut flows.
+description: Use when operating volclog in agent or CI sessions and you need a contract-first workflow for runtime selector resolution, discover/describe/exec routing, App resource or Topic resolution, envelope reading, large-result delivery, and error recovery without guessing commands, fields, or shortcut flows.
 ---
 
 # Volclog Core
@@ -17,6 +17,7 @@ Treat this file as the dominant generic operating model for `volclog`, not as an
 - Treat profile configuration as a runtime-selector problem, not a region-discovery ritual.
 - Think in runtime selectors: active profile, explicit `--profile <name>`, one-shot `--secrets-file`, `context.secrets_file`, or process-scoped environment credentials.
 - Use `tool` for published public APIs, `workflow` for CLI-owned orchestration, and `raw` only when method/path is already known.
+- Keep one-call App, LogApp, Trace, and TraceScore capabilities on `tool`; use `workflow app.resolve-resources` or `app.resolve-topic-ids` only for CLI-owned cross-call expansion.
 - Prefer structured JSON input such as `--input '{...}'` when `tool exec` or `workflow exec` already supports it.
 
 ## Runtime Selector Model
@@ -27,13 +28,6 @@ Treat this file as the dominant generic operating model for `volclog`, not as an
 - Use `region` only when the contract or task explicitly requires an override. Do not infer it from endpoint or domain.
 - `--profile`/`context.profile` and `--secrets-file`/`context.secrets_file` are runtime selectors, not business input fields.
 - Never read, print, export, or persist AK/SK or token values in prompts, memory, request artifacts, or skill content.
-
-## Authentication Mode & Recovery
-
-- Discover the auth mode with `volclog doctor` (offline) or by reading the profile `mode` field. Dynamic profiles use `mode=sso` or `mode=console-login`; static profiles have no `mode` or `mode=ak`.
-- On `error.kind=auth` with a `ReauthRequired` description, recover with the exact command matching the mode: `volclog login --profile NAME` (Console Login) or `volclog sso login --profile NAME` (SSO). Do not invent other commands.
-- Do **not** treat login as an automatic retry action. An Agent must not run `login`/`sso login` on its own; surface the `ReauthRequired` error to the user and wait for explicit re-login.
-- Do not suggest or manually copy tokens/cache from `~/.volcengine` into volclog. volclog uses an independently managed state root and lifecycle and does not read `~/.volcengine` at runtime; even where some cache schema/filenames are upstream-compatible, manual cache copying is not supported.
 
 ## Canonical Agent Loop
 
@@ -49,6 +43,8 @@ Discover -> Describe -> Exec -> Read Result
    - `volclog workflow list <group>`
 3. Read the contract.
    - `volclog tool describe <group.action>`
+   - use `volclog tool describe <group.action> --view full` when authoring a nested request or when compact output omits an expected optional field
+   - treat compact view as the discovery summary and full view as the request-authoring contract
    - `volclog workflow describe <group.command>`
 4. Execute with structured input.
    - `volclog tool exec <group.action> --input '{...}'`
@@ -74,6 +70,8 @@ Discover -> Describe -> Exec -> Read Result
 
 - Do not guess command names, tool ids, workflow ids, JSON fields, or output shape.
 - If the action id is still unknown, run `volclog tool list <group>` or `volclog workflow list <group>` before guessing.
+- Let the operation's `risk`, `recovery`, and `usage_constraints` override the generic recovery map below.
+- Treat `high-risk-retry` as a warning that retrying is high risk. After an ambiguous result, reconcile only through a get/describe/list action named by the contract; otherwise stop and escalate instead of retrying automatically.
 - Do not use human shortcut commands as the primary agent flow.
 - Do not repeat schema details that already exist in `tool describe` or `workflow describe`.
 - Do not rebuild a valid `tool exec` or `workflow exec` request into flag-heavy shortcut form just because the shell path looks shorter.
@@ -85,7 +83,7 @@ Discover -> Describe -> Exec -> Read Result
 
 ## Error Recovery Quick Map
 
-Use this table as the default first response after a failed envelope. Read `references/best-practices.md` only when you need runtime-specific detail beyond the quick action below.
+Use this table as the default first response after a failed envelope only after reading the operation's `risk`, `recovery`, and `usage_constraints`. The operation contract takes precedence. Read `references/best-practices.md` only when you need runtime-specific detail beyond the quick action below.
 
 | Signal | Next action |
 | --- | --- |
@@ -93,11 +91,11 @@ Use this table as the default first response after a failed envelope. Read `refe
 | `error.kind=auth` or `401` | Re-check runtime selector, then credentials, then endpoint or region override. |
 | `403 Forbidden` | Re-check tenant or profile alignment before widening the permission search. |
 | `error.kind=usage` | Re-run `tool list` or `workflow list`; do not invent aliases. |
-| `error.kind=unsupported_feature` | Remove the unsupported flag or switch to the right surface. |
+| `error.kind=unsupported_feature` | Read `error.hint`, then remove the unsupported flag or switch to the named surface; non-LogApp Topic resolution should switch to `app.resolve-resources`. |
 | `error.kind=incompatible_flags` | Remove one conflicting flag and rerun. |
 | `error.kind=filesystem` | Fix `--output-dir`, local path, or permissions before retrying. |
 | `error.kind=decode` | Read `error.hint`, remove the wrong filter or projection if present, then rerun unfiltered or with `--trace-dir`. |
-| `error.kind=server` | Read `error.code` and `error.requestId`, then retry with backoff if it looks transient or escalate to the service owner with that evidence. |
+| `error.kind=server` | Read `error.code` and `error.requestId`; retry with backoff only when the operation contract permits it and the failure is clearly transient. |
 | `error.kind=config` | Run `volclog doctor` for host-side configuration checks, then inspect the reported runtime issue. |
 | `error.kind=unknown` | Read `error.hint` first, then `error.message` or `error.details`, and rerun with `--dry-run` or `--trace-dir` only if more detail is still needed. |
 | `ResultStatus=incomplete` | Narrow the time window and rerun before trusting counts or emptiness. |
@@ -120,6 +118,8 @@ Use this table as the default first response after a failed envelope. Read `refe
 | Need to discover action or workflow ids | `volclog tool list <group>` / `volclog workflow list <group>` |
 | Need help choosing the surface | read `references/routing.md` |
 | Need multi-step execution order | read `references/sops.md` |
+| Resolve an App resource graph | `volclog workflow describe app.resolve-resources` / `volclog workflow exec app.resolve-resources` |
+| Resolve Topic IDs for a LogApp App | `volclog workflow describe app.resolve-topic-ids` / `volclog workflow exec app.resolve-topic-ids` |
 | Need runtime/error/recovery semantics | read `references/best-practices.md` |
 | Use an exact method/path | `volclog raw --method ... --path ...` |
 | Authenticate a stateless run | host-selected local profile -> one-shot `--secrets-file` or `context.secrets_file` |

@@ -40,6 +40,8 @@ jobs:
           go test -tags=human ./...
       - name: install-binary regression test
         run: bash scripts/install-binary_test.sh
+      - name: install-local regression test
+        run: bash scripts/install-local_test.sh
       - name: npm package tests
         run: npm run test:npm --silent
       - name: npm pack dry-run

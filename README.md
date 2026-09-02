@@ -11,6 +11,7 @@ The official Volcengine TLS CLI. `volclog` is the default agent and automation e
 - **Broad TLS coverage** — projects, topics, indexes, search and analysis, alarms, host groups, collectors, ETL, consumer groups, and more.
 - **Safer execution** — `--dry-run`, structured envelopes, trace artifacts, and file delivery for preview, validation, and recovery.
 - **Flexible credentials** — long-lived AK/SK and STS temporary credentials via local profiles, environment variables, or one-shot `--secrets-file`.
+- **Bundled Agent skills** — install the generic `volclog-core` workflow or the specialized `tls-logcollector` configuration and verification workflow directly from the CLI.
 
 ## Quick start
 
@@ -19,7 +20,7 @@ Install the current stable binary from GitHub Release.
 On Unix:
 
 ```bash
-tag=volclog-v1.0.5
+tag=volclog-v1.0.6
 base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
 curl -fsSLO "${base_url}/install-binary.sh"
 VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh
@@ -29,7 +30,7 @@ export PATH="$HOME/.local/bin:$PATH"
 On Windows PowerShell:
 
 ```powershell
-$tag = "volclog-v1.0.5"
+$tag = "volclog-v1.0.6"
 $baseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/download/$tag"
 Invoke-WebRequest -Uri "$baseUrl/install.ps1" -OutFile install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -BaseUrl $baseUrl
