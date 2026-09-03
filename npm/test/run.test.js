@@ -7,7 +7,9 @@ test('runCLI forwards args to installed volclog binary', () => {
   const calls = [];
   const exitCode = runCLI({
     argv: ['skill', 'install', '--dir', '/tmp/skills'],
+    packageRoot: '/tmp/pkg',
     binaryPath: '/tmp/pkg/.volclog/bin/volclog',
+    env: { EXISTING: 'preserved' },
     existsImpl() {
       return true;
     },
@@ -25,7 +27,15 @@ test('runCLI forwards args to installed volclog binary', () => {
     {
       command: '/tmp/pkg/.volclog/bin/volclog',
       args: ['skill', 'install', '--dir', '/tmp/skills'],
-      options: { stdio: 'inherit' },
+      options: {
+        stdio: 'inherit',
+        env: {
+          EXISTING: 'preserved',
+          VOLCLOG_INSTALL_METHOD: 'npm',
+          VOLCLOG_NPM_PACKAGE: '@volcengine-tls/volclog',
+          VOLCLOG_NPM_PACKAGE_ROOT: '/tmp/pkg',
+        },
+      },
     },
   ]);
 });

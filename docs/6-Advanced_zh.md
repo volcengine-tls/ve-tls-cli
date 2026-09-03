@@ -6,9 +6,11 @@
 
 ## 1. 过滤与投影
 
-`--jmes-filter` 是应用于最终信封（对于 `raw`、`tool exec`、`workflow exec`）或原始结果（对于其他组）的 CLI 级过滤器，在收到响应后应用。
+`--jmes-filter` 会在发送任何请求前编译并校验，然后在收到响应后应用于最终信封（对于 `raw`、`tool exec`、`workflow exec`）或原始结果（对于其他组）。
 
-`execution.projection`（在 `tool exec` 和 `workflow exec` 的 `--context` JSON 中）是 CLI 本地的 JMESPath 投影，在收到响应后、CLI 构建信封之前应用于原始结果。它不是服务器端的。它使用与 `--jmes-filter` 相同的 JMESPath 引擎，但作用于原始结果而不是最终信封。
+`execution.projection`（在 `tool exec` 和 `workflow exec` 的 `--context` JSON 中）会在请求前编译，并在收到响应后、CLI 构建信封之前作用于原始结果。它不是服务器端的。它使用与 `--jmes-filter` 相同的 JMESPath 引擎，但作用于原始结果而不是最终信封。
+
+动态 JSON 在请求解码、服务响应、信封、JSONL 输出和 JMESPath 求值的全链路保留 `json.Number`。大整数和长小数不会经过 `float64` 转换，因此能够保持精度。无效的 filter 或 projection 会在本地预执行阶段失败，不会发送请求。
 
 行为：
 
@@ -73,7 +75,7 @@ CLI 校验本地契约形状（输入模式、必填字段）并将请求传输�
 
 仅在用 `--help` 确认确切语法后，才使用 `skill list` 和 `skill install --name <name> --dir <dir>`。遵循 发现 → 描述 → 预执行 → 执行 的顺序：检查契约、本地校验、然后发送。
 
-1.0.6 内置两个 Skill：
+1.0.7 内置两个 Skill：
 
 - `volclog-core`：通用的契约优先运行时、路由、交付和恢复模型。
 - `tls-logcollector`：LogCollector 采集设计、非持久化样本校验、TLS 资源对账、Linux/Kubernetes 部署指导及端到端验收。
@@ -85,6 +87,37 @@ volclog skill list
 volclog skill install --name volclog-core --dir <agent-skills-dir>
 volclog skill install --name tls-logcollector --dir <agent-skills-dir>
 ```
+
+### 9.1 Skill 生命周期与修改保护
+
+所有生命周期命令都必须提供 `--dir`；重复使用 `--name` 可选择多个 Skill，省略则选择全部内置 Skill：
+
+```bash
+volclog skill status --dir <agent-skills-dir> [--name <name>]
+volclog skill update --dir <agent-skills-dir> [--name <name>] [--force]
+volclog skill uninstall --dir <agent-skills-dir> [--name <name>] [--force]
+```
+
+每个已安装 Skill 都有 `.volclog-skill.json` sidecar，字段包括 `schema_version`、`name`、`installed_version`、`source_digest` 和 `installed_digest`。digest 是基于排序后的相对 POSIX 路径与按长度分帧的文件内容计算的稳定 SHA-256，并排除该 sidecar；symlink 和特殊文件会被拒绝。`status` 完全离线，状态包括 `not_installed`、`current`、`outdated`、`modified`、`untracked` 和 `invalid_manifest`；版本不一致会与内容修改分开报告。
+
+`current` 表示磁盘内容等于 `installed_digest` 且内置 source 等于 `source_digest`；`outdated` 表示内容未改动但内置 source digest 已变化；`modified` 表示磁盘内容不同于 `installed_digest`。缺少 sidecar 时为 `untracked`，sidecar 无法读取或内容不一致时为 `invalid_manifest`。
+
+目标已存在时，`install` 默认失败，必须显式使用 `--force`。`update` 和 `uninstall` 默认保留 `modified`、`untracked` 和 `invalid_manifest` Skill；使用 `--force` 才会显式替换或删除。安装和更新会先构造完整临时目录，再通过同文件系统 rename 完成替换；替换失败时恢复旧目录。
+
+### 9.2 版本与显式升级
+
+`volclog version` 输出包含 `schema_version`、`version`、`edition`、`commit`、`catalog_digest`、`operation_count`、`public_operation_count` 和 `workflow_count` 的机器可读 JSON。`volclog --version` 继续保留文本兼容形式，供已有脚本使用。
+
+升级只会在显式调用时执行，永不后台检查：
+
+```bash
+volclog upgrade --check
+volclog upgrade --version 1.0.7
+volclog upgrade --version 1.0.7 --yes
+volclog upgrade --yes
+```
+
+检查和不带 `--yes` 的版本选择都不会写文件。npm 安装会委托 npm；独立二进制会校验发布 checksum，并使用原子替换。
 
 `tls-logcollector` 是对 `volclog-core` 的补充而不是替代。它要求以当前 `tool describe` 契约为准，并在写入采集规则前使用非持久化的采集解析、索引分词预览和 Processor 调试接口。临时采集 LogCollector 自身日志的 POC 必须显式启用，因为宽泛或递归的自采集可能放大入流。
 

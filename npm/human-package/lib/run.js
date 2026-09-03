@@ -15,7 +15,8 @@ function resolveBinaryPath(options = {}) {
 
 function runCLI(options = {}) {
   const argv = options.argv || process.argv.slice(2);
-  const binaryPath = resolveBinaryPath(options);
+  const packageRoot = options.packageRoot || path.resolve(__dirname, '..');
+  const binaryPath = resolveBinaryPath({ ...options, packageRoot });
   const spawnImpl = options.spawnImpl || spawnSync;
   const existsImpl = options.existsImpl || fs.existsSync;
   if (!existsImpl(binaryPath)) {
@@ -23,7 +24,13 @@ function runCLI(options = {}) {
       `volclog-human binary not found: ${binaryPath}. Reinstall package or run npm rebuild @volcengine-tls/volclog-human.`,
     );
   }
-  const result = spawnImpl(binaryPath, argv, { stdio: 'inherit' });
+  const env = {
+    ...(options.env || process.env),
+    VOLCLOG_INSTALL_METHOD: 'npm',
+    VOLCLOG_NPM_PACKAGE: '@volcengine-tls/volclog-human',
+    VOLCLOG_NPM_PACKAGE_ROOT: packageRoot,
+  };
+  const result = spawnImpl(binaryPath, argv, { stdio: 'inherit', env });
   if (result.error) {
     throw result.error;
   }

@@ -256,6 +256,38 @@ func TestExecutorDryRunEncodesExactlyOnceWithoutDecodeOrTransport(t *testing.T) 
 	}
 }
 
+func TestExecutorDryRunPreviewPreservesJSONNumberLexemes(t *testing.T) {
+	op := requestTestOperation()
+	result, err := NewExecutor(&fakeTransport{}, NewCodecRegistry()).Execute(context.Background(), Invocation{
+		Operation: op,
+		Input: Input{
+			Path: map[string]any{"ProjectId": "p1"},
+			Body: Payload{JSON: map[string]any{
+				"big":     json.Number("9007199254740993"),
+				"decimal": json.Number("0.12345678901234567890123456789"),
+			}},
+		},
+		Options: Options{DryRun: true},
+		Runtime: RuntimeView{Endpoint: "https://tls.example.com", Region: "cn-beijing"},
+	})
+	if err != nil {
+		t.Fatalf("Execute(dry-run) error = %v", err)
+	}
+	body, ok := result.Plan.RequestPreview["body"].(map[string]any)
+	if !ok {
+		t.Fatalf("preview body type = %T", result.Plan.RequestPreview["body"])
+	}
+	for key, want := range map[string]string{
+		"big":     "9007199254740993",
+		"decimal": "0.12345678901234567890123456789",
+	} {
+		number, ok := body[key].(json.Number)
+		if !ok || number.String() != want {
+			t.Errorf("preview %s = %#v, want json.Number(%q)", key, body[key], want)
+		}
+	}
+}
+
 func TestExecutorRejectsPageAllWithoutPaginationMetadata(t *testing.T) {
 	for _, dryRun := range []bool{false, true} {
 		_, err := NewExecutor(&fakeTransport{}, NewCodecRegistry()).Execute(context.Background(), Invocation{

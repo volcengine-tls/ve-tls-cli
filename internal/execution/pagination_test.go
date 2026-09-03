@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"reflect"
@@ -81,7 +82,7 @@ func TestExecutorCursorPaginationAndMaxPageGuard(t *testing.T) {
 		t.Fatalf("requests = %#v", transport.requests)
 	}
 	data := result.Data.(map[string]any)
-	if !reflect.DeepEqual(data["Items"], []any{float64(1), float64(2), float64(3), float64(4)}) ||
+	if !reflect.DeepEqual(data["Items"], []any{json.Number("1"), json.Number("2"), json.Number("3"), json.Number("4")}) ||
 		data["Total"] != 4 {
 		t.Fatalf("data = %#v", data)
 	}

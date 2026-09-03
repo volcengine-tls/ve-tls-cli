@@ -26,6 +26,8 @@ volclog-human --help
 volclog-human --profile default doctor
 ```
 
+`volclog-human version` emits the same machine-readable build and catalog metadata as `volclog version`; `volclog-human --version` remains the text-compatible version output. `upgrade` and Skill lifecycle commands are shared CLI groups rather than resource shortcuts; see [Usage](4-Usage.md) and [Advanced](6-Advanced.md).
+
 Do not memorize every option. Discover the installed version in this order:
 
 ```bash

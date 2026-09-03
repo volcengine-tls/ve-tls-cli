@@ -26,6 +26,8 @@ volclog-human --help
 volclog-human --profile default doctor
 ```
 
+`volclog-human version` 与 `volclog version` 一样输出机器可读的构建和 catalog 元信息；`volclog-human --version` 继续输出文本兼容的版本信息。`upgrade` 和 Skill 生命周期命令是共享的 CLI 命令组，不属于资源 shortcut，详见[使用](4-Usage_zh.md)和[进阶](6-Advanced_zh.md)。
+
 不要背诵全部参数，按以下顺序发现当前版本的用法：
 
 ```bash

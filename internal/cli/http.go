@@ -1,10 +1,10 @@
 package cli
 
 import (
-	"encoding/json"
 	"errors"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/jsonx"
 	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
@@ -37,8 +37,11 @@ func decodeResponse(resp tlsapi.Response) (any, error) {
 	if err == nil {
 		return v, nil
 	}
+	if errors.Is(err, jsonx.ErrTrailingData) {
+		return nil, err
+	}
 	var s string
-	if json.Unmarshal(resp.Body, &s) == nil {
+	if jsonx.Unmarshal(resp.Body, &s) == nil {
 		return map[string]any{"data": s}, nil
 	}
 	return map[string]any{"data": string(resp.Body)}, nil
@@ -57,7 +60,7 @@ func parseHTTPErrorPayload(he *httpError) (string, string, map[string]any) {
 		return "", "", nil
 	}
 	var body map[string]any
-	if err := json.Unmarshal(he.body, &body); err != nil {
+	if err := jsonx.Unmarshal(he.body, &body); err != nil {
 		return "", "", nil
 	}
 	errorCode := firstStringValue(body, "errorCode", "ErrorCode")
@@ -84,7 +87,7 @@ func parseJSONObjectString(raw string) map[string]any {
 		return nil
 	}
 	var out map[string]any
-	if err := json.Unmarshal([]byte(trimmed), &out); err != nil {
+	if err := jsonx.Unmarshal([]byte(trimmed), &out); err != nil {
 		return nil
 	}
 	return out

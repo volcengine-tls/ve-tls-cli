@@ -55,6 +55,39 @@ func TestBuildRequestResolvesPathAndConvertsQueryHeaderAndBody(t *testing.T) {
 	}
 }
 
+func TestBuildRequestPreservesJSONNumberLexemes(t *testing.T) {
+	op := requestTestOperation()
+	input := Input{
+		Path: map[string]any{"ProjectId": json.Number("9007199254740993")},
+		Query: map[string]any{
+			"Big":     json.Number("9007199254740993"),
+			"Decimal": json.Number("0.12345678901234567890123456789"),
+		},
+		Header: map[string]any{"X-Number": json.Number("9007199254740993")},
+		Body: Payload{JSON: map[string]any{
+			"big":     json.Number("9007199254740993"),
+			"decimal": json.Number("0.12345678901234567890123456789"),
+		}},
+	}
+	request, err := BuildRequest(op, input)
+	if err != nil {
+		t.Fatalf("BuildRequest() error = %v", err)
+	}
+	if request.Path != "/projects/9007199254740993" {
+		t.Fatalf("path = %q", request.Path)
+	}
+	if request.Query["Big"] != "9007199254740993" || request.Query["Decimal"] != "0.12345678901234567890123456789" {
+		t.Fatalf("query = %#v", request.Query)
+	}
+	if request.Header["X-Number"] != "9007199254740993" {
+		t.Fatalf("header = %#v", request.Header)
+	}
+	wantBody := `{"big":9007199254740993,"decimal":0.12345678901234567890123456789}`
+	if string(request.Body) != wantBody {
+		t.Fatalf("body = %q, want %q", request.Body, wantBody)
+	}
+}
+
 func TestAppendMultiQueryPreservesExistingQueryAndRepeatsValues(t *testing.T) {
 	got, err := AppendMultiQuery("/DescribeTraceScores?Fixed=yes", map[string][]string{
 		"SpanIds": {"span-1", "span 2"},
