@@ -7,6 +7,7 @@
 - Add machine-readable build and catalog metadata through `volclog version`.
 - Add explicit-only CLI upgrades for npm and standalone installations; no background update checks are performed.
 - Add managed skill status, safe update, and uninstall commands with version and digest based modification detection.
+- Expose `ManualMergeShard` as the high-risk `shard.merge` operation with contract-first dry-run support and `shard.describe` reconciliation guidance.
 
 ## volclog-v1.0.6
 

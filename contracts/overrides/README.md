@@ -73,6 +73,16 @@ Paths below are relative to the log-service repository at the pinned commit.
 - `DescribeLogAppSession` and `DescribeLogAppSessions` accept microsecond timestamps and divide them by 1000 before querying logs.
 - `DescribeTraceScores` reads `SpanIds` with `QueryArray`; the CLI therefore sends array values as repeated query parameters.
 
+## Shard merge alignment baseline
+
+`shard.merge` is aligned to the same clean `epic_v6.6.2` commit `af4f584761927a9bc2ca9ca1931b5f727f0de1dc` using these runtime symbols:
+
+- `api/rest/shard/merge_shard.go::ManualMergeShardReq`: `POST /ManualMergeShard`, required JSON body fields `TopicId` and `ShardId`, UUID validation for `TopicId`, and `ShardId >= 0`;
+- `api/handler/shard.go::ManualMergeShard`: merges the selected readwrite shard with its next contiguous readwrite shard, rejects a final-range or non-mergeable shard, and serializes split/merge operations per Topic;
+- `api/rest/shard/merge_shard.go::ManualMergeShardResp`: returns the resulting `Shards` list.
+
+This route exists in the server and the legacy agentic snapshot but is absent from the generated public source catalog, so it is added as a supplemental operation with high-risk retry semantics. After an ambiguous result, use `shard.describe` to reconcile the shard list instead of retrying automatically.
+
 ## Regeneration and validation
 
 After editing supplemental operations, run:
