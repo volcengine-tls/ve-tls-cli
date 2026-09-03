@@ -12,6 +12,7 @@
 - **执行路径更安全** — `--dry-run`、结构化 envelope、trace 工件与 file delivery 让预检查、验证和恢复更直接。
 - **凭证接入更灵活** — 同时支持长期 AK/SK 和 STS 临时凭证，可通过本地 profile、环境变量或一次性的 `--secrets-file` 注入。
 - **内置 Agent Skill** — 可直接从 CLI 安装通用的 `volclog-core`，或面向采集配置与验收的 `tls-logcollector` 专项 Skill。
+- **显式生命周期控制** — `version` 提供机器可读的构建与 catalog 元信息，`upgrade` 仅在显式调用时联网，Skill 默认保护用户改动。
 
 ## 快速开始
 
@@ -20,7 +21,7 @@
 Unix：
 
 ```bash
-tag=volclog-v1.0.6
+tag=volclog-v1.0.7
 base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
 curl -fsSLO "${base_url}/install-binary.sh"
 VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh
@@ -30,7 +31,7 @@ export PATH="$HOME/.local/bin:$PATH"
 Windows PowerShell：
 
 ```powershell
-$tag = "volclog-v1.0.6"
+$tag = "volclog-v1.0.7"
 $baseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/download/$tag"
 Invoke-WebRequest -Uri "$baseUrl/install.ps1" -OutFile install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -BaseUrl $baseUrl
@@ -78,6 +79,6 @@ volclog --profile default tool exec project.describe-projects
 
 ## 贡献与安全
 
-- **贡献** — 在 GitHub 上提交 issue 或 pull request。提交前请运行相关检查（Go 改动运行 `go test ./...`；npm 打包运行 `npm run test:npm`）。
+- **贡献** — 在 GitHub 上提交 issue 或 pull request。提交前请运行相关检查（Go 改动运行 `go test . ./cmd/... ./internal/...`；npm 打包运行 `npm run test:npm`）。Go 检查会明确排除 `repos/**`。
 - [SECURITY.md](https://github.com/volcengine-tls/ve-tls-cli/blob/main/SECURITY.md) — 漏洞报告与支持版本
 - [RELEASING.md](https://github.com/volcengine-tls/ve-tls-cli/blob/main/RELEASING.md) — 发布流程

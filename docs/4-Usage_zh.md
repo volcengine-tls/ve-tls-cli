@@ -6,7 +6,7 @@
 
 ## 1. 命令架构与版本边界
 
-默认的 `volclog` 命令暴露以下组：`configure`、`doctor`、`skill`、`tool`、`workflow`、`raw`、`login`、`logout` 和 `sso`。
+默认的 `volclog` 命令暴露以下组：`configure`、`tool`、`workflow`、`raw`、`doctor`、`skill`、`upgrade`、`version`、`login`、`logout` 和 `sso`。
 
 `volclog-human` 在 `tool`/`workflow`/`raw` 之外添加了人类快捷方式层（`project`、`topic`、`metric-topic`、`index`、`log`、`host-group`、`collector`）。快捷方式复用共享的认证、传输、信封和追踪基础设施，但有自己的快捷方式参数解析和请求构建。契约校验、表格支持和文件/标准输出行为可能与 `tool`/`workflow`/`raw` 不同。用户和自动化必须遵循所选命令面的文档化契约。
 
@@ -16,6 +16,46 @@
 - 当你想要 CLI 提供的、对一个或多个工具的高层编排时，使用 `workflow`。
 - 仅当你已经知道确切的方法和路径并需要直接传输调用时，使用 `raw`。
 - `volclog-human` 快捷方式仅用于交互式终端工作；Agent 和 CI 应默认使用 `tool`/`workflow`/`raw`。
+
+### 版本与显式升级
+
+`version` 用于输出机器可读的构建和 catalog 元信息。`--version` 保留文本兼容形式，适合只需要版本字符串的脚本：
+
+```bash
+volclog version
+volclog --version
+```
+
+`volclog version` 返回的 JSON 包含 `schema_version`、`version`、`edition`、`commit`、`catalog_digest`、`operation_count`、`public_operation_count` 和 `workflow_count`。
+
+升级检查和安装只会在显式调用时执行；`volclog` 不会在后台联网检查：
+
+```bash
+volclog upgrade --check
+volclog upgrade --version 1.0.7
+volclog upgrade --version 1.0.7 --yes
+volclog upgrade --yes
+```
+
+`--check` 以及不带 `--yes` 的版本选择不会写文件。npm 安装会委托 npm；独立二进制需要校验发布 checksum，并使用原子替换。
+
+### Skill 生命周期
+
+所有 Skill 生命周期命令都必须提供 `--dir`。重复使用 `--name` 可选择多个内置 Skill；省略则选择全部内置 Skill：
+
+```bash
+volclog skill list
+volclog skill install --dir <agent-skills-dir> [--name <name>] [--force]
+volclog skill status --dir <agent-skills-dir> [--name <name>]
+volclog skill update --dir <agent-skills-dir> [--name <name>] [--force]
+volclog skill uninstall --dir <agent-skills-dir> [--name <name>] [--force]
+```
+
+每个已安装 Skill 目录都包含 `.volclog-skill.json`，记录 schema 版本、Skill 名称、安装时 CLI 版本、source digest 和安装内容 digest。digest 对排序后的相对 POSIX 路径及按长度分帧的文件内容计算稳定 SHA-256，并排除该 sidecar；symlink 或特殊文件会被拒绝。`status` 完全离线，状态包括 `not_installed`、`current`、`outdated`、`modified`、`untracked` 和 `invalid_manifest`。版本不一致会单独报告，不会仅因版本变化就判定用户修改了 Skill。
+
+`current` 表示磁盘内容匹配 `installed_digest` 且内置 source 匹配 `source_digest`；`outdated` 表示内容未改动但内置 source digest 已变化；`modified` 表示磁盘内容不同于 `installed_digest`。缺少 sidecar 时为 `untracked`，sidecar 无法读取或内容不一致时为 `invalid_manifest`。
+
+目标已存在时，`install` 默认报错，必须显式使用 `--force`。`update` 和 `uninstall` 默认跳过 `modified`、`untracked` 和 `invalid_manifest` Skill；使用 `--force` 才会替换或删除。安装和更新会先构造完整目录，再通过同文件系统 rename 完成替换；替换失败时恢复旧目录。
 
 ## 2. 执行前先发现
 
@@ -230,7 +270,7 @@ volclog --profile default --output json --output-mode file --output-dir ./out \
 
 ### 8.1 `--jmes-filter` 作用于完整信封
 
-对于 `raw`、`tool exec` 和 `workflow exec`，`--jmes-filter` 作用于完整的信封（包括 `status`、`summary`、`data`、`error`）。对于其他组，它作用于原始结果值。
+CLI 会在发送任何请求前编译并校验 `--jmes-filter`。表达式无效时会在本地失败，不会发起网络调用。收到响应后，对于 `raw`、`tool exec` 和 `workflow exec`，过滤器作用于完整的信封（包括 `status`、`summary`、`data`、`error`）；对于其他组，它作用于原始结果值。
 
 ### 8.2 空值、缺失路径与无效表达式
 
@@ -244,9 +284,11 @@ volclog --profile default --output json --output-mode file --output-dir ./out \
 
 ### 8.4 CLI 信封过滤与 `execution.projection`
 
-`--jmes-filter` 是应用于最终信封（或非信封组的原始结果）的 CLI 级过滤器，在收到响应后应用。
+`--jmes-filter` 会在请求前编译，然后在收到响应后作为 CLI 级过滤器应用于最终信封（或非信封组的原始结果）。
 
-`execution.projection`（在 `tool exec` 和 `workflow exec` 的 `--context` JSON 中）是 CLI 本地的 JMESPath 投影，在收到响应后、CLI 构建信封之前应用于原始结果。它不是服务器端的。它使用与 `--jmes-filter` 相同的 JMESPath 引擎，但作用于原始结果而不是最终信封。
+`execution.projection`（在 `tool exec` 和 `workflow exec` 的 `--context` JSON 中）会在请求前编译，并在收到响应后、CLI 构建信封之前作用于原始结果。它不是服务器端的。它使用与 `--jmes-filter` 相同的 JMESPath 引擎，但作用于原始结果而不是最终信封。
+
+动态 JSON 在请求体、服务响应、信封、JSONL 和 JMESPath 求值的全链路保留 `json.Number`，不会先转换为 `float64` 而损失精度。因此大整数和长小数可以保持原始精度。
 
 ### 8.5 信封字段与错误输出
 

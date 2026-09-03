@@ -2,13 +2,13 @@ package execution
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
+	"github.com/volcengine-tls/ve-tls-cli/internal/jsonx"
 )
 
 type Codec interface {
@@ -109,11 +109,13 @@ func decodeJSONResponse(response Response) (any, error) {
 		return map[string]any{}, nil
 	}
 	var value any
-	if err := json.Unmarshal(response.Body, &value); err == nil {
+	if err := jsonx.Unmarshal(response.Body, &value); err == nil {
 		return value, nil
+	} else if errors.Is(err, jsonx.ErrTrailingData) {
+		return nil, err
 	}
 	var text string
-	if json.Unmarshal(response.Body, &text) == nil {
+	if jsonx.Unmarshal(response.Body, &text) == nil {
 		return map[string]any{"data": text}, nil
 	}
 	return map[string]any{"data": string(response.Body)}, nil

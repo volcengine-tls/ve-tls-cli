@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/volcengine-tls/ve-tls-cli/internal/jsonx"
 )
 
 func ReadMaybeFile(s string) ([]byte, error) {
@@ -94,11 +96,11 @@ func MustJSON(v any) ([]byte, error) {
 }
 
 func UnmarshalJSON(b []byte) (any, error) {
-	var v any
 	if len(bytesTrimSpace(b)) == 0 {
 		return map[string]any{}, nil
 	}
-	if err := json.Unmarshal(b, &v); err != nil {
+	v, err := jsonx.Decode(b)
+	if err != nil {
 		return nil, err
 	}
 	return v, nil
@@ -123,7 +125,7 @@ func ReadStringListMaybeFile(s string) ([]string, error) {
 	}
 	if b[0] == '[' {
 		var a []any
-		if err := json.Unmarshal(b, &a); err != nil {
+		if err := jsonx.Unmarshal(b, &a); err != nil {
 			return nil, err
 		}
 		out := make([]string, 0, len(a))

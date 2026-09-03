@@ -1,6 +1,6 @@
 {
   "name": "@volcengine-tls/volclog",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Volcengine TLS CLI default agent-first edition with bundled Agent skills",
   "license": "Apache-2.0",
   "bin": {

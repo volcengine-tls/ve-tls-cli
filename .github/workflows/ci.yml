@@ -31,13 +31,13 @@ jobs:
         run: go install honnef.co/go/tools/cmd/staticcheck@2024.1.1
       - name: Go fmt
         run: |
-          test -z "$(gofmt -l .)"
+          test -z "$(find . -path './repos' -prune -o -name '*.go' -print0 | xargs -0 gofmt -l)"
       - name: Go quality
         run: bash scripts/check-go-quality.sh
       - name: Go test
         run: |
-          go test ./...
-          go test -tags=human ./...
+          go test . ./cmd/... ./internal/...
+          go test -tags=human . ./cmd/... ./internal/...
       - name: install-binary regression test
         run: bash scripts/install-binary_test.sh
       - name: install-local regression test

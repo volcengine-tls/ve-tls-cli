@@ -6,7 +6,7 @@ This guide covers how to run commands with `volclog`: the command surface, how t
 
 ## 1. Command architecture and edition boundary
 
-The default `volclog` command exposes these groups: `configure`, `doctor`, `skill`, `tool`, `workflow`, `raw`, `login`, `logout`, and `sso`.
+The default `volclog` command exposes these groups: `configure`, `tool`, `workflow`, `raw`, `doctor`, `skill`, `upgrade`, `version`, `login`, `logout`, and `sso`.
 
 `volclog-human` adds a human shortcut layer (`project`, `topic`, `metric-topic`, `index`, `log`, `host-group`, `collector`) alongside `tool`/`workflow`/`raw`. The shortcuts reuse shared authentication, transport, envelope, and tracing infrastructure, but have their own shortcut argument parsing and request construction. Contract validation, table support, and file/stdout behavior can differ from `tool`/`workflow`/`raw`. Users and automation must follow the documented contract for the selected command surface.
 
@@ -16,6 +16,46 @@ Choose the right surface:
 - Use `workflow` when you want CLI-provided higher-level orchestration over one or more tools.
 - Use `raw` only when you already know the exact method and path and need a direct transport call.
 - Use `volclog-human` shortcuts only for interactive terminal work; agents and CI should default to `tool`/`workflow`/`raw`.
+
+### Version and explicit upgrade
+
+`version` is the machine-readable build and catalog metadata command. `--version` remains the text-compatible form for scripts that only need the version string:
+
+```bash
+volclog version
+volclog --version
+```
+
+The JSON returned by `volclog version` includes `schema_version`, `version`, `edition`, `commit`, `catalog_digest`, `operation_count`, `public_operation_count`, and `workflow_count`.
+
+Upgrade checks and installs are explicit only; `volclog` never performs a background network check:
+
+```bash
+volclog upgrade --check
+volclog upgrade --version 1.0.7
+volclog upgrade --version 1.0.7 --yes
+volclog upgrade --yes
+```
+
+`--check` and a version selection without `--yes` do not write files. npm installations delegate to npm. Standalone binaries require release checksum verification and use an atomic replacement.
+
+### Skill lifecycle
+
+All Skill lifecycle commands require `--dir`. Repeat `--name` to select multiple bundled Skills; omit it to select all bundled Skills:
+
+```bash
+volclog skill list
+volclog skill install --dir <agent-skills-dir> [--name <name>] [--force]
+volclog skill status --dir <agent-skills-dir> [--name <name>]
+volclog skill update --dir <agent-skills-dir> [--name <name>] [--force]
+volclog skill uninstall --dir <agent-skills-dir> [--name <name>] [--force]
+```
+
+Each installed Skill directory contains `.volclog-skill.json` with the schema version, Skill name, installed CLI version, source digest, and installed-content digest. Digests are stable SHA-256 values over sorted relative POSIX paths and length-framed file contents; the sidecar is excluded, and symlinks or special files are rejected. `status` is offline and reports `not_installed`, `current`, `outdated`, `modified`, `untracked`, or `invalid_manifest`. A version mismatch is reported separately and does not by itself mean that the user modified the Skill.
+
+`current` means the on-disk content matches `installed_digest` and the bundled source matches `source_digest`; `outdated` means the content is unchanged but the bundled source digest changed; `modified` means the on-disk content differs from `installed_digest`. A missing sidecar is `untracked`, while an unreadable or inconsistent sidecar is `invalid_manifest`.
+
+`install` errors when a target already exists unless `--force` is explicit. `update` and `uninstall` skip `modified`, `untracked`, and `invalid_manifest` Skills by default; use `--force` to replace or remove them. Installation and updates stage a complete directory, replace it with same-filesystem renames, and restore the prior directory if replacement fails.
 
 ## 2. Discover before execution
 
@@ -230,7 +270,7 @@ volclog --profile default --output json --output-mode file --output-dir ./out \
 
 ### 8.1 `--jmes-filter` applies to the complete envelope
 
-For `raw`, `tool exec`, and `workflow exec`, `--jmes-filter` is applied to the complete envelope (including `status`, `summary`, `data`, `error`). For other groups, it is applied to the raw result value.
+The CLI compiles and validates `--jmes-filter` before dispatching any request. An invalid expression therefore fails locally without a network call. After a response is received, the filter is applied to the complete envelope (including `status`, `summary`, `data`, `error`) for `raw`, `tool exec`, and `workflow exec`; for other groups, it is applied to the raw result value.
 
 ### 8.2 Null, missing path, and invalid expression
 
@@ -244,9 +284,11 @@ For `raw`, `tool exec`, and `workflow exec`, `--jmes-filter` is applied to the c
 
 ### 8.4 CLI envelope filtering vs `execution.projection`
 
-`--jmes-filter` is a CLI-level filter applied to the final envelope (or raw result for non-envelope groups) after the response is received.
+`--jmes-filter` is compiled before the request and then evaluated as a CLI-level filter on the final envelope (or raw result for non-envelope groups) after the response is received.
 
-`execution.projection` (in the `--context` JSON for `tool exec` and `workflow exec`) is a CLI-local JMESPath projection applied to the raw result after the response is received and before the CLI builds the envelope. It is not server-side. It uses the same JMESPath engine as `--jmes-filter` but operates on the raw result rather than the final envelope.
+`execution.projection` (in the `--context` JSON for `tool exec` and `workflow exec`) is compiled before the request and evaluated on the raw result after the response is received, before the CLI builds the envelope. It is not server-side. It uses the same JMESPath engine as `--jmes-filter` but operates on the raw result rather than the final envelope.
+
+Dynamic JSON is decoded and encoded with `json.Number` preserved across request bodies, service responses, envelopes, JSONL, and JMESPath evaluation. Large integers and long decimals therefore do not pass through a `float64` conversion and lose precision.
 
 ### 8.5 Envelope fields and error output
 

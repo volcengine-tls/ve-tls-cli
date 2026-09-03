@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
@@ -104,6 +105,10 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 			return nil, err
 		}
 	}
+	compiledProjection, err := output.Compile(options.Projection)
+	if err != nil {
+		return nil, fmt.Errorf("invalid execution.projection: %w", err)
+	}
 
 	runtime := execution.RuntimeView{}
 	if options.DryRun {
@@ -140,7 +145,7 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 	}
 
 	warnings := toolDigestWarnings(operation, ctxCfg.ContractDigest)
-	filteredResult, err := applyToolExecFilters(result, options.Projection)
+	filteredResult, err := applyCompiledToolExecFilter(result, compiledProjection)
 	if err != nil {
 		return nil, err
 	}
@@ -161,20 +166,11 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 	return env, nil
 }
 
-func applyToolExecFilters(result any, expressions ...string) (any, error) {
-	out := result
-	for _, expr := range expressions {
-		filter := strings.TrimSpace(expr)
-		if filter == "" {
-			continue
-		}
-		next, err := output.ApplyFilter(out, filter)
-		if err != nil {
-			return nil, err
-		}
-		out = next
+func applyCompiledToolExecFilter(result any, filter *output.CompiledFilter) (any, error) {
+	if filter == nil {
+		return result, nil
 	}
-	return out, nil
+	return filter.Apply(result)
 }
 
 func stabilizeProjectedToolResult(raw, filtered any, expressions ...string) any {

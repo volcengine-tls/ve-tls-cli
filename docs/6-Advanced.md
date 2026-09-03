@@ -6,9 +6,11 @@ This guide covers advanced operational decisions, edge cases, and patterns. For 
 
 ## 1. Filtering and projection
 
-`--jmes-filter` is a CLI-level filter applied to the final envelope (for `raw`, `tool exec`, `workflow exec`) or to the raw result (for other groups) after the response is received.
+`--jmes-filter` is compiled and validated before any request is dispatched. It is then applied after the response is received to the final envelope (for `raw`, `tool exec`, and `workflow exec`) or to the raw result (for other groups).
 
-`execution.projection` (in the `--context` JSON for `tool exec` and `workflow exec`) is a CLI-local JMESPath projection applied to the raw result after the response is received and before the CLI builds the envelope. It is not server-side. It uses the same JMESPath engine as `--jmes-filter` but operates on the raw result rather than the final envelope.
+`execution.projection` (in the `--context` JSON for `tool exec` and `workflow exec`) is compiled before the request and applied to the raw result after the response is received and before the CLI builds the envelope. It is not server-side. It uses the same JMESPath engine as `--jmes-filter` but operates on the raw result rather than the final envelope.
+
+Dynamic JSON keeps `json.Number` through request decoding, service responses, envelopes, JSONL output, and JMESPath evaluation. Large integers and long decimals are not converted through `float64`, so their precision is preserved. Invalid filters and projections fail during local preflight and do not send a request.
 
 Behavior:
 
@@ -73,7 +75,7 @@ If `ResultStatus=incomplete`, narrow the time range and rerun before trusting co
 
 Use `skill list` and `skill install --name <name> --dir <dir>` only after verifying their exact syntax with `--help`. Follow the discover → describe → dry-run → execute order: inspect the contract, validate locally, then send.
 
-The 1.0.6 build bundles two skills:
+The 1.0.7 build bundles two skills:
 
 - `volclog-core`: the generic contract-first runtime, routing, delivery, and recovery model.
 - `tls-logcollector`: LogCollector collection design, non-persistent sample validation, TLS resource reconciliation, Linux/Kubernetes deployment guidance, and end-to-end verification.
@@ -85,6 +87,37 @@ volclog skill list
 volclog skill install --name volclog-core --dir <agent-skills-dir>
 volclog skill install --name tls-logcollector --dir <agent-skills-dir>
 ```
+
+### 9.1 Skill lifecycle and modification protection
+
+All lifecycle commands require `--dir`; repeat `--name` for multiple Skills or omit it for all bundled Skills:
+
+```bash
+volclog skill status --dir <agent-skills-dir> [--name <name>]
+volclog skill update --dir <agent-skills-dir> [--name <name>] [--force]
+volclog skill uninstall --dir <agent-skills-dir> [--name <name>] [--force]
+```
+
+Each installed Skill has a `.volclog-skill.json` sidecar with `schema_version`, `name`, `installed_version`, `source_digest`, and `installed_digest`. The digest is a stable SHA-256 over sorted relative POSIX paths and length-framed file contents, excluding the sidecar; symlinks and special files are rejected. `status` runs fully offline and reports `not_installed`, `current`, `outdated`, `modified`, `untracked`, or `invalid_manifest`; version mismatch is reported separately from content modification.
+
+`current` means the disk content equals `installed_digest` and the bundled source equals `source_digest`; `outdated` means the content is unchanged but the bundled source digest changed; `modified` means the disk content differs from `installed_digest`. A missing sidecar is `untracked`, and an unreadable or inconsistent sidecar is `invalid_manifest`.
+
+`install` fails on an existing target unless `--force` is explicit. `update` and `uninstall` leave `modified`, `untracked`, and `invalid_manifest` Skills untouched by default; `--force` explicitly opts into replacement or removal. Install and update build a complete temporary directory, replace it with same-filesystem renames, and restore the prior directory if replacement fails.
+
+### 9.2 Version and explicit upgrade
+
+`volclog version` emits machine-readable JSON with `schema_version`, `version`, `edition`, `commit`, `catalog_digest`, `operation_count`, `public_operation_count`, and `workflow_count`. `volclog --version` remains the text-compatible form for existing scripts.
+
+Upgrade is explicit only and never runs a background check:
+
+```bash
+volclog upgrade --check
+volclog upgrade --version 1.0.7
+volclog upgrade --version 1.0.7 --yes
+volclog upgrade --yes
+```
+
+Checks and version selection without `--yes` are no-write operations. npm installations delegate to npm; standalone binaries verify the release checksum and use an atomic replacement.
 
 `tls-logcollector` complements rather than replaces `volclog-core`. It uses the current `tool describe` contract and the non-persistent collector, index-preview, and processor-debug helpers before any collector-rule write. Its temporary self-log POC path is opt-in because broad or recursive self-collection can amplify ingestion.
 

@@ -131,6 +131,7 @@
   "schedule-sql-task.modify": "83816a6e43034bf5797f840d62a99a350b1bfb920042ee32a7bc6fe0c5be474a",
   "shard.create": "c8935cc65e1681e0a9bf11afabc31520bf02ac54c10b6104876a0246da1f5dda",
   "shard.describe": "df3ada74f7ef501287dd84b593f4094f32e38a30952205ed92cf7fc51ba94a4f",
+  "shard.merge": "2ede7af58729c4f1758598fd376ac3e6ae3c2108302d1014653c78b9c157103c",
   "shipper.create": "4767e1fbc3ec828582ffa4eab83736a01b3b90c2c28a3c9183d2f1fe5c999c9a",
   "shipper.delete": "ba686f94d3869de512b37418f0fef1fb4912ccf20335cfab9e5b8faa5333011a",
   "shipper.describe-shipper": "3f1da21fba54c9176b377c016fc4d27840ee8510809df21a3709c58dfb25bd58",

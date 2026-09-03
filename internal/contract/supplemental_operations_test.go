@@ -31,6 +31,7 @@ func TestSupplementalTLSOperationsMatchBackendContracts(t *testing.T) {
 		"log-back-flow.describe":         "GET /DescribeLogBackFlowTasks",
 		"log-back-flow.modify":           "PUT /ModifyLogBackFlowTask",
 		"processor.exec-processor":       "POST /ExecProcessor",
+		"shard.merge":                    "POST /ManualMergeShard",
 	}
 	for id, wantRoute := range wantRoutes {
 		operation, ok := byID[id]
@@ -58,6 +59,20 @@ func TestSupplementalTLSOperationsMatchBackendContracts(t *testing.T) {
 	for _, want := range []string{"Do not retry automatically", "account.get"} {
 		if !strings.Contains(active.Docs.UsageConstraints, want) {
 			t.Fatalf("account.active usage constraints missing %q: %q", want, active.Docs.UsageConstraints)
+		}
+	}
+
+	mergeShard := byID["shard.merge"]
+	assertBodyRequired(t, mergeShard, "TopicId", "ShardId")
+	if got := bodyProperty(t, mergeShard, "ShardId")["minimum"]; got != float64(0) {
+		t.Fatalf("shard.merge ShardId minimum=%#v, want 0", got)
+	}
+	if mergeShard.Risk.Level != "high" || mergeShard.Risk.ErrorRecovery != "high-risk-retry" {
+		t.Fatalf("shard.merge risk=%+v", mergeShard.Risk)
+	}
+	for _, want := range []string{"next contiguous readwrite shard", "Do not retry automatically", "shard.describe"} {
+		if !strings.Contains(mergeShard.Docs.UsageConstraints, want) {
+			t.Fatalf("shard.merge usage constraints missing %q: %q", want, mergeShard.Docs.UsageConstraints)
 		}
 	}
 

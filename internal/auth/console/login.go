@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/auth/browser"
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth/oauth"
 	"github.com/volcengine-tls/ve-tls-cli/internal/config"
 	"github.com/volcengine-tls/ve-tls-cli/internal/securestore"
@@ -109,7 +111,15 @@ type AuthorizerFactory func(client OAuthClient, state, codeChallenge string) Aut
 
 // LoginOptions holds the parameters for a Console Login attempt.
 type LoginOptions struct {
+	// DeviceCode explicitly selects the cross-device Device Authorization Grant.
+	// The default is the same-device browser callback flow with PKCE.
+	DeviceCode bool
+	// Remote is retained for command-line compatibility and implies DeviceCode
+	// plus NoBrowser.
 	Remote bool
+	// NoBrowser implies DeviceCode and suppresses best-effort browser opening
+	// while retaining the printed verification URL and user code.
+	NoBrowser bool
 	// EndpointURL is the Console OAuth base endpoint selected by
 	// --login-endpoint. When empty, DefaultEndpoint is used. The normalized
 	// value is stored in the login cache so refresh uses the same issuer.
@@ -136,19 +146,32 @@ type LoginResult struct {
 // are injectable so tests run without network, browser, or real sockets.
 type LoginService struct {
 	oauthClientFactory OAuthClientFactory
-	localAuthorizer    AuthorizerFactory
-	remoteAuthorizer   AuthorizerFactory
-	cache              ConsoleCache
-	profileStore       ProfileStore
-	clock              func() time.Time
-	pkceGenerator      func() (oauth.PKCE, error)
-	stateGenerator     func() (string, error)
-	confirm            func(profileName, currentSession, newSession string) (bool, error)
+	// DeviceFlowFactory handles the explicit cross-device login path.
+	deviceFlowFactory DeviceFlowFactory
+	prompt            io.Writer
+	opener            browser.Opener
+	sleeper           DeviceSleeper
+
+	// localAuthorizer handles the default same-device browser callback path.
+	// remoteAuthorizer remains only for source compatibility; Device Code is the
+	// supported remote path.
+	localAuthorizer  AuthorizerFactory
+	remoteAuthorizer AuthorizerFactory
+	cache            ConsoleCache
+	profileStore     ProfileStore
+	clock            func() time.Time
+	pkceGenerator    func() (oauth.PKCE, error)
+	stateGenerator   func() (string, error)
+	confirm          func(profileName, currentSession, newSession string) (bool, error)
 }
 
 // LoginServiceConfig holds the injectable dependencies for LoginService.
 type LoginServiceConfig struct {
 	OAuthClientFactory OAuthClientFactory
+	DeviceFlowFactory  DeviceFlowFactory
+	Prompt             io.Writer
+	Browser            browser.Opener
+	Sleeper            DeviceSleeper
 	LocalAuthorizer    AuthorizerFactory
 	RemoteAuthorizer   AuthorizerFactory
 	Cache              ConsoleCache
@@ -168,6 +191,10 @@ func NewLoginService(cfg *LoginServiceConfig) *LoginService {
 	}
 	ls := &LoginService{
 		oauthClientFactory: cfg.OAuthClientFactory,
+		deviceFlowFactory:  cfg.DeviceFlowFactory,
+		prompt:             cfg.Prompt,
+		opener:             cfg.Browser,
+		sleeper:            cfg.Sleeper,
 		localAuthorizer:    cfg.LocalAuthorizer,
 		remoteAuthorizer:   cfg.RemoteAuthorizer,
 		cache:              cfg.Cache,
@@ -179,6 +206,15 @@ func NewLoginService(cfg *LoginServiceConfig) *LoginService {
 	}
 	if ls.oauthClientFactory == nil {
 		ls.oauthClientFactory = defaultOAuthClientFactory
+	}
+	if ls.deviceFlowFactory == nil {
+		ls.deviceFlowFactory = defaultDeviceFlowFactory
+	}
+	if ls.prompt == nil || isNilInterface(ls.prompt) {
+		ls.prompt = io.Discard
+	}
+	if ls.sleeper == nil {
+		ls.sleeper = sleepDeviceAuthorization
 	}
 	if ls.profileStore == nil {
 		ls.profileStore = configProfileStore{}
@@ -192,7 +228,18 @@ func NewLoginService(cfg *LoginServiceConfig) *LoginService {
 	if ls.stateGenerator == nil {
 		ls.stateGenerator = func() (string, error) { return oauth.GenerateState(nil) }
 	}
+	if ls.localAuthorizer == nil {
+		ls.localAuthorizer = func(client OAuthClient, state, codeChallenge string) Authorizer {
+			return NewDefaultLocalAuthorizer(client, ls.opener, ls.prompt, state, codeChallenge)
+		}
+	}
 	return ls
+}
+
+func defaultDeviceFlowFactory(client OAuthClient, prompt io.Writer, opener browser.Opener, noBrowser bool, clock func() time.Time, sleeper DeviceSleeper) DeviceFlow {
+	flow := NewDeviceAuthorizationFlow(client, prompt, opener, clock, sleeper)
+	flow.NoBrowser = noBrowser
+	return flow
 }
 
 // defaultOAuthClientFactory wraps NewConsoleOAuthClient.
@@ -202,10 +249,10 @@ func defaultOAuthClientFactory(endpointURL string) (OAuthClient, error) {
 
 // Login runs the full Console Login flow and returns a redacted LoginResult.
 //
-// The sequence is frozen: resolve profile/region, generate PKCE/state, choose
-// client ID, authorize, exchange token, validate STS, extract login-session,
-// confirm replacement if needed, then atomically write cache and patch config
-// inside the per-session cache lock with rollback on config failure.
+// The sequence is frozen: resolve profile/region, run the selected authorization
+// flow without fallback, obtain a token, validate STS, extract
+// login-session, confirm replacement if needed, then atomically write cache and
+// patch config inside the per-session cache lock with rollback on config failure.
 func (s *LoginService) Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 	if s == nil {
 		return nil, errors.New("nil *LoginService")
@@ -222,20 +269,8 @@ func (s *LoginService) Login(ctx context.Context, opts LoginOptions) (*LoginResu
 	if s.oauthClientFactory == nil {
 		return nil, errors.New("nil oauth client factory")
 	}
-	if s.localAuthorizer == nil {
-		return nil, errors.New("nil local authorizer factory")
-	}
-	if s.remoteAuthorizer == nil {
-		return nil, errors.New("nil remote authorizer factory")
-	}
 	if s.clock == nil {
 		return nil, errors.New("nil clock")
-	}
-	if s.pkceGenerator == nil {
-		return nil, errors.New("nil pkce generator")
-	}
-	if s.stateGenerator == nil {
-		return nil, errors.New("nil state generator")
 	}
 
 	// 1. Resolve profile and region from the latest loaded config.
@@ -255,19 +290,11 @@ func (s *LoginService) Login(ctx context.Context, opts LoginOptions) (*LoginResu
 		tlsEndpoint = strings.TrimSpace(profile.Endpoint)
 	}
 
-	// 2. Generate PKCE and random state.
-	pkce, err := s.pkceGenerator()
-	if err != nil {
-		return nil, newSafeError("generate PKCE failed", err)
-	}
-	state, err := s.stateGenerator()
-	if err != nil {
-		return nil, newSafeError("generate state failed", err)
-	}
-
-	// 3. Choose client ID and create the OAuth client.
+	// 2. Create the OAuth client. The selected flow controls the frozen client
+	// ID persisted in cache and reused by refresh.
+	useDeviceCode := opts.DeviceCode || opts.NoBrowser || opts.Remote
 	clientID := ClientIDSameDevice
-	if opts.Remote {
+	if useDeviceCode {
 		clientID = ClientIDCrossDevice
 	}
 	endpoint := strings.TrimSpace(opts.EndpointURL)
@@ -284,32 +311,59 @@ func (s *LoginService) Login(ctx context.Context, opts LoginOptions) (*LoginResu
 	// Freeze the normalized endpoint from the client, not the raw input.
 	endpoint = strings.TrimRight(client.EndpointURL(), "/")
 
-	// 4. Complete authorization.
-	var auth Authorizer
-	if opts.Remote {
-		auth = s.remoteAuthorizer(client, state, pkce.Challenge)
+	// 3. Complete the selected authorization flow. No cache lock is held while
+	// the user authorizes or while network requests are in flight. A failure is
+	// returned directly; login never falls back to the other flow.
+	var tokenResp *ConsoleTokenResponse
+	if useDeviceCode {
+		if s.deviceFlowFactory == nil {
+			return nil, errors.New("nil device flow factory")
+		}
+		flow := s.deviceFlowFactory(client, s.prompt, s.opener, opts.NoBrowser || opts.Remote, s.clock, s.sleeper)
+		if isNilInterface(flow) {
+			return nil, errors.New("device flow factory returned nil flow")
+		}
+		tokenResp, err = flow.Authorize(ctx)
+		if err != nil {
+			return nil, newSafeError("device authorization failed", err)
+		}
 	} else {
-		auth = s.localAuthorizer(client, state, pkce.Challenge)
-	}
-	if isNilInterface(auth) {
-		return nil, errors.New("authorizer factory returned nil authorizer")
-	}
-	code, redirectURI, err := auth.Authorize(ctx)
-	if err != nil {
-		return nil, newSafeError("authorization failed", err)
-	}
-
-	// 5. Exchange authorization_code token.
-	tokenResp, err := client.ExchangeToken(ctx, &ConsoleTokenRequest{
-		GrantType:    GrantTypeAuthorizationCode,
-		Code:         code,
-		RedirectURI:  redirectURI,
-		ClientID:     clientID,
-		Scope:        Scope,
-		CodeVerifier: pkce.Verifier,
-	})
-	if err != nil {
-		return nil, newSafeError("token exchange failed", err)
+		if s.localAuthorizer == nil {
+			return nil, errors.New("nil local authorizer factory")
+		}
+		if s.pkceGenerator == nil {
+			return nil, errors.New("nil PKCE generator")
+		}
+		if s.stateGenerator == nil {
+			return nil, errors.New("nil state generator")
+		}
+		pkce, pkceErr := s.pkceGenerator()
+		if pkceErr != nil {
+			return nil, newSafeError("generate PKCE failed", pkceErr)
+		}
+		state, stateErr := s.stateGenerator()
+		if stateErr != nil {
+			return nil, newSafeError("generate OAuth state failed", stateErr)
+		}
+		authorizer := s.localAuthorizer(client, state, pkce.Challenge)
+		if isNilInterface(authorizer) {
+			return nil, errors.New("local authorizer factory returned nil authorizer")
+		}
+		code, redirectURI, authorizeErr := authorizer.Authorize(ctx)
+		if authorizeErr != nil {
+			return nil, newSafeError("browser authorization failed", authorizeErr)
+		}
+		tokenResp, err = client.ExchangeToken(ctx, &ConsoleTokenRequest{
+			GrantType:    GrantTypeAuthorizationCode,
+			Code:         code,
+			ClientID:     ClientIDSameDevice,
+			Scope:        Scope,
+			CodeVerifier: pkce.Verifier,
+			RedirectURI:  redirectURI,
+		})
+		if err != nil {
+			return nil, newSafeError("authorization code exchange failed", err)
+		}
 	}
 	if tokenResp == nil {
 		return nil, errors.New("token exchange returned nil response")

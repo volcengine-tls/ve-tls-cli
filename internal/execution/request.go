@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
+	"github.com/volcengine-tls/ve-tls-cli/internal/jsonx"
 )
 
 type Request struct {
@@ -146,7 +147,7 @@ func stringifyValue(value any) string {
 		if err == nil && len(raw) > 0 && string(raw) != "null" {
 			if raw[0] == '"' {
 				var decoded string
-				if json.Unmarshal(raw, &decoded) == nil {
+				if jsonx.Unmarshal(raw, &decoded) == nil {
 					return decoded
 				}
 			}

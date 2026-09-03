@@ -3879,6 +3879,58 @@
         "level": "low",
         "error_recovery": "safe-retry"
       }
+    },
+    {
+      "id": "shard.merge",
+      "group": "shard",
+      "group_title": "分区管理",
+      "action": "ManualMergeShard",
+      "resource": "manual-shard-merge",
+      "verb": "merge",
+      "family": "shard",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/ManualMergeShard",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "ShardId": {
+              "description": "待合并的起始分区编号，必须为非负整数。服务端将其与后一个连续的 readwrite 分区合并。",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "TopicId": {
+              "description": "日志主题ID，必须为有效 UUID。",
+              "type": "string"
+            }
+          },
+          "required": [
+            "TopicId",
+            "ShardId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ManualMergeShard",
+        "source": "log-service shard API",
+        "usage_constraints": "Before execution, call shard.describe with all pages and verify that the selected shard is readwrite, is not the final key-range shard, and has a next contiguous readwrite shard. ManualMergeShard merges exactly that pair, and merge/split operations for the same topic are serialized. This operation mutates shard topology. Tool exec currently validates required-field presence locally; TopicId UUID syntax, ShardId range, and shard mergeability remain service-side validation. On success, read the resulting list from data.Shards. Do not retry automatically after an ambiguous failure; call shard.describe to reconcile the shard list and statuses."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
     }
   ]
 }

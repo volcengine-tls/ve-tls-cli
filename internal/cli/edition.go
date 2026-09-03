@@ -13,6 +13,8 @@ var volclogPrimaryGroupNames = map[string]bool{
 	"configure": true,
 	"doctor":    true,
 	"skill":     true,
+	"upgrade":   true,
+	"version":   true,
 	"tool":      true,
 	"workflow":  true,
 	"raw":       true,
@@ -60,7 +62,7 @@ func isRecognizedGroup(group string) bool {
 func editionGroupHint(group string) string {
 	group = strings.TrimSpace(group)
 	if group == "" {
-		return "use one of configure/doctor/skill/tool/workflow/raw/login/logout/sso in the default volclog build"
+		return "use one of configure/doctor/skill/upgrade/version/tool/workflow/raw/login/logout/sso in the default volclog build"
 	}
-	return "the default volclog build only exposes configure/doctor/skill/tool/workflow/raw/login/logout/sso; use 'volclog tool list', 'volclog workflow list', or switch to the volclog-human build (-tags=human) for human shortcuts"
+	return "the default volclog build only exposes configure/doctor/skill/upgrade/version/tool/workflow/raw/login/logout/sso; use 'volclog tool list', 'volclog workflow list', or switch to the volclog-human build (-tags=human) for human shortcuts"
 }

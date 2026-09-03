@@ -4,13 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"reflect"
 	"sort"
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
+	"github.com/volcengine-tls/ve-tls-cli/internal/jsonx"
 )
 
 type Executor struct {
@@ -194,7 +194,7 @@ func validateJSONBodyCheck(request Request) PreflightCheck {
 				continue
 			}
 			var value any
-			if err := json.Unmarshal([]byte(line), &value); err != nil {
+			if err := jsonx.Unmarshal([]byte(line), &value); err != nil {
 				check.OK = false
 				detail := err.Error()
 				check.Detail = &detail
@@ -203,7 +203,7 @@ func validateJSONBodyCheck(request Request) PreflightCheck {
 		}
 	default:
 		var value any
-		if err := json.Unmarshal(request.Body, &value); err != nil {
+		if err := jsonx.Unmarshal(request.Body, &value); err != nil {
 			check.OK = false
 			detail := err.Error()
 			check.Detail = &detail
@@ -226,7 +226,7 @@ func previewBody(request Request) (any, bool) {
 				continue
 			}
 			var row any
-			if json.Unmarshal([]byte(line), &row) != nil {
+			if jsonx.Unmarshal([]byte(line), &row) != nil {
 				return trimmed, true
 			}
 			rows = append(rows, row)
@@ -234,7 +234,7 @@ func previewBody(request Request) (any, bool) {
 		return rows, true
 	default:
 		var value any
-		if json.Unmarshal(request.Body, &value) == nil {
+		if jsonx.Unmarshal(request.Body, &value) == nil {
 			return value, true
 		}
 		return trimmed, true

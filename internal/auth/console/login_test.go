@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/auth/browser"
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth/oauth"
 	"github.com/volcengine-tls/ve-tls-cli/internal/config"
 	"github.com/volcengine-tls/ve-tls-cli/internal/securestore"
@@ -174,6 +175,30 @@ func (f *fakeAuthorizer) Authorize(ctx context.Context) (string, string, error) 
 	return f.code, f.redirectURI, f.err
 }
 
+// fakeDeviceFlow keeps LoginService tests independent from the HTTP/device
+// polling implementation while exercising the real cache/config transaction.
+type fakeDeviceFlow struct {
+	client *fakeOAuthClient
+	resp   *ConsoleTokenResponse
+	err    error
+	called bool
+}
+
+func (f *fakeDeviceFlow) Authorize(context.Context) (*ConsoleTokenResponse, error) {
+	f.called = true
+	if f.client != nil {
+		// Keep the request capture used by the client assertions and make the
+		// selected device grant explicit.
+		f.client.lastReq = &ConsoleTokenRequest{
+			GrantType:  GrantTypeDeviceCode,
+			ClientID:   ClientIDCrossDevice,
+			Scope:      Scope,
+			DeviceCode: "device-code",
+		}
+	}
+	return f.resp, f.err
+}
+
 func loginFixedClock(t time.Time) func() time.Time {
 	return func() time.Time { return t }
 }
@@ -205,6 +230,9 @@ func newLoginService(t *testing.T, client *fakeOAuthClient, cache ConsoleCache, 
 		clock:          loginFixedClock(time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)),
 		pkceGenerator:  fixedPKCE(),
 		stateGenerator: fixedState("state-canary-789"),
+		deviceFlowFactory: func(_ OAuthClient, _ io.Writer, _ browser.Opener, _ bool, _ func() time.Time, _ DeviceSleeper) DeviceFlow {
+			return &fakeDeviceFlow{client: client, resp: client.exchangeResp, err: client.exchangeErr}
+		},
 		confirm: func(profileName, current, new string) (bool, error) {
 			return true, nil
 		},
@@ -213,13 +241,18 @@ func newLoginService(t *testing.T, client *fakeOAuthClient, cache ConsoleCache, 
 
 // --- Tests ---
 
-func TestLoginUsesLocalAndRemoteClientIDs(t *testing.T) {
+func TestLoginSelectsAuthorizationFlowAndPersistsMatchingClientID(t *testing.T) {
 	const session = "trn:iam::1:user/local"
 
-	t.Run("local uses same-device", func(t *testing.T) {
+	t.Run("default login uses same-device authorization code with PKCE", func(t *testing.T) {
 		client := &fakeOAuthClient{exchangeResp: validTokenResponse(session), endpointURL: DefaultEndpoint}
+		cache := newFakeCache()
 		store := &fakeProfileStore{cfg: config.DefaultConfig(), path: "/tmp/config.json"}
-		svc := newLoginService(t, client, newFakeCache(), store)
+		svc := newLoginService(t, client, cache, store)
+		svc.deviceFlowFactory = func(_ OAuthClient, _ io.Writer, _ browser.Opener, _ bool, _ func() time.Time, _ DeviceSleeper) DeviceFlow {
+			t.Fatal("default login must not invoke Device Code")
+			return nil
+		}
 		_, err := svc.Login(context.Background(), LoginOptions{Profile: "default"})
 		if err != nil {
 			t.Fatalf("Login error: %v", err)
@@ -228,15 +261,33 @@ func TestLoginUsesLocalAndRemoteClientIDs(t *testing.T) {
 			t.Fatal("ExchangeToken was not called")
 		}
 		if client.lastReq.ClientID != ClientIDSameDevice {
-			t.Errorf("local client_id = %q, want %q", client.lastReq.ClientID, ClientIDSameDevice)
+			t.Errorf("client_id = %q, want %q", client.lastReq.ClientID, ClientIDSameDevice)
+		}
+		if client.lastReq.GrantType != GrantTypeAuthorizationCode {
+			t.Errorf("grant_type = %q, want %q", client.lastReq.GrantType, GrantTypeAuthorizationCode)
+		}
+		if client.lastReq.CodeVerifier != "verifier-canary-123" || client.lastReq.RedirectURI == "" {
+			t.Errorf("authorization-code request missing PKCE or redirect URI: %+v", client.lastReq)
+		}
+		var stored LoginTokenCache
+		if err := json.Unmarshal(cache.data[session], &stored); err != nil {
+			t.Fatalf("unmarshal cache: %v", err)
+		}
+		if stored.ClientID != ClientIDSameDevice {
+			t.Errorf("stored client_id = %q, want %q", stored.ClientID, ClientIDSameDevice)
 		}
 	})
 
-	t.Run("remote uses cross-device", func(t *testing.T) {
+	t.Run("explicit device code uses cross-device device grant", func(t *testing.T) {
 		client := &fakeOAuthClient{exchangeResp: validTokenResponse(session), endpointURL: DefaultEndpoint}
+		cache := newFakeCache()
 		store := &fakeProfileStore{cfg: config.DefaultConfig(), path: "/tmp/config.json"}
-		svc := newLoginService(t, client, newFakeCache(), store)
-		_, err := svc.Login(context.Background(), LoginOptions{Profile: "default", Remote: true})
+		svc := newLoginService(t, client, cache, store)
+		svc.localAuthorizer = func(OAuthClient, string, string) Authorizer {
+			t.Fatal("Device Code login must not invoke local authorization")
+			return nil
+		}
+		_, err := svc.Login(context.Background(), LoginOptions{Profile: "default", DeviceCode: true})
 		if err != nil {
 			t.Fatalf("Login error: %v", err)
 		}
@@ -244,9 +295,64 @@ func TestLoginUsesLocalAndRemoteClientIDs(t *testing.T) {
 			t.Fatal("ExchangeToken was not called")
 		}
 		if client.lastReq.ClientID != ClientIDCrossDevice {
-			t.Errorf("remote client_id = %q, want %q", client.lastReq.ClientID, ClientIDCrossDevice)
+			t.Errorf("client_id = %q, want %q", client.lastReq.ClientID, ClientIDCrossDevice)
+		}
+		if client.lastReq.GrantType != GrantTypeDeviceCode {
+			t.Errorf("grant_type = %q, want %q", client.lastReq.GrantType, GrantTypeDeviceCode)
+		}
+		var stored LoginTokenCache
+		if err := json.Unmarshal(cache.data[session], &stored); err != nil {
+			t.Fatalf("unmarshal cache: %v", err)
+		}
+		if stored.ClientID != ClientIDCrossDevice {
+			t.Errorf("stored client_id = %q, want %q", stored.ClientID, ClientIDCrossDevice)
 		}
 	})
+
+	for _, testCase := range []struct {
+		name string
+		opts LoginOptions
+	}{
+		{name: "no-browser implies device code", opts: LoginOptions{Profile: "default", NoBrowser: true}},
+		{name: "remote implies no-browser device code", opts: LoginOptions{Profile: "default", Remote: true}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			client := &fakeOAuthClient{exchangeResp: validTokenResponse(session), endpointURL: DefaultEndpoint}
+			store := &fakeProfileStore{cfg: config.DefaultConfig(), path: "/tmp/config.json"}
+			svc := newLoginService(t, client, newFakeCache(), store)
+			svc.localAuthorizer = func(OAuthClient, string, string) Authorizer {
+				t.Fatal("no-browser/remote login must not invoke local authorization")
+				return nil
+			}
+			var noBrowser bool
+			svc.deviceFlowFactory = func(_ OAuthClient, _ io.Writer, _ browser.Opener, value bool, _ func() time.Time, _ DeviceSleeper) DeviceFlow {
+				noBrowser = value
+				return &fakeDeviceFlow{client: client, resp: client.exchangeResp}
+			}
+			if _, err := svc.Login(context.Background(), testCase.opts); err != nil {
+				t.Fatalf("Login error: %v", err)
+			}
+			if !noBrowser {
+				t.Fatal("device flow did not receive noBrowser=true")
+			}
+		})
+	}
+}
+
+func TestLoginDoesNotFallbackBetweenAuthorizationFlows(t *testing.T) {
+	client := &fakeOAuthClient{exchangeResp: validTokenResponse("trn:iam::1:user:no-fallback"), endpointURL: DefaultEndpoint}
+	store := &fakeProfileStore{cfg: config.DefaultConfig(), path: "/tmp/config.json"}
+	svc := newLoginService(t, client, newFakeCache(), store)
+	svc.localAuthorizer = func(OAuthClient, string, string) Authorizer {
+		return &fakeAuthorizer{err: errors.New("loopback unavailable")}
+	}
+	svc.deviceFlowFactory = func(_ OAuthClient, _ io.Writer, _ browser.Opener, _ bool, _ func() time.Time, _ DeviceSleeper) DeviceFlow {
+		t.Fatal("local authorization failure must not fall back to Device Code")
+		return nil
+	}
+	if _, err := svc.Login(context.Background(), LoginOptions{Profile: "default"}); err == nil {
+		t.Fatal("expected local authorization error")
+	}
 }
 
 func TestLoginSameSessionNeedsNoConfirmation(t *testing.T) {
@@ -757,6 +863,12 @@ func TestNewLoginServiceSetsDefaults(t *testing.T) {
 	if svc.stateGenerator == nil {
 		t.Error("stateGenerator should default")
 	}
+	if svc.localAuthorizer == nil {
+		t.Error("localAuthorizer should default")
+	}
+	if svc.deviceFlowFactory == nil {
+		t.Error("deviceFlowFactory should default")
+	}
 }
 
 func TestNewLocalAndRemoteAuthorizerConstructors(t *testing.T) {
@@ -806,7 +918,7 @@ func TestLoginNilTokenResponseFailsSafely(t *testing.T) {
 	store := &fakeProfileStore{cfg: config.DefaultConfig(), path: "/tmp/config.json"}
 	svc := newLoginService(t, client, newFakeCache(), store)
 
-	_, err := svc.Login(context.Background(), LoginOptions{Profile: "default"})
+	_, err := svc.Login(context.Background(), LoginOptions{Profile: "default", DeviceCode: true})
 	if err == nil {
 		t.Fatal("expected error for nil token response")
 	}
@@ -835,8 +947,21 @@ func TestLoginEmptyTokenTypeFailsClosedWithoutMutation(t *testing.T) {
 	}
 }
 
-func TestLoginNilAuthorizerFactoryFailsSafely(t *testing.T) {
-	const session = "trn:iam::1:user:nilauth"
+func TestLoginNilDeviceFlowFactoryFailsSafely(t *testing.T) {
+	const session = "trn:iam::1:user:nilflow"
+	client := &fakeOAuthClient{exchangeResp: validTokenResponse(session), endpointURL: DefaultEndpoint}
+	store := &fakeProfileStore{cfg: config.DefaultConfig(), path: "/tmp/config.json"}
+	svc := newLoginService(t, client, newFakeCache(), store)
+	svc.deviceFlowFactory = nil
+
+	_, err := svc.Login(context.Background(), LoginOptions{Profile: "default", DeviceCode: true})
+	if err == nil {
+		t.Fatal("expected error for nil device flow factory")
+	}
+}
+
+func TestLoginNilLocalAuthorizerFactoryFailsSafely(t *testing.T) {
+	const session = "trn:iam::1:user:nillocal"
 	client := &fakeOAuthClient{exchangeResp: validTokenResponse(session), endpointURL: DefaultEndpoint}
 	store := &fakeProfileStore{cfg: config.DefaultConfig(), path: "/tmp/config.json"}
 	svc := newLoginService(t, client, newFakeCache(), store)
@@ -844,7 +969,7 @@ func TestLoginNilAuthorizerFactoryFailsSafely(t *testing.T) {
 
 	_, err := svc.Login(context.Background(), LoginOptions{Profile: "default"})
 	if err == nil {
-		t.Fatal("expected error for nil authorizer factory")
+		t.Fatal("expected error for nil local authorizer factory")
 	}
 }
 
@@ -1220,64 +1345,62 @@ func TestLoginEmptyScopeUsesFrozenScope(t *testing.T) {
 	}
 }
 
-func TestLoginPKCEGeneratorFailureFailsSafely(t *testing.T) {
-	const session = "trn:iam::1:user:pkcefail"
+func TestDeviceCodeLoginDoesNotInvokePKCEGenerator(t *testing.T) {
+	const session = "trn:iam::1:user:pkce-unused"
 	client := &fakeOAuthClient{exchangeResp: validTokenResponse(session), endpointURL: DefaultEndpoint}
 	store := &fakeProfileStore{cfg: config.DefaultConfig(), path: "/tmp/config.json"}
 	svc := newLoginService(t, client, newFakeCache(), store)
-	svc.pkceGenerator = func() (oauth.PKCE, error) { return oauth.PKCE{}, errors.New("pkce boom") }
+	svc.pkceGenerator = func() (oauth.PKCE, error) { return oauth.PKCE{}, errors.New("pkce must not be called") }
 
-	_, err := svc.Login(context.Background(), LoginOptions{Profile: "default"})
-	if err == nil {
-		t.Fatal("expected error when PKCE generator fails")
+	if _, err := svc.Login(context.Background(), LoginOptions{Profile: "default", DeviceCode: true}); err != nil {
+		t.Fatalf("Login unexpectedly used PKCE: %v", err)
 	}
 }
 
-func TestLoginStateGeneratorFailureFailsSafely(t *testing.T) {
-	const session = "trn:iam::1:user:statefail"
+func TestDeviceCodeLoginDoesNotInvokeStateGenerator(t *testing.T) {
+	const session = "trn:iam::1:user:state-unused"
 	client := &fakeOAuthClient{exchangeResp: validTokenResponse(session), endpointURL: DefaultEndpoint}
 	store := &fakeProfileStore{cfg: config.DefaultConfig(), path: "/tmp/config.json"}
 	svc := newLoginService(t, client, newFakeCache(), store)
-	svc.stateGenerator = func() (string, error) { return "", errors.New("state boom") }
+	svc.stateGenerator = func() (string, error) { return "", errors.New("state must not be called") }
 
-	_, err := svc.Login(context.Background(), LoginOptions{Profile: "default"})
-	if err == nil {
-		t.Fatal("expected error when state generator fails")
+	if _, err := svc.Login(context.Background(), LoginOptions{Profile: "default", DeviceCode: true}); err != nil {
+		t.Fatalf("Login unexpectedly used state: %v", err)
 	}
 }
 
-func TestLoginAuthorizerErrorPropagates(t *testing.T) {
+func TestLoginDeviceFlowErrorPropagates(t *testing.T) {
 	const session = "trn:iam::1:user:autherr"
 	client := &fakeOAuthClient{exchangeResp: validTokenResponse(session), endpointURL: DefaultEndpoint}
 	store := &fakeProfileStore{cfg: config.DefaultConfig(), path: "/tmp/config.json"}
 	svc := newLoginService(t, client, newFakeCache(), store)
-	svc.localAuthorizer = func(c OAuthClient, state, challenge string) Authorizer {
-		return &fakeAuthorizer{err: errors.New("authorize failed")}
+	svc.deviceFlowFactory = func(_ OAuthClient, _ io.Writer, _ browser.Opener, _ bool, _ func() time.Time, _ DeviceSleeper) DeviceFlow {
+		return &fakeDeviceFlow{err: errors.New("device authorization failed")}
 	}
 
-	_, err := svc.Login(context.Background(), LoginOptions{Profile: "default"})
+	_, err := svc.Login(context.Background(), LoginOptions{Profile: "default", DeviceCode: true})
 	if err == nil {
-		t.Fatal("expected error when authorizer fails")
+		t.Fatal("expected error when device flow fails")
 	}
 }
 
-// TestLoginAuthorizerErrorDoesNotLeakCanary verifies that an error returned by
-// the injected Authorizer (which may contain secret material) is wrapped with a
+// TestLoginDeviceFlowErrorDoesNotLeakCanary verifies that an error returned by
+// the injected DeviceFlow (which may contain secret material) is wrapped with a
 // fixed safe description at the Login boundary, so the canary never appears in
 // the returned error text.
-func TestLoginAuthorizerErrorDoesNotLeakCanary(t *testing.T) {
+func TestLoginDeviceFlowErrorDoesNotLeakCanary(t *testing.T) {
 	const session = "trn:iam::1:user:authcanary"
 	const authCanary = "authorizer-secret-canary-777"
 	client := &fakeOAuthClient{exchangeResp: validTokenResponse(session), endpointURL: DefaultEndpoint}
 	store := &fakeProfileStore{cfg: config.DefaultConfig(), path: "/tmp/config.json"}
 	svc := newLoginService(t, client, newFakeCache(), store)
-	svc.localAuthorizer = func(c OAuthClient, state, challenge string) Authorizer {
-		return &fakeAuthorizer{err: errors.New(authCanary)}
+	svc.deviceFlowFactory = func(_ OAuthClient, _ io.Writer, _ browser.Opener, _ bool, _ func() time.Time, _ DeviceSleeper) DeviceFlow {
+		return &fakeDeviceFlow{err: errors.New(authCanary)}
 	}
 
-	_, err := svc.Login(context.Background(), LoginOptions{Profile: "default"})
+	_, err := svc.Login(context.Background(), LoginOptions{Profile: "default", DeviceCode: true})
 	if err == nil {
-		t.Fatal("expected error when authorizer fails")
+		t.Fatal("expected error when device flow fails")
 	}
 	if strings.Contains(err.Error(), authCanary) {
 		t.Errorf("Login error leaks authorizer canary: %s", err.Error())
@@ -1344,7 +1467,7 @@ func TestLoginErrorsNeverLeakSecrets(t *testing.T) {
 }
 
 // TestLoginTypedNilDepsFailClosed verifies that typed-nil interface values for
-// ConsoleCache, ProfileStore, factory-returned OAuthClient, and Authorizer are
+// ConsoleCache, ProfileStore, factory-returned OAuthClient, and DeviceFlow are
 // detected and rejected with an error rather than panicking.
 func TestLoginTypedNilDepsFailClosed(t *testing.T) {
 	const session = "trn:iam::1:user:typednil"
@@ -1359,54 +1482,62 @@ func TestLoginTypedNilDepsFailClosed(t *testing.T) {
 			name: "typed-nil cache",
 			svc: &LoginService{
 				oauthClientFactory: func(string) (OAuthClient, error) { return baseClient, nil },
-				localAuthorizer:    func(c OAuthClient, s, ch string) Authorizer { return &fakeAuthorizer{code: "c", redirectURI: "r"} },
-				cache:              (*fakeCache)(nil),
-				profileStore:       baseStore,
-				clock:              time.Now,
-				pkceGenerator:      fixedPKCE(),
-				stateGenerator:     fixedState("s"),
+				deviceFlowFactory: func(_ OAuthClient, _ io.Writer, _ browser.Opener, _ bool, _ func() time.Time, _ DeviceSleeper) DeviceFlow {
+					return &fakeDeviceFlow{resp: validTokenResponse(session)}
+				},
+				cache:          (*fakeCache)(nil),
+				profileStore:   baseStore,
+				clock:          time.Now,
+				pkceGenerator:  fixedPKCE(),
+				stateGenerator: fixedState("s"),
 			},
 		},
 		{
 			name: "typed-nil profile store",
 			svc: &LoginService{
 				oauthClientFactory: func(string) (OAuthClient, error) { return baseClient, nil },
-				localAuthorizer:    func(c OAuthClient, s, ch string) Authorizer { return &fakeAuthorizer{code: "c", redirectURI: "r"} },
-				cache:              newFakeCache(),
-				profileStore:       (*fakeProfileStore)(nil),
-				clock:              time.Now,
-				pkceGenerator:      fixedPKCE(),
-				stateGenerator:     fixedState("s"),
+				deviceFlowFactory: func(_ OAuthClient, _ io.Writer, _ browser.Opener, _ bool, _ func() time.Time, _ DeviceSleeper) DeviceFlow {
+					return &fakeDeviceFlow{resp: validTokenResponse(session)}
+				},
+				cache:          newFakeCache(),
+				profileStore:   (*fakeProfileStore)(nil),
+				clock:          time.Now,
+				pkceGenerator:  fixedPKCE(),
+				stateGenerator: fixedState("s"),
 			},
 		},
 		{
 			name: "factory returns typed-nil client",
 			svc: &LoginService{
 				oauthClientFactory: func(string) (OAuthClient, error) { return (*fakeOAuthClient)(nil), nil },
-				localAuthorizer:    func(c OAuthClient, s, ch string) Authorizer { return &fakeAuthorizer{code: "c", redirectURI: "r"} },
-				cache:              newFakeCache(),
-				profileStore:       baseStore,
-				clock:              time.Now,
-				pkceGenerator:      fixedPKCE(),
-				stateGenerator:     fixedState("s"),
+				deviceFlowFactory: func(_ OAuthClient, _ io.Writer, _ browser.Opener, _ bool, _ func() time.Time, _ DeviceSleeper) DeviceFlow {
+					return &fakeDeviceFlow{resp: validTokenResponse(session)}
+				},
+				cache:          newFakeCache(),
+				profileStore:   baseStore,
+				clock:          time.Now,
+				pkceGenerator:  fixedPKCE(),
+				stateGenerator: fixedState("s"),
 			},
 		},
 		{
-			name: "authorizer factory returns typed-nil authorizer",
+			name: "device flow factory returns typed-nil flow",
 			svc: &LoginService{
 				oauthClientFactory: func(string) (OAuthClient, error) { return baseClient, nil },
-				localAuthorizer:    func(c OAuthClient, s, ch string) Authorizer { return (*fakeAuthorizer)(nil) },
-				cache:              newFakeCache(),
-				profileStore:       baseStore,
-				clock:              time.Now,
-				pkceGenerator:      fixedPKCE(),
-				stateGenerator:     fixedState("s"),
+				deviceFlowFactory: func(_ OAuthClient, _ io.Writer, _ browser.Opener, _ bool, _ func() time.Time, _ DeviceSleeper) DeviceFlow {
+					return (*fakeDeviceFlow)(nil)
+				},
+				cache:          newFakeCache(),
+				profileStore:   baseStore,
+				clock:          time.Now,
+				pkceGenerator:  fixedPKCE(),
+				stateGenerator: fixedState("s"),
 			},
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := tc.svc.Login(context.Background(), LoginOptions{Profile: "default"})
+			_, err := tc.svc.Login(context.Background(), LoginOptions{Profile: "default", DeviceCode: true})
 			if err == nil {
 				t.Fatal("expected error for typed-nil dependency")
 			}
@@ -1520,6 +1651,9 @@ func TestLoginServiceSessionWithSlash(t *testing.T) {
 		},
 		remoteAuthorizer: func(c OAuthClient, state, challenge string) Authorizer {
 			return &fakeAuthorizer{code: "auth-code", redirectURI: "https://signin.example.com/authorize/oauth/authorize"}
+		},
+		deviceFlowFactory: func(_ OAuthClient, _ io.Writer, _ browser.Opener, _ bool, _ func() time.Time, _ DeviceSleeper) DeviceFlow {
+			return &fakeDeviceFlow{resp: client.exchangeResp}
 		},
 		cache:          cache,
 		profileStore:   store,

@@ -256,11 +256,13 @@ func TestLoginShortFlagsMatchLongFlags(t *testing.T) {
 		{"long profile", []string{"--profile", "prod"}, loginOpts{Profile: "prod"}},
 		{"short region", []string{"-r", "cn-beijing"}, loginOpts{Region: "cn-beijing"}},
 		{"long region", []string{"--region", "cn-beijing"}, loginOpts{Region: "cn-beijing"}},
-		{"remote", []string{"--remote"}, loginOpts{Remote: true}},
+		{"device code", []string{"--device-code"}, loginOpts{DeviceCode: true}},
+		{"remote", []string{"--remote"}, loginOpts{DeviceCode: true, Remote: true, NoBrowser: true}},
+		{"no browser", []string{"--no-browser"}, loginOpts{DeviceCode: true, NoBrowser: true}},
 		{"endpoint", []string{"--endpoint", "https://tls-cn-beijing.volces.com"}, loginOpts{Endpoint: "https://tls-cn-beijing.volces.com"}},
 		{"login endpoint", []string{"--login-endpoint", "https://signin.byteplus.com"}, loginOpts{LoginEndpoint: "https://signin.byteplus.com"}},
-		{"all flags", []string{"-p", "prod", "-r", "cn-beijing", "--remote", "--endpoint", "https://tls-cn-beijing.volces.com", "--login-endpoint", "https://signin.byteplus.com"},
-			loginOpts{Profile: "prod", Region: "cn-beijing", Remote: true, Endpoint: "https://tls-cn-beijing.volces.com", LoginEndpoint: "https://signin.byteplus.com"}},
+		{"all flags", []string{"-p", "prod", "-r", "cn-beijing", "--device-code", "--remote", "--no-browser", "--endpoint", "https://tls-cn-beijing.volces.com", "--login-endpoint", "https://signin.byteplus.com"},
+			loginOpts{Profile: "prod", Region: "cn-beijing", DeviceCode: true, Remote: true, NoBrowser: true, Endpoint: "https://tls-cn-beijing.volces.com", LoginEndpoint: "https://signin.byteplus.com"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -382,6 +384,45 @@ func TestLoginProgressUsesStderrAndResultUsesStdout(t *testing.T) {
 		if _, ok := m[key]; ok {
 			t.Fatalf("result must not contain secret field %q: %s", key, string(b))
 		}
+	}
+}
+
+func TestLoginFailureClassificationSuggestsSelectedFlowWithoutLeakingCause(t *testing.T) {
+	for _, testCase := range []struct {
+		name         string
+		opts         loginOpts
+		wantHint     string
+		unwantedHint string
+	}{
+		{
+			name:         "default browser callback",
+			wantHint:     "volclog login --device-code",
+			unwantedHint: "--no-browser",
+		},
+		{
+			name:         "device code",
+			opts:         loginOpts{DeviceCode: true},
+			wantHint:     "--device-code --no-browser",
+			unwantedHint: "callback",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			adapter := &loginAdapter{loginSvc: &fakeLoginService{err: errors.New("secret-login-cause")}}
+			_, err := adapter.runLogin(context.Background(), testCase.opts)
+			if err == nil {
+				t.Fatal("expected login error")
+			}
+			payload, code := classifyError(err, "", 0, "login")
+			if code != 2 || payload.Kind != "auth" || !strings.Contains(payload.Hint, testCase.wantHint) {
+				t.Fatalf("classifyError() = code %d payload %+v", code, payload)
+			}
+			if strings.Contains(payload.Hint, testCase.unwantedHint) {
+				t.Fatalf("hint %q unexpectedly describes the other flow", payload.Hint)
+			}
+			if strings.Contains(err.Error(), "secret-login-cause") {
+				t.Fatalf("error leaked cause: %q", err.Error())
+			}
+		})
 	}
 }
 

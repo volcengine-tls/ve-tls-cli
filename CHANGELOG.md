@@ -1,5 +1,14 @@
 # Changelog
 
+## volclog-v1.0.7
+
+- Support both local browser callback + PKCE Console Login (default) and explicit Device Code authorization for remote or sandboxed environments, while retaining locked caches, atomic configuration writes, refresh behavior, and secret redaction.
+- Preserve `json.Number` across dynamic request, response, envelope, JSONL, and JMESPath processing, and reject invalid filters or projections before any TLS request is sent.
+- Add machine-readable build and catalog metadata through `volclog version`.
+- Add explicit-only CLI upgrades for npm and standalone installations; no background update checks are performed.
+- Add managed skill status, safe update, and uninstall commands with version and digest based modification detection.
+- Expose `ManualMergeShard` as the high-risk `shard.merge` operation with contract-first dry-run support and `shard.describe` reconciliation guidance.
+
 ## volclog-v1.0.6
 
 - Bundle the `tls-logcollector` Agent skill for contract-first LogCollector resource setup, parser and processor validation, Linux or Kubernetes deployment guidance, and end-to-end heartbeat, binding, and ingestion verification.
