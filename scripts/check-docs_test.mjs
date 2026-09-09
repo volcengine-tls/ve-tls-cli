@@ -2,7 +2,7 @@
 // Strict TDD: these tests define the contract before implementation.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -733,7 +733,7 @@ test('valid tree passes when repository root has a symlinked ancestor', () => {
     const diags = validateDocsTree(join(aliasParent, 'repo'));
     assert.deepEqual(diags, [], `symlinked root ancestor should pass, got: ${diags.join('\n')}`);
   } finally {
-    rmSync(aliasParent, { force: true });
+    unlinkSync(aliasParent);
     cleanup(realParent);
   }
 });

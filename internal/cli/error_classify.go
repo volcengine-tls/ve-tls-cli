@@ -57,6 +57,19 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 	if ue, ok := asUsageError(err); ok {
 		return errPayload{Kind: "usage"}, ue.ExitCode
 	}
+	var loginFlowErr *safeCLIError
+	if errors.As(err, &loginFlowErr) && loginFlowErr.loginFlow != "" {
+		hint := "check browser callback access, or retry explicitly with 'volclog login --device-code' when loopback is unavailable"
+		if loginFlowErr.loginFlow == "device-code" {
+			hint = "complete device authorization, or rerun 'volclog login --device-code --no-browser' and follow the printed URL and user code"
+		}
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "auth",
+			Hint:       hint,
+		}, 2
+	}
 	// Stable outer transaction/partial-failure sentinels take priority over any
 	// inner business cause. These sentinels may wrap an *auth.Error (e.g. a
 	// ProtocolError from a failed revoke or config update) as their cause; if the
@@ -269,6 +282,14 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 			Kind:       "filesystem",
 			Hint:       "check the current working directory and local filesystem permissions",
 		}, 2
+	}
+	if strings.HasPrefix(msg, "invalid execution.projection:") {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "decode",
+			Hint:       "check context.execution.projection",
+		}, 3
 	}
 	if strings.HasPrefix(msg, "filter ") || msg == "empty filter" || strings.HasPrefix(msg, "invalid --jmes-filter") || strings.HasPrefix(msg, "invalid jmes-filter expression:") {
 		return errPayload{

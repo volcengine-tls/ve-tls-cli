@@ -15,8 +15,10 @@ import (
 )
 
 // ConsoleOAuthClient wraps HTTP calls to the Volcengine console sign-in OAuth
-// endpoints. It implements the public-client PKCE authorization code flow and
-// the refresh_token grant.
+// endpoints. It implements the public-client Device Authorization Grant and
+// refresh_token grant. The legacy authorization-code helpers remain available
+// for callers that still need to read old protocol fixtures, but LoginService
+// does not use them for production login.
 //
 // All dependencies (HTTP client, retry client, clock, sleeper) are injectable
 // so that tests can run without real network access or real delays. The zero
@@ -25,6 +27,7 @@ type ConsoleOAuthClient struct {
 	endpointURL  string
 	authorizeURL string
 	tokenURL     string
+	deviceURL    string
 	retry        *httpx.RetryClient
 }
 
@@ -78,6 +81,7 @@ func NewConsoleOAuthClient(cfg *ConsoleOAuthClientConfig) (*ConsoleOAuthClient, 
 		endpointURL:  clean,
 		authorizeURL: clean + AuthorizePath,
 		tokenURL:     clean + TokenPath,
+		deviceURL:    clean + DeviceAuthorizationPath,
 		retry:        retryClient,
 	}, nil
 }
@@ -176,6 +180,67 @@ func (c *ConsoleOAuthClient) BuildAuthorizeURL(params *AuthorizeParams) (string,
 	return c.authorizeURL + "?" + q.Encode(), nil
 }
 
+// StartDeviceAuthorization starts the Console OAuth 2.0 Device Authorization
+// Grant. It sends an application/x-www-form-urlencoded POST containing only
+// client_id, scope (when supplied), and device_info (when supplied). Console's
+// public device client never sends a client_secret.
+func (c *ConsoleOAuthClient) StartDeviceAuthorization(ctx context.Context, req *ConsoleDeviceAuthorizationRequest) (*ConsoleDeviceAuthorizationResponse, error) {
+	if c == nil {
+		return nil, errors.New("nil *ConsoleOAuthClient")
+	}
+	if ctx == nil {
+		return nil, errors.New("nil context")
+	}
+	if req == nil {
+		return nil, errors.New("request cannot be nil")
+	}
+	if req.ClientID != ClientIDCrossDevice {
+		return nil, errors.New("device authorization requires the cross-device client ID")
+	}
+	if req.Scope != Scope {
+		return nil, errors.New("scope must equal the frozen Console scope")
+	}
+	form := url.Values{}
+	form.Set("client_id", req.ClientID)
+	form.Set("scope", req.Scope)
+	if strings.TrimSpace(req.DeviceInfo) != "" {
+		form.Set("device_info", req.DeviceInfo)
+	}
+
+	resp, err := c.postForm(ctx, c.deviceURL, form, RetryAttempts)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	requestID := resp.Header.Get(RequestIDHeader)
+	if resp.StatusCode/100 != 2 {
+		return nil, parseErrorResponse(resp.StatusCode, requestID, resp.Body)
+	}
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read device authorization response: %w", err)
+	}
+	var authResp ConsoleDeviceAuthorizationResponse
+	if len(bytes.TrimSpace(respBytes)) > 0 {
+		if err := json.Unmarshal(respBytes, &authResp); err != nil {
+			return nil, fmt.Errorf("decode device authorization response (status %d): %w", resp.StatusCode, err)
+		}
+	}
+	if strings.TrimSpace(authResp.DeviceCode) == "" {
+		return nil, errors.New("device authorization response missing device_code")
+	}
+	if strings.TrimSpace(authResp.UserCode) == "" {
+		return nil, errors.New("device authorization response missing user_code")
+	}
+	if strings.TrimSpace(authResp.VerificationURI) == "" {
+		return nil, errors.New("device authorization response missing verification_uri")
+	}
+	if authResp.ExpiresIn <= 0 {
+		return nil, errors.New("device authorization response has invalid expires_in")
+	}
+	return &authResp, nil
+}
+
 // ExchangeToken performs the token exchange by sending a POST request to the
 // token endpoint with an application/x-www-form-urlencoded body.
 //
@@ -191,6 +256,18 @@ func (c *ConsoleOAuthClient) BuildAuthorizeURL(params *AuthorizeParams) (string,
 // that retains the status code, parsed OAuth error fields, and request ID but
 // never the raw response body.
 func (c *ConsoleOAuthClient) ExchangeToken(ctx context.Context, req *ConsoleTokenRequest) (*ConsoleTokenResponse, error) {
+	return c.exchangeTokenWithAttempts(ctx, req, RetryAttempts)
+}
+
+// ExchangeTokenOnce performs exactly one HTTP attempt. Device-code polling
+// uses this method so RFC8628 pending/slow_down responses are handled by the
+// poll loop rather than hidden by transport retries. Refresh callers should
+// continue using ExchangeToken.
+func (c *ConsoleOAuthClient) ExchangeTokenOnce(ctx context.Context, req *ConsoleTokenRequest) (*ConsoleTokenResponse, error) {
+	return c.exchangeTokenWithAttempts(ctx, req, 1)
+}
+
+func (c *ConsoleOAuthClient) exchangeTokenWithAttempts(ctx context.Context, req *ConsoleTokenRequest, attempts int) (*ConsoleTokenResponse, error) {
 	if c == nil {
 		return nil, errors.New("nil *ConsoleOAuthClient")
 	}
@@ -206,23 +283,16 @@ func (c *ConsoleOAuthClient) ExchangeToken(ctx context.Context, req *ConsoleToke
 	if strings.TrimSpace(req.ClientID) == "" {
 		return nil, errors.New("client_id is required")
 	}
+	if c.retry == nil {
+		return nil, errors.New("nil retry client")
+	}
 
 	form, err := buildTokenForm(req)
 	if err != nil {
 		return nil, err
 	}
-	body := form.Encode()
 
-	resp, err := c.retry.Do(ctx, func(ctx context.Context) (*http.Request, error) {
-		// Build a fresh request (and fresh body reader) on every attempt so
-		// retries never reuse a consumed body.
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.tokenURL, strings.NewReader(body))
-		if err != nil {
-			return nil, fmt.Errorf("build request: %w", err)
-		}
-		httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		return httpReq, nil
-	})
+	resp, err := c.postForm(ctx, c.tokenURL, form, attempts)
 	if err != nil {
 		return nil, err
 	}
@@ -270,12 +340,51 @@ func (c *ConsoleOAuthClient) ExchangeToken(ctx context.Context, req *ConsoleToke
 	return &tokenResp, nil
 }
 
+// postForm executes a form POST through the configured retry client. The body
+// is encoded once but a fresh reader/request is built for every attempt. When
+// attempts is one, a shallow retry-client copy forces exactly one HTTP call
+// without mutating the shared client used by concurrent refreshes.
+func (c *ConsoleOAuthClient) postForm(ctx context.Context, endpoint string, form url.Values, attempts int) (*http.Response, error) {
+	if c == nil {
+		return nil, errors.New("nil *ConsoleOAuthClient")
+	}
+	if ctx == nil {
+		return nil, errors.New("nil context")
+	}
+	if c.retry == nil {
+		return nil, errors.New("nil retry client")
+	}
+	if attempts <= 0 {
+		return nil, errors.New("attempts must be positive")
+	}
+	body := form.Encode()
+	retryClient := c.retry
+	if attempts == 1 && c.retry.MaxAttempts != 1 {
+		copyClient := *c.retry
+		copyClient.MaxAttempts = 1
+		retryClient = &copyClient
+	}
+	return retryClient.Do(ctx, func(ctx context.Context) (*http.Request, error) {
+		// Build a fresh request (and fresh body reader) on every attempt so
+		// retries never reuse a consumed body.
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("build request: %w", err)
+		}
+		httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return httpReq, nil
+	})
+}
+
 // buildTokenForm constructs the url.Values for a token request based on the
 // grant type. It enforces the exact field set required by the protocol.
 //
 // For authorization_code: grant_type, client_id, scope, code, code_verifier,
 // and redirect_uri are all required. The client_id must be a frozen Console
 // client ID and the scope must equal the frozen Console scope.
+//
+// For device_code: grant_type, client_id, scope, and device_code are included;
+// only the cross-device client ID is valid.
 //
 // For refresh_token: grant_type, client_id, scope, and refresh_token are
 // required. The form never includes code, redirect_uri, or code_verifier.
@@ -306,6 +415,14 @@ func buildTokenForm(req *ConsoleTokenRequest) (url.Values, error) {
 		q.Set("code", req.Code)
 		q.Set("code_verifier", req.CodeVerifier)
 		q.Set("redirect_uri", req.RedirectURI)
+	case GrantTypeDeviceCode:
+		if req.ClientID != ClientIDCrossDevice {
+			return nil, errors.New("device_code grant requires the cross-device client ID")
+		}
+		if strings.TrimSpace(req.DeviceCode) == "" {
+			return nil, errors.New("device_code is required for device_code grant")
+		}
+		q.Set("device_code", req.DeviceCode)
 	case GrantTypeRefreshToken:
 		if strings.TrimSpace(req.RefreshToken) == "" {
 			return nil, errors.New("refresh_token is required for refresh_token grant")

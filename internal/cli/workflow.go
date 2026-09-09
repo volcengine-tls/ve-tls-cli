@@ -262,6 +262,10 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 			return nil, err
 		}
 	}
+	compiledProjection, err := output.Compile(options.Projection)
+	if err != nil {
+		return nil, fmt.Errorf("invalid execution.projection: %w", err)
+	}
 
 	workflowArgs, cleanup, err := workflowExecArgs(spec, input)
 	if err != nil {
@@ -273,7 +277,7 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	filtered, err := applyToolExecFilters(out, options.Projection)
+	filtered, err := applyCompiledToolExecFilter(out, compiledProjection)
 	if err != nil {
 		return nil, err
 	}

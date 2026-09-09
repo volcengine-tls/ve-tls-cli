@@ -316,11 +316,17 @@ volclog tool exec project.describe-projects
 
 - 确认用户账号具备目标 TLS 资源权限；
 - 明确 TLS Region 和 Endpoint；
-- 远程模式下，可以把终端显示的授权 URL 复制到本地浏览器，并把授权码粘贴回终端。
+- 默认 Console Login 使用本机 loopback 回调与 PKCE。远程终端或本机回调不可用时，显式使用 `--device-code`；`--no-browser`（兼容别名为 `--remote`）会自动选择 Device Code。
 
-`login --region --endpoint` 会把两个 TLS 运行值写入目标 profile。任一参数都可以省略以保留旧值，之后再通过 `configure set` 补充。`--login-endpoint` 用于选择 Console OAuth 服务，与 TLS 业务 Endpoint 相互独立。
+`login --region --endpoint` 会把两个 TLS 运行值写入目标 profile。下文所有可复制的登录示例都显式提供二者，避免把 Console 登录地址误认为 TLS 业务地址。初始化新 profile 时必须同时提供二者；只有已有 profile 已保存对应值时，才应省略参数以保留原值。`--login-endpoint` 用于选择 Console OAuth 服务，与 TLS 业务 Endpoint 相互独立。
 
-### 5.3 本地浏览器登录
+| 模式 | 模式选项 | 运行条件 | 优势 | 推荐场景 |
+| --- | --- | --- | --- | --- |
+| 本机浏览器回调 + PKCE（默认） | 无 | CLI 可以监听 loopback 随机端口，浏览器可以回调当前机器 | 无需输入 user code，步骤最少 | 本机桌面终端 |
+| Device Code + 自动打开浏览器 | `--device-code` | CLI 可以向外访问 HTTPS，机器可以打开浏览器 | 不监听回调端口，同时保留自动打开浏览器 | 本机回调被防火墙或沙箱限制 |
+| Device Code + 无浏览器 | `--device-code --no-browser` | CLI 可以向外访问 HTTPS，用户能在任意设备打开浏览器 | 终端与浏览器解耦，不依赖 GUI 或入站回调 | SSH、Trae、人工参与的 Agent 会话 |
+
+### 5.3 本机浏览器回调登录（默认）
 
 ```bash
 volclog login \
@@ -329,28 +335,57 @@ volclog login \
   --endpoint https://tls-cn-beijing.volces.com
 ```
 
-本地模式使用 loopback callback 接收浏览器授权结果。登录成功后，profile 会切换为 `mode=console-login`，保存登录会话绑定，并且只修补显式提供的 TLS 运行字段。未提供的已有身份和运行字段保持不变，新 profile 不会自动写入默认 Region。
+该命令默认先在 loopback 随机端口启动本地回调，再使用 PKCE 打开浏览器。用户在页面中确认授权后，浏览器把授权结果回调给 CLI，不需要输入设备码或向终端粘贴 code。登录成功后，profile 会切换为 `mode=console-login`，保存登录会话绑定，并且只修补显式提供的 TLS 运行字段。未提供的已有身份和运行字段保持不变，新 profile 不会自动写入默认 Region。
+
+默认方式的优势是交互步骤最少，适合浏览器和 CLI 位于同一台机器的日常使用。它不适合浏览器位于本地、CLI 位于远程 SSH 主机的场景：浏览器访问的 `127.0.0.1` 是本地机器，不是远程主机；某些 IDE 或 Agent 沙箱也会禁止监听随机端口或启动浏览器。遇到这些条件时应显式使用 Device Code，CLI 不会自动切换流程。
 
 Console 授权服务默认使用 `https://signin.volcengine.com`。如需选择其他兼容的 Console OAuth 根地址，可使用 `--login-endpoint`。登录地址必须是干净的 HTTPS 根地址，不能包含用户信息、查询参数、片段或非根路径。地址会在规范化后随登录缓存保存，后续自动刷新会继续使用同一个授权服务；不含该字段的旧缓存仍使用默认地址。`--endpoint` 始终表示 TLS 业务 Endpoint。
 
-### 5.4 远程或跨设备登录
+### 5.4 Device Code 与无浏览器登录
 
-开发机无法直接显示浏览器页面时使用：
+本机回调端口不可用或希望使用跨设备授权时，显式选择 Device Code：
 
 ```bash
 volclog login \
   --profile console-dev \
   --region cn-beijing \
-  --remote
+  --endpoint https://tls-cn-beijing.volces.com \
+  --device-code
+```
+
+CLI 会打印验证 URL 和 user code、尽力打开默认浏览器并轮询授权结果。这里供用户输入的是短期 `user code`；OAuth 内部的 `device_code` 只在 CLI 与授权服务之间使用，不会打印给用户。开发机无法直接显示浏览器页面时再加 `--no-browser`：
+
+```bash
+volclog login \
+  --profile console-dev \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com \
+  --device-code \
+  --no-browser
 ```
 
 按终端提示：
 
-1. 在可以看到页面的设备上打开授权 URL；
-2. 完成登录和授权；
-3. 将授权码粘贴回运行 `volclog` 的终端。
+1. 复制终端打印的验证 URL，而不是复制登录命令；
+2. 在当前机器或另一台设备的浏览器中打开该 URL；
+3. 在官方授权页面输入终端打印的 user code，并完成登录和确认；Console 密码也只在该浏览器页面输入；
+4. 保持原终端运行，`volclog` 会通过出站 HTTPS 轮询等待完成；不需要把任何 code 粘贴回终端。
 
-### 5.5 使用和验证
+`--no-browser` 和兼容别名 `--remote` 都隐含 `--device-code`。默认 PKCE 或 Device Code 任一流程失败时，CLI 都不会自动切换到另一流程；本机回调失败时应根据错误显式重试 `--device-code`。
+
+Device Code 适合 SSH、Trae 和人工参与的 Agent 会话，是因为它不启动本地回调监听、不要求 CLI 操作浏览器，也不要求浏览器和终端位于同一台机器；CLI 只需要能够向 Console 发起出站 HTTPS 请求。它仍然要求用户在官方页面确认授权，因此不适合无人值守 CI。CI 或工作负载应优先使用 OIDC、ECS Role 或其他可自动轮换的非交互身份。
+
+### 5.5 凭证安全与最小权限边界
+
+- CLI 不读取 Console 密码；账号密码和多因素认证信息只能输入到官方 HTTPS 浏览器页面。
+- 成功结果的 stdout 只包含 profile、provider、Region、Endpoint、过期时间和脱敏 AK。raw AK、SK、SecurityToken、OAuth token、authorization code、PKCE verifier 和内部 device code 不得出现在 stdout、stderr、错误消息或 trace 中。
+- Device Code 流程必须把验证 URL 和短期 user code 写到 stderr 供用户完成授权。user code 不会落盘，但终端宿主可能记录 stderr；不要把它复制到聊天、工单、CI 日志或其他持久化位置。
+- OAuth 与 STS 动态材料只保存在权限为 `0600` 的登录缓存中，并通过缓存锁和原子替换更新；profile 只保存登录会话绑定和 TLS 运行配置。
+- 登录失败不会回退到环境变量或 profile 中的 AK/SK，也不会自动切换授权流程，避免在用户不知情时使用另一个身份。
+- Console Login 只获得当前登录账号原本拥有的权限，不会提升权限。应为账号配置最小必要权限，并使用 `doctor --online` 或只读 API 验证实际访问边界。
+- 使用完毕后执行 `volclog logout --profile NAME` 清除登录缓存。Agent 只能引导用户在官方页面授权，不应要求用户把密码、user code、AK/SK 或 token 粘贴进对话。
+
+### 5.6 使用和验证
 
 ```bash
 volclog configure use console-dev
@@ -358,11 +393,11 @@ volclog --profile console-dev doctor
 volclog --profile console-dev doctor --online
 ```
 
-登录成功不等于已经具备目标 TLS 权限。`doctor --online` 成功才说明当前临时身份可以完成 TLS 只读访问。
+这些命令从 `console-dev` profile 读取登录时保存的 TLS Region 和 Endpoint，不需要再次传入。登录成功不等于已经具备目标 TLS 权限。`doctor --online` 成功才说明当前临时身份可以完成 TLS 只读访问。
 
-### 5.6 刷新和重新登录
+### 5.7 刷新和重新登录
 
-Console Login 的硬过期时间由缓存令牌的 `IssuedAt` 加上 `ExpiresIn`（Console 服务返回的有效期）计算得出。当临时凭证距离该硬过期时间不足 60 秒时，业务命令会尝试使用缓存中的刷新材料自动换取新凭证。这些有效期由 Console 服务设定，不是用户可配置的 CLI 参数。
+Console Login 的硬过期时间由缓存令牌的 `IssuedAt` 加上 `ExpiresIn`（Console 服务返回的有效期）计算得出。当临时凭证距离该硬过期时间不足 60 秒时，业务命令会尝试使用缓存中的刷新材料自动换取新凭证。这些有效期由 Console 服务设定，不是用户可配置的 CLI 参数；CLI 不会自行推导或假设独立的固定授权 TTL（例如 48 小时）。
 
 以下情况需要重新登录：
 
@@ -374,12 +409,15 @@ Console Login 的硬过期时间由缓存令牌的 `IssuedAt` 加上 `ExpiresIn`
 恢复命令：
 
 ```bash
-volclog login --profile console-dev --region cn-beijing
+volclog login \
+  --profile console-dev \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
 ```
 
 业务命令不会在后台主动打开浏览器。
 
-### 5.7 退出
+### 5.8 退出
 
 Console 退出是会话范围的。`volclog logout --profile NAME` 仅使用指定 profile 来解析其 `login-session`；随后删除该会话的缓存，并清除仍绑定到同一会话的每个 console-login profile 的 `login-session` 绑定，而不仅是指定的 profile。如果多个 profile 共享同一个登录会话，退出其中一个会为所有 profile 清除共享会话。
 
@@ -413,7 +451,7 @@ volclog logout --all
 - SSO Session 名称，由用户自行命名；
 - SSO Start URL，由企业身份管理员提供；
 - SSO 服务所在 Region；
-- 一个已经存在的目标 profile；
+- 一个目标 profile；如果首次创建，必须同时初始化 TLS Region 和 Endpoint；
 - 目标账号 ID 和角色名；也可以在首次配置时交互选择；
 - TLS 使用的 Region 和 Endpoint。
 
@@ -461,7 +499,9 @@ volclog configure sso \
   --profile sso-dev \
   --sso-session corp \
   --account-id '<account-id>' \
-  --role-name '<role-name>'
+  --role-name '<role-name>' \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
 ```
 
 无图形界面的终端可以禁止自动打开浏览器：
@@ -470,6 +510,8 @@ volclog configure sso \
 volclog configure sso \
   --profile sso-dev \
   --sso-session corp \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com \
   --no-browser
 ```
 
@@ -481,7 +523,7 @@ volclog configure sso \
 volclog configure use sso-dev
 ```
 
-如果登录时省略了 TLS Region 或 Endpoint，可以在不改变 SSO 绑定的情况下补充：
+初始化新 profile 时不要省略 TLS Region 或 Endpoint。对于历史遗留的不完整 profile，可以在不改变 SSO 绑定的情况下补齐：
 
 ```bash
 volclog configure set --profile sso-dev \
@@ -552,7 +594,7 @@ volclog sso logout --profile sso-dev
 volclog sso logout --sso-session corp
 ```
 
-退出不会删除 SSO Session 配置、profile、账号 ID、角色名或 TLS 运行配置。它也不会移除可能因之前的静态配置而残留的任何休眠静态 `AccessKeyID`、`SecretAccessKey`、`SecurityToken` 或 `CredRef` 字段。[5.7 节](#57-退出)中描述的相同休眠字段保留和清理指导同样适用于此处。
+退出不会删除 SSO Session 配置、profile、账号 ID、角色名或 TLS 运行配置。它也不会移除可能因之前的静态配置而残留的任何休眠静态 `AccessKeyID`、`SecretAccessKey`、`SecurityToken` 或 `CredRef` 字段。[5.8 节](#58-退出)中描述的相同休眠字段保留和清理指导同样适用于此处。
 
 ## 7. RAM Role ARN
 
@@ -837,12 +879,12 @@ volclog configure use NAME
 
 ### 11.2 缺少 Region 或 Endpoint
 
-工作负载模式应在 `configure set` 时显式写入 Region 和 Endpoint。动态登录 profile 如果没有保存这些值，可以给单条命令提供：
+所有 profile 都应保存明确的 TLS Region 和 Endpoint。工作负载模式应在 `configure set` 时写入；动态登录的历史 profile 如果缺少字段，应持久化补齐，避免后续命令依赖临时环境变量：
 
 ```bash
-VOLCENGINE_REGION=cn-beijing \
-VOLCENGINE_ENDPOINT=https://tls-cn-beijing.volces.com \
-volclog --profile NAME doctor --online
+volclog configure set --profile NAME \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
 ```
 
 ### 11.3 `ReauthRequired`
@@ -850,12 +892,18 @@ volclog --profile NAME doctor --online
 Console Login：
 
 ```bash
-volclog login --profile NAME
+volclog login \
+  --profile NAME \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
 ```
 
 SSO：
 
 ```bash
+volclog configure set --profile NAME \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
 volclog sso login --profile NAME
 ```
 

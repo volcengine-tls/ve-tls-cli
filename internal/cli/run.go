@@ -10,8 +10,8 @@ import (
 )
 
 // Run is the production entry point. It always assembles the real console login
-// adapter (FileCache, LoginService, local+remote authorizer, confirm prompt) and
-// the real SSO adapter. Tests that need to inject fakes call
+// adapter (FileCache, Device Code LoginService, browser opener, confirm prompt)
+// and the real SSO adapter. Tests that need to inject fakes call
 // runWithLoginAdapterFactory directly.
 func Run(args []string, stdout, stderr io.Writer) int {
 	return runWithLoginAdapterFactory(args, stdout, stderr, newProductionLoginAdapter, newProductionSSOAdapter)
@@ -314,7 +314,7 @@ func usageText() string {
 	b.WriteString("  配置完成后验证:         volclog --profile <name> doctor\n")
 	if currentEdition() == cliEditionVolclog {
 		b.WriteString("\n  可用 volclog skill install --dir <skills-dir> 安装内置 volclog 技能。\n")
-		b.WriteString("  当前 volclog 只暴露 configure/doctor/skill/tool/workflow/raw/login/logout/sso；human shortcut 需切到 volclog-human（-tags=human）。\n\n")
+		b.WriteString("  当前 volclog 只暴露 configure/doctor/skill/upgrade/version/tool/workflow/raw/login/logout/sso；human shortcut 需切到 volclog-human（-tags=human）。\n\n")
 	} else {
 		b.WriteString("\n  project/topic/index/log 等 shortcut 仅供人工交互；默认 volclog 不把它们当主流程，也不要默认停在 shortcut 的 --describe / --print-request-template。\n")
 		b.WriteString("  可用 volclog skill install --dir <skills-dir> 安装内置 volclog 技能。\n")

@@ -71,7 +71,7 @@ Examples:
   tlsctl configure set --profile ram-1 --mode ramrolearn --ak <ak> --sk <sk> --account-id 2100000000 --role-name TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure set --profile oidc-1 --mode oidc --oidc-token-file /var/run/secrets/token --role-trn trn:iam::2100000000:role/TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure set --profile ecs-1 --mode ecsrole --role-name TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
-  tlsctl configure set --profile default --mode ak --disable-ssl=false
+  tlsctl configure set --profile default --mode ak --disable-ssl=false --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure profile add tenant-a --ak <ak> --sk <sk> --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure profile use tenant-a
   tlsctl configure use default
@@ -105,13 +105,17 @@ func usageSkill() string {
   tlsctl skill <command> [args]
 
 Commands:
-  list      List bundled skills available in this volclog build
-  install   Install bundled skills into a user-provided agent skills directory
+  list       List bundled skills available in this volclog build
+  install    Install bundled skills into a user-provided agent skills directory
+  status     Compare installed skills with bundled version and digests
+  update     Update unmodified managed skills; protect local changes by default
+  uninstall  Remove unmodified managed skills; protect local changes by default
 
 Notes:
-  - --dir is required for install and should point to the target agent's skills directory
-  - If --name is omitted, install copies all bundled skills
-  - Use --force to overwrite an existing installed skill directory
+  - --dir is required for install/status/update/uninstall and points to the target agent's skills directory
+  - If --name is omitted, the command applies to all bundled skills
+  - update/uninstall skip modified, untracked, or invalid-manifest skills unless --force is explicit
+  - install --force preserves its explicit overwrite behavior
   - This command installs from the CLI's bundled skills; it does not require the source repo checkout
 
 Examples:
@@ -119,6 +123,9 @@ Examples:
   tlsctl skill install --dir /path/to/agent/skills
   tlsctl skill install --dir /path/to/agent/skills --name volclog-core
   tlsctl skill install --dir /path/to/agent/skills --force
+  tlsctl skill status --dir /path/to/agent/skills
+  tlsctl skill update --dir /path/to/agent/skills
+  tlsctl skill uninstall --dir /path/to/agent/skills --name volclog-core
 
 Exit Code:
   0 success
@@ -225,6 +232,21 @@ Next:
 
 Filters:
   --format <text|json>
+`)
+}
+
+func usageUpgrade() string {
+	return u(`Usage:
+  tlsctl upgrade [--check]
+  tlsctl upgrade [--version <semver>] [--yes]
+
+Behavior:
+  - no flags / --check: check the latest version without changing files
+  - --version <semver>: select a release; without --yes this is a no-write check
+  - --yes: apply the selected or latest release
+  - npm installations delegate updates to npm
+  - standalone binaries require a release checksum and replace the executable atomically
+  - volclog never performs background update checks
 `)
 }
 
@@ -345,11 +367,12 @@ Agent:
 
 func usageLogin() string {
 	return u(`Usage:
-  tlsctl login [-p|--profile NAME] [-r|--region REGION] [--endpoint URL] [--login-endpoint URL] [--remote]
+  tlsctl login [-p|--profile NAME] [-r|--region REGION] [--endpoint URL] [--login-endpoint URL] [--device-code] [--no-browser] [--remote]
 
 概览:
-  通过 Console Login（OAuth Authorization Code + PKCE）登录并获取临时 STS 凭证。
-  默认使用本地 loopback callback 接收授权回调；--remote 用于无浏览器或远程终端场景。
+  通过 Console Login 获取临时 STS 凭证。
+  默认使用本机浏览器回调 + PKCE；--device-code 显式使用跨设备 Device Code。
+  --no-browser 与历史兼容别名 --remote 均隐含 --device-code。
   登录态只写入 ~/.volclog（或 VOLCLOG_CONFIG 对应目录）的 login/cache，不依赖 ve 或 ~/.volcengine。
 
 Flags:
@@ -357,11 +380,32 @@ Flags:
   -r, --region <region>      保存到 profile 的 TLS region
   --endpoint <url>           保存到 profile 的 TLS 业务 endpoint
   --login-endpoint <url>     Console OAuth 根地址（默认 https://signin.volcengine.com）
-  --remote                   使用跨设备远程登录（手动输入授权码）
+  --device-code              使用跨设备 Device Code，而非默认本机浏览器回调
+  --no-browser               使用 Device Code 且不自动打开浏览器
+  --remote                   --no-browser 的历史兼容别名
+
+Examples:
+  # 本机桌面：浏览器回调 + PKCE，不输入 user code
+  tlsctl login --profile NAME --region REGION --endpoint URL
+
+  # Device Code：不监听本地回调端口，仍尝试自动打开浏览器
+  tlsctl login --device-code --profile NAME --region REGION --endpoint URL
+
+  # SSH / Trae / 人工参与的 Agent：复制终端打印的 URL，在任意浏览器的官方页面输入 user code
+  tlsctl login --device-code --no-browser --profile NAME --region REGION --endpoint URL
 
 输出:
   - stdout 仅输出最终 JSON（profile/provider/region/endpoint/expires_at/masked_access_key）
-  - 授权 URL、prompt、浏览器提示、进度只写 stderr
+  - 授权 URL、短期 user code、prompt、浏览器提示、进度只写 stderr
+  - 保持原终端运行并等待轮询完成；不需要把任何 code 粘贴回终端
+
+安全:
+  - Console 密码只在官方浏览器页面输入；CLI 不读取密码
+  - raw AK/SK、SecurityToken、OAuth token、authorization code、PKCE verifier 和内部 device_code 不写 stdout/stderr/trace
+  - user code 只用于用户在授权页输入，短期有效且不落盘；不要复制到聊天、工单或持久化日志
+  - 动态令牌只写入 0600 私有缓存；失败不切换流程，也不回退到环境 AK/SK
+  - Console Login 只使用当前登录账号已有权限，不提升权限；账号应遵循最小权限原则
+  - Console Login 需要人工确认，不适合无人值守 CI；CI 优先使用 OIDC 或 ECS Role
 
 Next:
   tlsctl --profile <name> doctor
@@ -375,9 +419,9 @@ Exit Code:
 注意:
   - --login-endpoint 只影响登录授权；--endpoint 始终表示 TLS 业务地址
   - 登录地址必须是干净的 HTTPS 根地址；登录成功后会随缓存保存并用于后续刷新
-  - 省略 region/endpoint 时保留 profile 原值；新 profile 可在登录后补充
+  - 新 profile 应同时提供 region 和 endpoint；已有 profile 可省略以保留原值
   - 不接受 --secrets-file；不要把长期静态凭证注入交互登录进程
-  - 登录失败必须失败关闭，不会回退到环境 AK/SK
+  - 任一授权流程失败都不会自动切换到另一流程，也不会回退到环境 AK/SK
 `)
 }
 
@@ -541,7 +585,8 @@ func usageConfigureSSO() string {
 
 概览:
   绑定 profile 到 SSO session 并完成首次 Device Authorization 登录。
-  profile 可以不存在；TLS endpoint/region 可一步保存，也可稍后补充。
+  profile 可以不存在；首次创建时应同时提供 TLS region 和 endpoint。
+  已有 profile 可省略对应参数以保留原值。
   不改变 CurrentProfile。
 
 Flags:
@@ -552,6 +597,11 @@ Flags:
   --region <region>          TLS SignV4 region（不是 SSO session region）
   --endpoint <url>           TLS 业务 endpoint
   --no-browser               不自动打开浏览器，仅打印授权 URL
+
+Examples:
+  tlsctl configure sso --profile sso-dev --sso-session corp --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
+  tlsctl configure sso --profile sso-dev --sso-session corp --account-id ACCOUNT_ID --role-name ROLE_NAME --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
+  tlsctl configure sso --profile sso-dev --sso-session corp --region cn-beijing --endpoint https://tls-cn-beijing.volces.com --no-browser
 
 行为:
   - 把 profile 切到 mode=sso；只更新显式提供的 TLS Region/Endpoint

@@ -74,7 +74,7 @@ jobs:
           test "${lock_version}" = "${package_version}"
       - name: Test
         run: |
-          go test ./...
+          go test . ./cmd/... ./internal/...
           npm run test:npm --silent
       - name: Build
         env:
@@ -100,7 +100,7 @@ jobs:
             if [ "$GOOS" = "windows" ]; then
               out="${out}.exe"
             fi
-            ldflags="-s -w -X github.com/volcengine-tls/ve-tls-cli/internal/version.Version=${version}"
+            ldflags="-s -w -X github.com/volcengine-tls/ve-tls-cli/internal/version.Version=${version} -X github.com/volcengine-tls/ve-tls-cli/internal/version.Commit=${GITHUB_SHA}"
             if [ "$GOOS" = "darwin" ]; then
               ldflags="$ldflags -linkmode=external"
               build_args+=( -a )

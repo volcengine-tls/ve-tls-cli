@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
+	"github.com/volcengine-tls/ve-tls-cli/internal/jsonx"
 )
 
 func buildToolExecutionRuntimeView(ctx *Context) execution.RuntimeView {
@@ -72,7 +73,7 @@ func toolExecutionPlanValue(plan *execution.DryRunPlan) (map[string]any, error) 
 		return nil, err
 	}
 	out := map[string]any{}
-	if err := json.Unmarshal(raw, &out); err != nil {
+	if err := jsonx.Unmarshal(raw, &out); err != nil {
 		return nil, err
 	}
 	return out, nil

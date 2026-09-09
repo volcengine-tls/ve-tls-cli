@@ -67,6 +67,12 @@ func resolveToolByIdentity(group, action string) (contract.Operation, error) {
 	if g == "" || a == "" {
 		return contract.Operation{}, fmt.Errorf("unknown tool: %s.%s", strings.TrimSpace(group), strings.TrimSpace(action))
 	}
+	if replacement, ok := rejectedLegacyToolIdentity(g, a); ok {
+		return contract.Operation{}, fmt.Errorf(
+			"legacy tool identity %s.%s is no longer accepted; use %s",
+			strings.TrimSpace(group), strings.TrimSpace(action), replacement,
+		)
+	}
 	exact := make([]contract.Operation, 0, 1)
 	verbAliases := make([]contract.Operation, 0, 2)
 	for _, operation := range catalog.Operations {
@@ -94,6 +100,20 @@ func resolveToolByIdentity(group, action string) (contract.Operation, error) {
 		return contract.Operation{}, ambiguousToolIdentityError(group, action, verbAliases)
 	}
 	return contract.Operation{}, fmt.Errorf("unknown tool: %s.%s", strings.TrimSpace(group), strings.TrimSpace(action))
+}
+
+func rejectedLegacyToolIdentity(group, action string) (string, bool) {
+	if normalizeToken(group) != "log" {
+		return "", false
+	}
+	switch normalizeToken(action) {
+	case "create":
+		return "log.create-download-task", true
+	case "cancel":
+		return "log.cancel-download-task", true
+	default:
+		return "", false
+	}
 }
 
 func toolIdentityMatchesAlias(operation contract.Operation, actionToken string) bool {
@@ -442,6 +462,15 @@ func buildToolDescribeCommon(operation contract.Operation) (toolDescribeCommon, 
 
 func toolSpecificUsageNotes(operation contract.Operation) []any {
 	switch strings.TrimSpace(string(operation.ID)) {
+	case "shard.merge":
+		return []any{
+			"The selected profile must have endpoint and region configured. The explicit --region and --endpoint overrides in the commands below keep the target environment unambiguous.",
+			"Preflight: run volclog --profile <profile> --region <region> --endpoint <tls-endpoint> tool exec shard.describe --input '{\"TopicId\":\"<topic-id>\"}' --page-all; select a non-final readwrite shard whose next shard is contiguous and readwrite.",
+			"Plan without mutation: run volclog --profile <profile> --region <region> --endpoint <tls-endpoint> --dry-run tool exec shard.merge --input '{\"TopicId\":\"<topic-id>\",\"ShardId\":0}' after replacing the placeholders and ShardId.",
+			"Execute once after reviewing the plan: run volclog --profile <profile> --region <region> --endpoint <tls-endpoint> tool exec shard.merge --input '{\"TopicId\":\"<topic-id>\",\"ShardId\":0}'.",
+			"Dry-run validates request planning and required-field presence only; TopicId UUID syntax, ShardId range, and shard mergeability remain service-side validation.",
+			"On success, read status first and then the resulting shard list from data.Shards. If the result is ambiguous, preserve error.requestId and run shard.describe again; do not retry shard.merge automatically.",
+		}
 	case "log.search":
 		return []any{
 			"SearchLogs Query supports both plain search syntax and SQL/analysis syntax such as '* | select ...'.",

@@ -23,7 +23,9 @@ type loginOpts struct {
 	Region        string
 	Endpoint      string
 	LoginEndpoint string
+	DeviceCode    bool
 	Remote        bool
+	NoBrowser     bool
 }
 
 // loginResult is the redacted result of a successful console login. It is the
@@ -106,8 +108,9 @@ func newLogoutPartialFailureError(cause error) error {
 // secrets), but Unwrap preserves the cause so errors.Is/errors.As still match.
 // This mirrors console.safeError for the CLI adapter layer.
 type safeCLIError struct {
-	desc  string
-	cause error
+	desc      string
+	cause     error
+	loginFlow string
 }
 
 func (e *safeCLIError) Error() string {
@@ -133,6 +136,20 @@ func newSafeCLIError(desc string, cause error) error {
 	return &safeCLIError{desc: desc, cause: cause}
 }
 
+// newConsoleLoginError preserves the long-standing *safeCLIError contract and
+// adds only a private flow marker for actionable, secret-free classification.
+func newConsoleLoginError(deviceCode bool, cause error) error {
+	flow := "browser"
+	if deviceCode {
+		flow = "device-code"
+	}
+	return &safeCLIError{
+		desc:      "console login failed",
+		cause:     cause,
+		loginFlow: flow,
+	}
+}
+
 // resolveProfileSelector resolves the effective profile name from a global
 // selector (e.g. ctx.Profile from --profile before the group) and a
 // command-level selector (e.g. -p/--profile after the group).
@@ -156,8 +173,8 @@ func resolveProfileSelector(global, local string) (string, error) {
 }
 
 // parseLoginFlags parses login command flags. It accepts -p/--profile,
-// -r/--region, --endpoint, --login-endpoint, and --remote. Any --secrets-file
-// flag is rejected explicitly.
+// -r/--region, --endpoint, --login-endpoint, --device-code, --no-browser, and
+// the legacy --remote alias. Any --secrets-file flag is rejected explicitly.
 func parseLoginFlags(args []string) (loginOpts, error) {
 	var opts loginOpts
 	for i := 0; i < len(args); i++ {
@@ -179,7 +196,14 @@ func parseLoginFlags(args []string) (loginOpts, error) {
 			}
 			i++
 		case "--remote":
+			opts.DeviceCode = true
 			opts.Remote = true
+			opts.NoBrowser = true
+		case "--no-browser":
+			opts.DeviceCode = true
+			opts.NoBrowser = true
+		case "--device-code":
+			opts.DeviceCode = true
 		case "--endpoint":
 			if i+1 >= len(args) {
 				return opts, errors.New("missing value for --endpoint")
@@ -349,7 +373,7 @@ func runLogoutWithFactory(ctx *Context, args []string, factory loginAdapterFacto
 }
 
 // runLogin executes the login flow and returns the redacted result. All
-// prompts and progress go to stderr via the injected authorizer writers.
+// prompts and progress go to stderr via the injected Device Flow prompt.
 func (a *loginAdapter) runLogin(ctx context.Context, opts loginOpts) (*loginResult, error) {
 	if a == nil {
 		return nil, errors.New("nil login adapter")
@@ -359,7 +383,7 @@ func (a *loginAdapter) runLogin(ctx context.Context, opts loginOpts) (*loginResu
 	}
 	result, err := a.loginSvc.Login(ctx, opts)
 	if err != nil {
-		return nil, newSafeCLIError("console login failed", err)
+		return nil, newConsoleLoginError(opts.DeviceCode || opts.NoBrowser || opts.Remote, err)
 	}
 	if result == nil {
 		return nil, errors.New("login returned nil result")
@@ -599,8 +623,8 @@ func readConfirmLine(r io.Reader) (string, error) {
 }
 
 // newProductionLoginAdapter assembles the adapter with production dependencies:
-// the real console.LoginService, FileCache, config store, browser opener, and
-// os.Stdin for remote login.
+// the real device-code console.LoginService, FileCache, config store, browser
+// opener, and stderr prompt.
 func newProductionLoginAdapter(ctx *Context) (*loginAdapter, error) {
 	// Resolve the cache directory through the same shared resolver used by the
 	// dynamic provider factory, so login writes and TLS/Doctor/configure reads
@@ -619,12 +643,8 @@ func newProductionLoginAdapter(ctx *Context) (*loginAdapter, error) {
 		Cache:        cache,
 		ProfileStore: productionConfigStore{},
 		Confirm:      newConfirmPrompt(os.Stdin, ctx.Stderr),
-		LocalAuthorizer: func(client console.OAuthClient, state, codeChallenge string) console.Authorizer {
-			return console.NewDefaultLocalAuthorizer(client, &browser.DefaultOpener{}, ctx.Stderr, state, codeChallenge)
-		},
-		RemoteAuthorizer: func(client console.OAuthClient, state, codeChallenge string) console.Authorizer {
-			return console.NewRemoteAuthorizer(client, os.Stdin, ctx.Stderr, state, codeChallenge)
-		},
+		Prompt:       ctx.Stderr,
+		Browser:      &browser.DefaultOpener{},
 	})
 	return &loginAdapter{
 		loginSvc: &consoleLoginServiceAdapter{svc: svc},
@@ -664,11 +684,13 @@ type consoleLoginServiceAdapter struct {
 
 func (a *consoleLoginServiceAdapter) Login(ctx context.Context, opts loginOpts) (*loginResult, error) {
 	res, err := a.svc.Login(ctx, console.LoginOptions{
+		DeviceCode:  opts.DeviceCode,
 		Profile:     opts.Profile,
 		Region:      opts.Region,
 		Endpoint:    opts.Endpoint,
 		EndpointURL: opts.LoginEndpoint,
 		Remote:      opts.Remote,
+		NoBrowser:   opts.NoBrowser,
 	})
 	if err != nil {
 		return nil, err

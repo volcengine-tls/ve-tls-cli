@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth"
+	"github.com/volcengine-tls/ve-tls-cli/internal/auth/browser"
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth/console"
-	"github.com/volcengine-tls/ve-tls-cli/internal/auth/oauth"
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth/sso"
 	"github.com/volcengine-tls/ve-tls-cli/internal/config"
 )
@@ -279,15 +279,14 @@ func (f *indepLoginSSOOAuth) CreateToken(ctx context.Context, req *sso.CreateTok
 }
 
 // indepLoginConsoleOAuthClient implements console.OAuthClient for the real
-// LoginService.Login path. It validates BuildAuthorizeURL and ExchangeToken
-// parameters (including the PKCE relationship) and returns a valid
-// ConsoleTokenResponse (with STS embedded) on token exchange.
+// LoginService.Login path. It validates Device Authorization and single-attempt
+// device token parameters and returns a valid ConsoleTokenResponse.
 type indepLoginConsoleOAuthClient struct {
-	buildCalls     int32
-	exchangeCalls  int32
-	endpointURL    string
-	savedState     string
-	savedChallenge string
+	buildCalls       int32
+	exchangeCalls    int32
+	deviceAuthCalls  int32
+	deviceTokenCalls int32
+	endpointURL      string
 }
 
 func (f *indepLoginConsoleOAuthClient) BuildAuthorizeURL(params *console.AuthorizeParams) (string, error) {
@@ -314,42 +313,53 @@ func (f *indepLoginConsoleOAuthClient) BuildAuthorizeURL(params *console.Authori
 	if params.CodeChallengeMethod != console.CodeChallengeMethodS256 {
 		return "", errors.New("BuildAuthorizeURL: unexpected CodeChallengeMethod: " + params.CodeChallengeMethod)
 	}
-	f.savedState = params.State
-	f.savedChallenge = params.CodeChallenge
 	return f.endpointURL + console.AuthorizePath + "?state=" + params.State, nil
 }
+
 func (f *indepLoginConsoleOAuthClient) ExchangeToken(ctx context.Context, req *console.ConsoleTokenRequest) (*console.ConsoleTokenResponse, error) {
 	atomic.AddInt32(&f.exchangeCalls, 1)
 	if req == nil {
 		return nil, errors.New("ExchangeToken: nil request")
 	}
-	if req.GrantType != console.GrantTypeAuthorizationCode {
+	if req.GrantType != console.GrantTypeDeviceCode {
 		return nil, errors.New("ExchangeToken: unexpected GrantType: " + req.GrantType)
 	}
-	if req.Code != "console-auth-code" {
-		return nil, errors.New("ExchangeToken: unexpected Code: " + req.Code)
+	return f.deviceTokenResponse(req)
+}
+
+func (f *indepLoginConsoleOAuthClient) StartDeviceAuthorization(ctx context.Context, req *console.ConsoleDeviceAuthorizationRequest) (*console.ConsoleDeviceAuthorizationResponse, error) {
+	atomic.AddInt32(&f.deviceAuthCalls, 1)
+	if req == nil {
+		return nil, errors.New("StartDeviceAuthorization: nil request")
 	}
-	expectedRedirect := strings.TrimRight(f.endpointURL, "/") + console.AuthorizePath
-	if req.RedirectURI != expectedRedirect {
-		return nil, errors.New("ExchangeToken: unexpected RedirectURI: " + req.RedirectURI)
+	if req.ClientID != console.ClientIDCrossDevice || req.Scope != console.Scope || req.DeviceInfo != console.DeviceInfo {
+		return nil, errors.New("StartDeviceAuthorization: unexpected request")
 	}
-	if req.ClientID != console.ClientIDCrossDevice {
-		return nil, errors.New("ExchangeToken: unexpected ClientID: " + req.ClientID)
+	return &console.ConsoleDeviceAuthorizationResponse{
+		DeviceCode:              "console-device-code",
+		UserCode:                "CONSOLE-USER-CODE",
+		VerificationURI:         "https://example.com/device",
+		VerificationURIComplete: "https://example.com/device?user_code=CONSOLE-USER-CODE",
+		ExpiresIn:               300,
+		Interval:                1,
+	}, nil
+}
+
+func (f *indepLoginConsoleOAuthClient) ExchangeTokenOnce(ctx context.Context, req *console.ConsoleTokenRequest) (*console.ConsoleTokenResponse, error) {
+	atomic.AddInt32(&f.deviceTokenCalls, 1)
+	if req == nil {
+		return nil, errors.New("ExchangeTokenOnce: nil request")
 	}
-	if req.Scope != console.Scope {
-		return nil, errors.New("ExchangeToken: unexpected Scope: " + req.Scope)
+	if req.GrantType != console.GrantTypeDeviceCode || req.ClientID != console.ClientIDCrossDevice || req.Scope != console.Scope || req.DeviceCode != "console-device-code" {
+		return nil, errors.New("ExchangeTokenOnce: unexpected request")
 	}
-	if req.CodeVerifier == "" {
-		return nil, errors.New("ExchangeToken: empty CodeVerifier")
+	if req.Code != "" || req.CodeVerifier != "" || req.RedirectURI != "" || req.RefreshToken != "" {
+		return nil, errors.New("ExchangeTokenOnce: unexpected legacy fields")
 	}
-	if req.RefreshToken != "" {
-		return nil, errors.New("ExchangeToken: RefreshToken must be empty for authorization_code grant")
-	}
-	// Prove the PKCE relationship: the S256 challenge of the verifier must equal
-	// the challenge saved from BuildAuthorizeURL.
-	if got := oauth.CodeChallengeS256(req.CodeVerifier); got != f.savedChallenge {
-		return nil, errors.New("ExchangeToken: PKCE challenge mismatch")
-	}
+	return f.deviceTokenResponse(req)
+}
+
+func (f *indepLoginConsoleOAuthClient) deviceTokenResponse(_ *console.ConsoleTokenRequest) (*console.ConsoleTokenResponse, error) {
 	stsJSON, _ := json.Marshal(console.STSCredentials{
 		AccessKeyID:     "AKLTconsolelogin",
 		SecretAccessKey: "console-login-secret",
@@ -446,10 +456,10 @@ func (indepFailingAuthorizer) Authorize(ctx context.Context) (string, string, er
 }
 
 // runIndepConsoleLogin drives the real console.LoginService.Login entry point
-// (remote/cross-device authorization-code flow) with fakes and a real FileCache
-// rooted at volclogRoot. The authorization code is fed via a strings.Reader so
-// no real browser or network is used. It validates the login result, re-reads
-// the persisted cache, and returns the OAuth client so the test can check counts.
+// (cross-device device-code flow) with fakes and a real FileCache rooted at
+// volclogRoot. No real browser or network is used. It validates the login
+// result, re-reads the persisted cache, and returns the OAuth client so the test
+// can check protocol call counts.
 func runIndepConsoleLogin(t *testing.T, volclogRoot, endpointURL, profileName, region string) *indepLoginConsoleOAuthClient {
 	t.Helper()
 	cacheDir := filepath.Join(volclogRoot, "login", "cache")
@@ -468,11 +478,10 @@ func runIndepConsoleLogin(t *testing.T, volclogRoot, endpointURL, profileName, r
 		LocalAuthorizer: func(client console.OAuthClient, state, codeChallenge string) console.Authorizer {
 			return indepFailingAuthorizer{}
 		},
-		RemoteAuthorizer: func(client console.OAuthClient, state, codeChallenge string) console.Authorizer {
-			// The remote flow reads a base64-encoded "code=...&state=..." line.
-			payload := "code=console-auth-code&state=" + state
-			encoded := base64.StdEncoding.EncodeToString([]byte(payload))
-			return console.NewRemoteAuthorizer(client, strings.NewReader(encoded+"\n"), io.Discard, state, codeChallenge)
+		DeviceFlowFactory: func(client console.OAuthClient, prompt io.Writer, opener browser.Opener, noBrowser bool, clock func() time.Time, sleeper console.DeviceSleeper) console.DeviceFlow {
+			flow := console.NewDeviceAuthorizationFlow(client, io.Discard, nil, clock, func(context.Context, time.Duration) error { return nil })
+			flow.NoBrowser = true
+			return flow
 		},
 		Cache:   cache,
 		Clock:   time.Now,
@@ -491,12 +500,19 @@ func runIndepConsoleLogin(t *testing.T, volclogRoot, endpointURL, profileName, r
 	if factoryURL != endpointURL {
 		t.Fatalf("OAuthClientFactory received URL %q, want %q", factoryURL, endpointURL)
 	}
-	// BuildAuthorizeURL and ExchangeToken must each be called exactly once.
-	if got := atomic.LoadInt32(&oauthClient.buildCalls); got != 1 {
-		t.Fatalf("BuildAuthorizeURL calls = %d, want 1", got)
+	// The legacy authorization-code path must not be called. Device Authorization
+	// and its token poll are each invoked exactly once.
+	if got := atomic.LoadInt32(&oauthClient.buildCalls); got != 0 {
+		t.Fatalf("BuildAuthorizeURL calls = %d, want 0", got)
 	}
-	if got := atomic.LoadInt32(&oauthClient.exchangeCalls); got != 1 {
-		t.Fatalf("ExchangeToken calls = %d, want 1", got)
+	if got := atomic.LoadInt32(&oauthClient.exchangeCalls); got != 0 {
+		t.Fatalf("legacy ExchangeToken calls = %d, want 0", got)
+	}
+	if got := atomic.LoadInt32(&oauthClient.deviceAuthCalls); got != 1 {
+		t.Fatalf("StartDeviceAuthorization calls = %d, want 1", got)
+	}
+	if got := atomic.LoadInt32(&oauthClient.deviceTokenCalls); got != 1 {
+		t.Fatalf("ExchangeTokenOnce calls = %d, want 1", got)
 	}
 	// Validate the login result fields.
 	if result == nil {
@@ -1117,12 +1133,12 @@ func TestAuthIgnoresPoisonedVolcengineHomeAndFakeVEBinary(t *testing.T) {
 		t.Fatalf("WriteSTS: %v", err)
 	}
 
-	// Drive the real Console LoginService.Login entry point (remote/cross-device
-	// authorization-code flow) with fakes. It writes the login cache to the
+	// Drive the real Console LoginService.Login entry point (cross-device device
+	// code flow) with fakes. It writes the login cache to the
 	// VOLCLOG root (no real network/browser).
 	consoleOAuth := runIndepConsoleLogin(t, volclogRoot, "https://login.example.com", "console", "cn-beijing")
-	if got := atomic.LoadInt32(&consoleOAuth.exchangeCalls); got != 1 {
-		t.Fatalf("Console login entry point did not run: exchange calls = %d, want 1", got)
+	if got := atomic.LoadInt32(&consoleOAuth.deviceTokenCalls); got != 1 {
+		t.Fatalf("Console login entry point did not run: device token calls = %d, want 1", got)
 	}
 
 	// Self-check: the symlink canary must be captured as type=symlink with its

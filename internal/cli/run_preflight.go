@@ -4,6 +4,8 @@ import (
 	"errors"
 	"io"
 	"strings"
+
+	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
 func preflightRunInvocation(invocation *runInvocation, stdout, stderr io.Writer) (int, bool) {
@@ -22,6 +24,11 @@ func preflightRunInvocation(invocation *runInvocation, stdout, stderr io.Writer)
 	if isInteractiveAuthCommand(group, rest) {
 		if err := rejectFrozenOutputOptions(ctx); err != nil {
 			return writeRunError(ctx, stdout, stderr, group, rest, err, "usage", "login/logout/sso/configure-sso writes only JSON to stdout; remove output/file/filter/trace flags", outputMode, 1), true
+		}
+	}
+	if filter := strings.TrimSpace(ctx.Filter); filter != "" {
+		if err := output.Validate(filter); err != nil {
+			return writeRunError(ctx, stdout, stderr, group, rest, err, "decode", "invalid --jmes-filter", outputMode, 3), true
 		}
 	}
 

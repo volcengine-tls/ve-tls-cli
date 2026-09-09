@@ -172,7 +172,9 @@ func TestConsoleLoginServiceAdapterTranslatesOptionsAndResult(t *testing.T) {
 		Region:        "cn-beijing",
 		Endpoint:      "https://tls-cn-beijing.volces.com",
 		LoginEndpoint: "https://signin.byteplus.com",
+		DeviceCode:    true,
 		Remote:        true,
+		NoBrowser:     true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -184,7 +186,7 @@ func TestConsoleLoginServiceAdapterTranslatesOptionsAndResult(t *testing.T) {
 	}
 	if svc.gotOpts.Profile != "p1" || svc.gotOpts.Region != "cn-beijing" ||
 		svc.gotOpts.Endpoint != "https://tls-cn-beijing.volces.com" ||
-		!svc.gotOpts.Remote || svc.gotOpts.EndpointURL != "https://signin.byteplus.com" {
+		!svc.gotOpts.DeviceCode || !svc.gotOpts.Remote || !svc.gotOpts.NoBrowser || svc.gotOpts.EndpointURL != "https://signin.byteplus.com" {
 		t.Fatalf("options not translated: %+v", svc.gotOpts)
 	}
 }

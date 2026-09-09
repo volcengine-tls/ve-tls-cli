@@ -38,6 +38,25 @@ func prepareRunInvocation(args []string, stdout, stderr io.Writer) (*runInvocati
 			return nil, 1, true
 		}
 	}
+	if flags.ShowHelp {
+		_, _ = stdout.Write([]byte(usageText()))
+		return nil, 0, true
+	}
+	if flags.ShowVersion {
+		_, _ = stdout.Write([]byte("volclog " + version.Version + "\n"))
+		return nil, 0, true
+	}
+	if group == "version" {
+		if len(rest) != 0 {
+			writeCLIError(stderr, errors.New("version does not accept arguments"), "", 0, "usage", "use 'volclog version'")
+			return nil, 1, true
+		}
+		if err := writeVersionInfo(stdout); err != nil {
+			writeCLIError(stderr, err, "", 0, "internal", "failed to build version information")
+			return nil, 3, true
+		}
+		return nil, 0, true
+	}
 
 	wd, err := os.Getwd()
 	if err != nil {
@@ -61,19 +80,6 @@ func prepareRunInvocation(args []string, stdout, stderr io.Writer) (*runInvocati
 	}
 	if group == "log" && len(rest) > 0 && rest[0] == "export-analysis" && !outputExplicit {
 		flags.Output = "jsonl"
-	}
-
-	if flags.ShowHelp {
-		_, _ = stdout.Write([]byte(usageText()))
-		return nil, 0, true
-	}
-	if flags.ShowVersion {
-		_, _ = stdout.Write([]byte("volclog " + version.Version + "\n"))
-		return nil, 0, true
-	}
-	if group == "version" && len(rest) == 0 {
-		_, _ = stdout.Write([]byte("volclog " + version.Version + "\n"))
-		return nil, 0, true
 	}
 
 	if !isRecognizedGroup(group) {
@@ -144,6 +150,8 @@ func dispatchRunInvocation(invocation *runInvocation, stdout, stderr io.Writer, 
 		out, err = runRaw(ctx, rest)
 	case "skill":
 		out, err = runSkill(ctx, rest)
+	case "upgrade":
+		out, err = runUpgrade(ctx, rest)
 	case "capabilities":
 		err = removedLegacyCommandError("capabilities", legacyCapabilitiesHint(rest))
 	case "api":

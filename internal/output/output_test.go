@@ -2,9 +2,88 @@ package output
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 )
+
+func TestCompiledFilterPreservesNumbersAndSupportsNumericOperations(t *testing.T) {
+	in := map[string]any{
+		"items": []any{
+			map[string]any{"value": json.Number("9007199254740993"), "decimal": json.Number("0.12345678901234567890123456789")},
+			map[string]any{"value": json.Number("9007199254740991"), "decimal": json.Number("0.12345678901234567890123456787")},
+		},
+	}
+	filter, err := Compile("items[?value > `9007199254740992`].value")
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	result, err := filter.Apply(in)
+	if err != nil {
+		t.Fatalf("compiled filter Apply() error = %v", err)
+	}
+	values, ok := result.([]any)
+	if !ok || len(values) != 1 {
+		t.Fatalf("result = %#v (type %T), want one value", result, result)
+	}
+	if number, ok := values[0].(json.Number); !ok || number.String() != "9007199254740993" {
+		t.Fatalf("result value = %#v, want original json.Number", values[0])
+	}
+
+	sum, err := ApplyFilter(in, "sum(items[].value)")
+	if err != nil {
+		t.Fatalf("sum filter error = %v", err)
+	}
+	encoded, err := json.Marshal(sum)
+	if err != nil {
+		t.Fatalf("marshal sum = %v", err)
+	}
+	if string(encoded) != "18014398509481984" {
+		t.Fatalf("sum = %s, want exact decimal result", encoded)
+	}
+
+	decimalResult, err := ApplyFilter(in, "items[?decimal > `0.12345678901234567890123456788`].decimal")
+	if err != nil {
+		t.Fatalf("long-decimal comparison error = %v", err)
+	}
+	decimalValues, ok := decimalResult.([]any)
+	if !ok || len(decimalValues) != 1 {
+		t.Fatalf("long-decimal comparison result = %#v", decimalResult)
+	}
+	decimal, ok := decimalValues[0].(json.Number)
+	if !ok || decimal.String() != "0.12345678901234567890123456789" {
+		t.Fatalf("long-decimal value = %#v", decimalValues[0])
+	}
+}
+
+func TestValidateFilterCompilesBeforeApplication(t *testing.T) {
+	if err := Validate("items[].value"); err != nil {
+		t.Fatalf("Validate(valid) error = %v", err)
+	}
+	if err := Validate("items[]."); err == nil {
+		t.Fatal("Validate(invalid) error = nil")
+	}
+}
+
+func TestWritePreservesJSONNumberLexemes(t *testing.T) {
+	value := map[string]any{
+		"big":     json.Number("9007199254740993"),
+		"decimal": json.Number("0.12345678901234567890123456789"),
+	}
+	for _, format := range []Format{FormatJSON, FormatJSONL} {
+		t.Run(string(format), func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := Write(&buf, value, format); err != nil {
+				t.Fatalf("Write() error = %v", err)
+			}
+			for _, want := range []string{"9007199254740993", "0.12345678901234567890123456789"} {
+				if !strings.Contains(buf.String(), want) {
+					t.Fatalf("output = %q, missing %q", buf.String(), want)
+				}
+			}
+		})
+	}
+}
 
 func TestApplyFilterPath(t *testing.T) {
 	in := map[string]any{

@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jmespath/go-jmespath"
+	"github.com/woodsbury/jmespath"
 )
 
 type Format string
@@ -81,22 +81,63 @@ func Write(w io.Writer, v any, format Format) error {
 	}
 }
 
-func ApplyFilter(v any, expr string) (any, error) {
-	e := strings.TrimSpace(expr)
-	if e == "" {
+// CompiledFilter is a validated JMESPath expression that can be applied to
+// multiple values without reparsing it for every value.
+type CompiledFilter struct {
+	expression string
+	compiled   *jmespath.Expression
+}
+
+// Compile validates expr and returns a reusable filter. An empty expression is
+// a no-op, matching ApplyFilter's existing behavior.
+func Compile(expr string) (*CompiledFilter, error) {
+	expression := strings.TrimSpace(expr)
+	filter := &CompiledFilter{expression: expression}
+	if expression == "" {
+		return filter, nil
+	}
+	compiled, err := jmespath.Compile(expression)
+	if err != nil {
+		return nil, errors.New("invalid jmes-filter expression: " + err.Error())
+	}
+	filter.compiled = compiled
+	return filter, nil
+}
+
+// Validate checks that expr is a valid JMESPath expression.
+func Validate(expr string) error {
+	_, err := Compile(expr)
+	return err
+}
+
+// Apply evaluates a compiled filter while preserving the existing nil-result
+// diagnostics semantics.
+func (f *CompiledFilter) Apply(v any) (any, error) {
+	if f == nil || f.compiled == nil {
+		if f == nil {
+			return nil, errors.New("nil compiled jmes-filter")
+		}
 		return v, nil
 	}
-	out, err := jmespath.Search(e, v)
+	out, err := f.compiled.Search(v)
 	if err != nil {
 		return nil, errors.New("invalid jmes-filter expression: " + err.Error())
 	}
 	if out == nil {
-		if resolvedNilValue(v, e) {
+		if resolvedNilValue(v, f.expression) {
 			return nil, nil
 		}
-		return nil, errors.New(buildNilFilterMessage(v, e))
+		return nil, errors.New(buildNilFilterMessage(v, f.expression))
 	}
 	return out, nil
+}
+
+func ApplyFilter(v any, expr string) (any, error) {
+	filter, err := Compile(expr)
+	if err != nil {
+		return nil, err
+	}
+	return filter.Apply(v)
 }
 
 func resolvedNilValue(raw any, expr string) bool {

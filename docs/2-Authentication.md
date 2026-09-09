@@ -316,11 +316,17 @@ volclog tool exec project.describe-projects
 
 - Confirm the user account has the target TLS resource permissions;
 - Know the TLS region and endpoint;
-- In remote mode, copy the authorization URL shown by the terminal to a local browser, then paste the authorization code back into the terminal.
+- Console Login defaults to a local loopback callback with PKCE. For a remote terminal or when loopback is unavailable, explicitly use `--device-code`; `--no-browser` (or the compatibility alias `--remote`) automatically selects Device Code.
 
-`login --region --endpoint` writes both TLS runtime values into the target profile. Either value may be omitted to preserve an existing value and supplied later with `configure set`. `--login-endpoint` selects the Console OAuth service and is independent of the TLS business endpoint.
+`login --region --endpoint` writes both TLS runtime values into the target profile. Every copyable login example below supplies both values explicitly so the Console login endpoint cannot be mistaken for the TLS business endpoint. Supply both when initializing a new profile; omit a value only when an existing profile already stores it and should preserve it. `--login-endpoint` selects the Console OAuth service and is independent of the TLS business endpoint.
 
-### 5.3 Local browser login
+| Mode | Mode flags | Runtime requirements | Advantage | Recommended scenario |
+| --- | --- | --- | --- | --- |
+| Local browser callback + PKCE (default) | None | The CLI can listen on a random loopback port and the browser can call back to the same machine | No user-code entry and the fewest steps | A local desktop terminal |
+| Device Code + browser auto-open | `--device-code` | The CLI has outbound HTTPS access and the machine can open a browser | No callback listener while retaining browser auto-open | A firewall or sandbox blocks local callbacks |
+| Device Code + no browser | `--device-code --no-browser` | The CLI has outbound HTTPS access and the user can open a browser on any device | Terminal and browser are decoupled; no GUI or inbound callback dependency | SSH, Trae, or a human-assisted Agent session |
+
+### 5.3 Local browser callback login (default)
 
 ```bash
 volclog login \
@@ -329,28 +335,57 @@ volclog login \
   --endpoint https://tls-cn-beijing.volces.com
 ```
 
-Local mode uses a loopback callback to receive the browser authorization result. After a successful login, the profile switches to `mode=console-login`, stores the login session binding, and patches only explicitly supplied TLS runtime values. Existing identity and runtime fields that were not supplied remain unchanged. A new profile does not receive an implicit default region.
+This command binds a random loopback callback port and opens the browser with PKCE. After the user confirms authorization, the browser returns the result directly to the CLI; no device code or terminal code paste is required. After a successful login, the profile switches to `mode=console-login`, stores the login session binding, and patches only explicitly supplied TLS runtime values. Existing identity and runtime fields that were not supplied remain unchanged. A new profile does not receive an implicit default region.
+
+The default mode has the fewest interaction steps and is best when the browser and CLI run on the same machine. It is unsuitable when the browser is local but the CLI runs on a remote SSH host: the browser's `127.0.0.1` is the local machine, not the remote host. Some IDE or Agent sandboxes also block random-port listeners or browser launching. Explicitly use Device Code under those conditions; the CLI never switches flows automatically.
 
 The Console authorization service defaults to `https://signin.volcengine.com`. Use `--login-endpoint` to select another compatible Console OAuth root. The login endpoint must be a clean HTTPS root URL without user information, query, fragment, or a non-root path. It is normalized and stored with the login cache so automatic refresh continues to use the same authorization service. Existing caches without this field continue to use the default address. The `--endpoint` flag always means the TLS business endpoint.
 
-### 5.4 Remote or cross-device login
+### 5.4 Device Code and no-browser login
 
-Use this when the development machine cannot display a browser page directly:
+Explicitly select Device Code when loopback is unavailable or cross-device authorization is preferred:
 
 ```bash
 volclog login \
   --profile console-dev \
   --region cn-beijing \
-  --remote
+  --endpoint https://tls-cn-beijing.volces.com \
+  --device-code
+```
+
+The CLI prints the verification URL and user code, makes a best-effort attempt to open the browser, and polls for authorization. The user enters the short-lived `user code`; the OAuth `device_code` remains internal to the CLI and authorization service and is never printed. Add `--no-browser` when the development machine cannot display a browser page directly:
+
+```bash
+volclog login \
+  --profile console-dev \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com \
+  --device-code \
+  --no-browser
 ```
 
 Follow the terminal prompts:
 
-1. Open the authorization URL on a device that can display the page;
-2. Complete login and authorization;
-3. Paste the authorization code back into the terminal running `volclog`.
+1. Copy the printed verification URL, not the login command;
+2. Open that URL in a browser on the same machine or another device;
+3. Enter the printed user code on the official authorization page and confirm authorization; enter the Console password only on that browser page;
+4. Leave the original terminal running while `volclog` polls over outbound HTTPS; no code is pasted back into the terminal.
 
-### 5.5 Use and verify
+`--no-browser` and the compatibility alias `--remote` both imply `--device-code`. Neither the default PKCE flow nor Device Code automatically falls back to the other; retry explicitly with `--device-code` when a loopback failure requires it.
+
+Device Code fits SSH, Trae, and human-assisted Agent sessions because it starts no local callback listener, does not require the CLI to control a browser, and allows the browser and terminal to run on different machines. The CLI needs only outbound HTTPS access to Console. A user must still approve the request on the official page, so this is not an unattended-CI authentication method. Prefer OIDC, ECS Role, or another automatically rotated non-interactive identity for CI and workloads.
+
+### 5.5 Credential security and least-privilege boundary
+
+- The CLI never reads the Console password. Enter passwords and multi-factor authentication data only on the official HTTPS browser page.
+- Successful stdout contains only the profile, provider, region, endpoint, expiry, and masked AK. Raw AK, SK, SecurityToken, OAuth tokens, authorization codes, PKCE verifiers, and the internal device code must never appear in stdout, stderr, errors, or traces.
+- Device Code must write the verification URL and short-lived user code to stderr so the user can authorize. The user code is not persisted, but a terminal host may record stderr; never paste it into chats, tickets, CI logs, or other durable locations.
+- OAuth and STS dynamic material is stored only in the `0600` login cache and is updated with cache locking and atomic replacement. The profile stores only the login-session binding and TLS runtime configuration.
+- A login failure never falls back to AK/SK from the environment or profile and never switches authorization flows automatically, preventing silent use of another identity.
+- Console Login receives only the permissions already held by the signed-in account; it does not elevate privileges. Grant the minimum required permissions and use `doctor --online` or a read-only API to verify the effective access boundary.
+- Run `volclog logout --profile NAME` after use to clear the login cache. An Agent may guide the user to the official authorization page, but must never ask the user to paste a password, user code, AK/SK, or token into a conversation.
+
+### 5.6 Use and verify
 
 ```bash
 volclog configure use console-dev
@@ -358,11 +393,11 @@ volclog --profile console-dev doctor
 volclog --profile console-dev doctor --online
 ```
 
-A successful login does not mean the target TLS permissions are already granted. Only a successful `doctor --online` confirms that the current temporary identity can complete TLS read-only access.
+These commands read the TLS region and endpoint saved in the `console-dev` profile during login, so they do not need those values again. A successful login does not mean the target TLS permissions are already granted. Only a successful `doctor --online` confirms that the current temporary identity can complete TLS read-only access.
 
-### 5.6 Refresh and re-login
+### 5.7 Refresh and re-login
 
-Console Login hard expiry is derived from the cached token's `IssuedAt` plus `ExpiresIn` (the lifetime returned by the Console service). When the temporary credentials are within 60 seconds of that hard expiry, business commands attempt to use the cached refresh material to automatically obtain new credentials. These lifetimes are set by the Console service and are not user-configurable CLI parameters.
+Console Login hard expiry is derived from the cached token's `IssuedAt` plus `ExpiresIn` (the lifetime returned by the Console service). When the temporary credentials are within 60 seconds of that hard expiry, business commands attempt to use the cached refresh material to automatically obtain new credentials. These lifetimes are set by the Console service and are not user-configurable CLI parameters; the CLI does not derive or assume a separate fixed authorization TTL such as 48 hours.
 
 Re-login is required when:
 
@@ -374,12 +409,15 @@ Re-login is required when:
 Recovery command:
 
 ```bash
-volclog login --profile console-dev --region cn-beijing
+volclog login \
+  --profile console-dev \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
 ```
 
 Business commands never open a browser in the background.
 
-### 5.7 Log out
+### 5.8 Log out
 
 Console logout is session-scoped. `volclog logout --profile NAME` uses the named profile only to resolve its `login-session`; it then deletes that session's cache and clears the `login-session` binding on every console-login profile still bound to that same session, not only the named profile. If multiple profiles share a login session, logging out one of them clears the shared session for all of them.
 
@@ -413,7 +451,7 @@ There is currently no dedicated field-level CLI command that scrubs only dormant
 - An SSO Session name, chosen by the user;
 - The SSO Start URL, provided by the enterprise identity administrator;
 - The region where the SSO service runs;
-- An already existing target profile;
+- A target profile; when creating it for the first time, initialize both the TLS region and endpoint;
 - The target account ID and role name; these can also be selected interactively during first configuration;
 - The region and endpoint used for TLS.
 
@@ -461,7 +499,9 @@ volclog configure sso \
   --profile sso-dev \
   --sso-session corp \
   --account-id '<account-id>' \
-  --role-name '<role-name>'
+  --role-name '<role-name>' \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
 ```
 
 A terminal without a graphical interface can disable automatic browser opening:
@@ -470,6 +510,8 @@ A terminal without a graphical interface can disable automatic browser opening:
 volclog configure sso \
   --profile sso-dev \
   --sso-session corp \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com \
   --no-browser
 ```
 
@@ -481,7 +523,7 @@ The command prints an authorization URL and a device code prompt. Complete the a
 volclog configure use sso-dev
 ```
 
-If you omitted a TLS region or endpoint during login, add it without changing the SSO binding:
+Do not omit the TLS region or endpoint when initializing a new profile. For an incomplete legacy profile, add both without changing the SSO binding:
 
 ```bash
 volclog configure set --profile sso-dev \
@@ -552,7 +594,7 @@ Log out by Session:
 volclog sso logout --sso-session corp
 ```
 
-Logging out does not delete the SSO Session configuration, profiles, account ID, role name, or TLS runtime configuration. It also does not remove any dormant static `AccessKeyID`, `SecretAccessKey`, `SecurityToken`, or `CredRef` fields that may remain from a previous static configuration. The same dormant-field retention and cleanup guidance described in [Section 5.7](#57-log-out) applies here.
+Logging out does not delete the SSO Session configuration, profiles, account ID, role name, or TLS runtime configuration. It also does not remove any dormant static `AccessKeyID`, `SecretAccessKey`, `SecurityToken`, or `CredRef` fields that may remain from a previous static configuration. The same dormant-field retention and cleanup guidance described in [Section 5.8](#58-log-out) applies here.
 
 ## 7. RAM Role ARN
 
@@ -837,12 +879,12 @@ volclog configure use NAME
 
 ### 11.2 Missing region or endpoint
 
-Workload modes should write region and endpoint explicitly during `configure set`. If a dynamic-login profile does not store these values, you can supply them for a single command:
+Every profile should store an explicit TLS region and endpoint. Workload modes should write them during `configure set`; if a legacy dynamic-login profile is missing either field, persist both so later commands do not depend on temporary environment variables:
 
 ```bash
-VOLCENGINE_REGION=cn-beijing \
-VOLCENGINE_ENDPOINT=https://tls-cn-beijing.volces.com \
-volclog --profile NAME doctor --online
+volclog configure set --profile NAME \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
 ```
 
 ### 11.3 `ReauthRequired`
@@ -850,12 +892,18 @@ volclog --profile NAME doctor --online
 Console Login:
 
 ```bash
-volclog login --profile NAME
+volclog login \
+  --profile NAME \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
 ```
 
 SSO:
 
 ```bash
+volclog configure set --profile NAME \
+  --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com
 volclog sso login --profile NAME
 ```
 

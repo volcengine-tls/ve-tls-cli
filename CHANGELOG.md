@@ -1,5 +1,22 @@
 # Changelog
 
+## volclog-v1.1.0
+
+- Support both local browser callback + PKCE Console Login (default) and explicit Device Code authorization for remote or sandboxed environments, while retaining locked caches, atomic configuration writes, refresh behavior, and secret redaction.
+- Preserve `json.Number` across dynamic request, response, envelope, JSONL, and JMESPath processing, and reject invalid filters or projections before any TLS request is sent.
+- Add machine-readable build and catalog metadata through `volclog version`.
+- Add explicit-only CLI upgrades for npm and standalone installations; no background update checks are performed.
+- Add managed skill status, safe update, and uninstall commands with version and digest based modification detection.
+- Expose `ManualMergeShard` as the high-risk `shard.merge` operation with contract-first dry-run support and `shard.describe` reconciliation guidance.
+- Fix the `log.consume` request contract: `Cursor` is required, while the Kafka-only `Offset` field is no longer exposed or required.
+- Correct existing log, processor, index, project, topic, tag, and download-task request contracts, including nested object types, server-owned defaults, and conditional requirements. No new AI assistant or Copilot APIs are exposed.
+
+### Upgrade notes
+
+- Replace `log.create` with `log.create-download-task`, and `log.cancel` with `log.cancel-download-task` in scripts and Agent tool references. The old short names are removed, not retained as aliases; calls using them fail with a replacement-name hint. The underlying API actions, HTTP methods, and paths are unchanged.
+- Pass an explicit `MaxResults` between 10 and 100 to `tag.list`; do not rely on the previously documented default of 20.
+- Refresh cached tool contracts with `volclog tool describe <tool-id> --view full` before authoring requests. Schema defaults describe server behavior and are not injected by the CLI; dry-run does not replace service-side type, range, enum, or conditional validation.
+
 ## volclog-v1.0.6
 
 - Bundle the `tls-logcollector` Agent skill for contract-first LogCollector resource setup, parser and processor validation, Linux or Kubernetes deployment guidance, and end-to-end heartbeat, binding, and ingestion verification.

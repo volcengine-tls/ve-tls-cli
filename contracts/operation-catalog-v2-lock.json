@@ -2,8 +2,8 @@
   "schema_version": 1,
   "contract_version": "v1",
   "digest_algorithm": "sha256/go-json-v1",
-  "catalog_digest": "d09e263d9deef06964026e039ffc19bf09411e572031aef6715cc3d273a641c8",
-  "operation_count": 164,
+  "catalog_digest": "b124bdd54c4c253fc65646cb3adde1003ea5705ea681d5f9d2f699fd9c6f9254",
+  "operation_count": 165,
   "generation_mode": "bootstrap",
   "inputs": [
     {
@@ -49,7 +49,7 @@
     {
       "name": "generator_supplemental_operations",
       "path": "internal/openapigen/supplemental_operations.go",
-      "sha256": "330633e861f981611a707ffc05074656fbf295351835a4eb238a5f55377cd7fd"
+      "sha256": "d8beeba2400559d0acd9c3b5dcf5a2dd5f688d1d9c2a0bcf726e0e6e45fb5f75"
     },
     {
       "name": "override_internal_operations",
@@ -59,7 +59,7 @@
     {
       "name": "override_supplemental_operations",
       "path": "contracts/overrides/supplemental_operations.json",
-      "sha256": "03fb7ffe8d05079b378ed9e569c679efecc45bc298ce30b4ed95cc58bc9a7a7b"
+      "sha256": "1b6d0595bfcedc4cb65ca3d54666cc9d75344bdf63e15f4279d11f69e0291268"
     }
   ]
 }

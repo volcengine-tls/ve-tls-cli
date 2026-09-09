@@ -31,6 +31,7 @@ func TestSupplementalTLSOperationsMatchBackendContracts(t *testing.T) {
 		"log-back-flow.describe":         "GET /DescribeLogBackFlowTasks",
 		"log-back-flow.modify":           "PUT /ModifyLogBackFlowTask",
 		"processor.exec-processor":       "POST /ExecProcessor",
+		"shard.merge":                    "POST /ManualMergeShard",
 	}
 	for id, wantRoute := range wantRoutes {
 		operation, ok := byID[id]
@@ -61,16 +62,41 @@ func TestSupplementalTLSOperationsMatchBackendContracts(t *testing.T) {
 		}
 	}
 
+	mergeShard := byID["shard.merge"]
+	assertBodyRequired(t, mergeShard, "TopicId", "ShardId")
+	if got := bodyProperty(t, mergeShard, "ShardId")["minimum"]; got != float64(0) {
+		t.Fatalf("shard.merge ShardId minimum=%#v, want 0", got)
+	}
+	if mergeShard.Risk.Level != "high" || mergeShard.Risk.ErrorRecovery != "high-risk-retry" {
+		t.Fatalf("shard.merge risk=%+v", mergeShard.Risk)
+	}
+	for _, want := range []string{"next contiguous readwrite shard", "Do not retry automatically", "shard.describe"} {
+		if !strings.Contains(mergeShard.Docs.UsageConstraints, want) {
+			t.Fatalf("shard.merge usage constraints missing %q: %q", want, mergeShard.Docs.UsageConstraints)
+		}
+	}
+
 	assertBodyRequired(t, byID["collector.extract"], "BeginRegex", "LogRegex", "LogSample")
 	assertBodyRequired(t, byID["collector.generate-begin-regex"], "LogSample")
 	assertBodyRequired(t, byID["collector.generate-log-regex"], "End", "LogSample", "Start")
 	assertBodyRequired(t, byID["collector.parse-path"], "PathSample", "Regex")
 	assertBodyRequired(t, byID["collector.parse-time"], "TimeFormat", "TimeSample", "TimeZone")
 	assertBodyRequired(t, byID["collector.split"], "Delimiter", "LogSample")
+	consumeLogs := byID["log.consume"]
+	assertBodyRequired(t, consumeLogs, "Cursor")
+	assertSectionOmitsProperty(t, consumeLogs, "body", "Offset")
+	if consumeLogs.Wire.Codec != CodecConsumeLogs {
+		t.Fatalf("log.consume codec=%q, want %q", consumeLogs.Wire.Codec, CodecConsumeLogs)
+	}
+	for _, want := range []string{"cursor-based", "Offset", "ConsumeKafkaLogs"} {
+		if !strings.Contains(consumeLogs.Docs.UsageConstraints, want) {
+			t.Fatalf("log.consume usage constraints missing %q: %q", want, consumeLogs.Docs.UsageConstraints)
+		}
+	}
 	assertBodyRequired(t, byID["log.describe-latest-log"], "topicId")
 	assertBodyRequired(t, byID["log.preview"], "delimiter", "log", "topicId")
 	assertBodyRequired(t, byID["processor.exec-processor"],
-		"DSLContent", "ExecAction", "LogSample", "ProcessorDSLType", "ProcessorType")
+		"DSLContent", "ExecAction", "LogSample")
 
 	parseTime := byID["collector.parse-time"]
 	if !strings.Contains(parseTime.Docs.UsageConstraints, "nanoseconds") ||

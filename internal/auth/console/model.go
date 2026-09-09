@@ -1,6 +1,6 @@
 // Package console implements the Volcengine Console Login OAuth 2.0 protocol
-// client, token parsing helpers, and the local callback server used to receive
-// the authorization code from the browser.
+// client, token parsing helpers, the same-device browser callback flow, and the
+// cross-device Device Authorization flow.
 //
 // The package is intentionally self-contained: it only depends on the Go
 // standard library plus the shared internal/auth/httpx retry client and the
@@ -27,6 +27,10 @@ const (
 
 	// TokenPath is the path appended to the endpoint for the token URL.
 	TokenPath = "/authorize/oauth/token"
+
+	// DeviceAuthorizationPath is the path used to start Console Login's
+	// OAuth 2.0 Device Authorization Grant.
+	DeviceAuthorizationPath = "/authorize/oauth/device_authorization"
 
 	// ClientIDSameDevice is the public client ID for local/same-device login mode.
 	ClientIDSameDevice = "trn:signin:::devtools/same-device"
@@ -56,11 +60,15 @@ const (
 	// RefreshBuffer is the safety window subtracted from the token expiry when
 	// deciding whether a cached token must be refreshed before use.
 	RefreshBuffer = 60 * time.Second
+
+	// DeviceInfo identifies the CLI client in device authorization requests.
+	DeviceInfo = "volclog"
 )
 
 // Grant types supported by the Console OAuth token endpoint.
 const (
 	GrantTypeAuthorizationCode = "authorization_code"
+	GrantTypeDeviceCode        = "urn:ietf:params:oauth:grant-type:device_code"
 	GrantTypeRefreshToken      = "refresh_token"
 )
 
@@ -125,6 +133,25 @@ type ConsoleTokenResponse struct {
 	IDToken string `json:"id_token"`
 }
 
+// ConsoleDeviceAuthorizationRequest represents the form sent to the Console
+// Device Authorization endpoint. The public client does not use a secret.
+type ConsoleDeviceAuthorizationRequest struct {
+	ClientID   string
+	Scope      string
+	DeviceInfo string
+}
+
+// ConsoleDeviceAuthorizationResponse represents the device authorization
+// response. DeviceCode and UserCode are ephemeral and must never be persisted.
+type ConsoleDeviceAuthorizationResponse struct {
+	DeviceCode              string `json:"device_code"`
+	UserCode                string `json:"user_code"`
+	VerificationURI         string `json:"verification_uri"`
+	VerificationURIComplete string `json:"verification_uri_complete,omitempty"`
+	ExpiresIn               int    `json:"expires_in"`
+	Interval                int    `json:"interval,omitempty"`
+}
+
 // AuthorizeParams holds the parameters needed to build an authorization URL.
 type AuthorizeParams struct {
 	ClientID            string
@@ -139,6 +166,7 @@ type AuthorizeParams struct {
 type ConsoleTokenRequest struct {
 	GrantType    string
 	Code         string
+	DeviceCode   string
 	RedirectURI  string
 	ClientID     string
 	Scope        string
@@ -182,6 +210,10 @@ var allowedOAuthErrorCodes = map[string]struct{}{
 	"invalid_scope":             {},
 	"server_error":              {},
 	"temporarily_unavailable":   {},
+	"authorization_pending":     {},
+	"slow_down":                 {},
+	"expired_token":             {},
+	"invalid_device_code":       {},
 }
 
 // safeRequestID reports whether id is safe to render in an error string: it
