@@ -133,6 +133,49 @@ func TestMergeSupplementalOperationsIntoCheckedInCatalogUpdatesCatalogAndLock(t 
 	}
 }
 
+func TestSupplementalMergeOnlyMigratesLegacyDownloadTaskIDsBeforeCanonicalOverride(t *testing.T) {
+	root, catalogPath, lockPath, supplementalPath, _ := prepareSupplementalMergeFixture(t, true)
+	legacy := supplementalTestOperation("log.create", "public", "CreateDownloadTask", "/CreateDownloadTask")
+	legacy.Verb = "create"
+	legacyCatalog := supplementalTestCatalog(t, legacy)
+	inputPaths := map[string]string{
+		"generator_main":                    filepath.Join(root, "internal", "openapigen", "main.go"),
+		"generator_supplemental_operations": filepath.Join(root, "internal", "openapigen", "supplemental_operations.go"),
+		"override_supplemental_operations":  supplementalPath,
+	}
+	legacyLock, err := buildOperationCatalogLock(root, "bootstrap", legacyCatalog, inputPaths)
+	if err != nil {
+		t.Fatalf("build legacy operation catalog lock: %v", err)
+	}
+	if err := writeOperationCatalogPair(catalogPath, legacyCatalog, lockPath, legacyLock); err != nil {
+		t.Fatalf("write legacy operation catalog pair: %v", err)
+	}
+
+	override := supplementalTestOperation("log.create-download-task", "public", "CreateDownloadTask", "/CreateDownloadTask")
+	override.Verb = "create"
+	override.Docs.Summary = "canonical override"
+	writeSupplementalOverrides(t, supplementalPath, []contract.Operation{override})
+
+	if err := mergeSupplementalOperationsIntoCheckedInCatalog(catalogPath, lockPath, supplementalPath, root); err != nil {
+		t.Fatalf("merge supplemental operations: %v", err)
+	}
+	raw, err := os.ReadFile(catalogPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	merged, err := contract.Load(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := len(merged.Operations), 1; got != want {
+		t.Fatalf("operations=%d, want %d", got, want)
+	}
+	got := operationByID(t, merged.Operations, "log.create-download-task")
+	if got.Docs.Summary != override.Docs.Summary {
+		t.Fatalf("canonical override summary=%q, want %q", got.Docs.Summary, override.Docs.Summary)
+	}
+}
+
 func TestMergeSupplementalOperationsRejectsChangedNonMutableInput(t *testing.T) {
 	root, catalogPath, lockPath, supplementalPath, _ := prepareSupplementalMergeFixture(t, true)
 	if err := os.WriteFile(filepath.Join(root, "unrelated.txt"), []byte("changed\n"), 0o600); err != nil {

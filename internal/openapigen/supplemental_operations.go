@@ -20,6 +20,56 @@ type supplementalOperationOverrides struct {
 	Operations []contract.Operation `json:"operations"`
 }
 
+// stableOperationIDMigrations contains the small set of public IDs whose
+// canonical names must remain descriptive even when their verb is unique in a
+// group. The metadata checks are intentionally exact so this cannot become a
+// generalized action-name rewrite.
+var stableOperationIDMigrations = [...]struct {
+	oldID  string
+	newID  string
+	group  string
+	action string
+	verb   string
+	method string
+	path   string
+}{
+	{
+		oldID:  "log.create",
+		newID:  "log.create-download-task",
+		group:  "log",
+		action: "CreateDownloadTask",
+		verb:   "create",
+		method: "POST",
+		path:   "/CreateDownloadTask",
+	},
+	{
+		oldID:  "log.cancel",
+		newID:  "log.cancel-download-task",
+		group:  "log",
+		action: "CancelDownloadTask",
+		verb:   "cancel",
+		method: "POST",
+		path:   "/CancelDownloadTask",
+	},
+}
+
+func canonicalStableOperationID(id, group, action, verb, method, path string) string {
+	for _, migration := range stableOperationIDMigrations {
+		if id != migration.oldID && id != migration.newID {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(group), migration.group) ||
+			strings.TrimSpace(action) != migration.action ||
+			!strings.EqualFold(strings.TrimSpace(verb), migration.verb) ||
+			!strings.EqualFold(strings.TrimSpace(method), migration.method) ||
+			strings.TrimSpace(path) != migration.path {
+			return id
+		}
+		return migration.newID
+	}
+	return id
+}
+
 func loadSupplementalOperationOverrides(path string) ([]contract.Operation, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -56,6 +106,10 @@ func loadSupplementalOperationOverrides(path string) ([]contract.Operation, erro
 func mergeSupplementalOperations(catalog contract.Catalog, supplemental []contract.Operation) (contract.Catalog, error) {
 	if err := contract.Validate(catalog); err != nil {
 		return contract.Catalog{}, fmt.Errorf("validate operation catalog before supplemental merge: %w", err)
+	}
+	catalog, err := migrateCheckedInCatalogOperationIDs(catalog)
+	if err != nil {
+		return contract.Catalog{}, err
 	}
 	contextSchema, err := contract.ExpandContextSchema(catalog.ContextSchema, catalog.ExecutionSchema)
 	if err != nil {
@@ -135,6 +189,45 @@ func mergeSupplementalOperationsIntoCheckedInCatalog(
 		return err
 	}
 	return writeOperationCatalogPair(catalogPath, catalog, lockPath, lock)
+}
+
+func migrateCheckedInCatalogOperationIDs(catalog contract.Catalog) (contract.Catalog, error) {
+	operations := make([]contract.Operation, len(catalog.Operations))
+	copy(operations, catalog.Operations)
+	changed := false
+	for i := range operations {
+		operation := &operations[i]
+		canonicalID := canonicalStableOperationID(
+			string(operation.ID),
+			operation.Group,
+			operation.Action,
+			operation.Verb,
+			operation.Wire.Method,
+			operation.Wire.Path,
+		)
+		if canonicalID == string(operation.ID) {
+			continue
+		}
+		operation.ID = contract.OperationID(canonicalID)
+		changed = true
+	}
+	if !changed {
+		return catalog, nil
+	}
+	contextSchema, err := contract.ExpandContextSchema(catalog.ContextSchema, catalog.ExecutionSchema)
+	if err != nil {
+		return contract.Catalog{}, fmt.Errorf("expand operation catalog context schema for stable ID migration: %w", err)
+	}
+	migrated, err := contract.NewCatalog(
+		catalog.ContractVersion,
+		contextSchema,
+		catalog.ExecutionSchema,
+		operations,
+	)
+	if err != nil {
+		return contract.Catalog{}, fmt.Errorf("migrate checked-in operation catalog IDs: %w", err)
+	}
+	return migrated, nil
 }
 
 func validateSupplementalMergeOnlyUnchangedInputs(

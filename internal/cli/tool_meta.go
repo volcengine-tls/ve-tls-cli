@@ -67,6 +67,12 @@ func resolveToolByIdentity(group, action string) (contract.Operation, error) {
 	if g == "" || a == "" {
 		return contract.Operation{}, fmt.Errorf("unknown tool: %s.%s", strings.TrimSpace(group), strings.TrimSpace(action))
 	}
+	if replacement, ok := rejectedLegacyToolIdentity(g, a); ok {
+		return contract.Operation{}, fmt.Errorf(
+			"legacy tool identity %s.%s is no longer accepted; use %s",
+			strings.TrimSpace(group), strings.TrimSpace(action), replacement,
+		)
+	}
 	exact := make([]contract.Operation, 0, 1)
 	verbAliases := make([]contract.Operation, 0, 2)
 	for _, operation := range catalog.Operations {
@@ -94,6 +100,20 @@ func resolveToolByIdentity(group, action string) (contract.Operation, error) {
 		return contract.Operation{}, ambiguousToolIdentityError(group, action, verbAliases)
 	}
 	return contract.Operation{}, fmt.Errorf("unknown tool: %s.%s", strings.TrimSpace(group), strings.TrimSpace(action))
+}
+
+func rejectedLegacyToolIdentity(group, action string) (string, bool) {
+	if normalizeToken(group) != "log" {
+		return "", false
+	}
+	switch normalizeToken(action) {
+	case "create":
+		return "log.create-download-task", true
+	case "cancel":
+		return "log.cancel-download-task", true
+	default:
+		return "", false
+	}
 }
 
 func toolIdentityMatchesAlias(operation contract.Operation, actionToken string) bool {

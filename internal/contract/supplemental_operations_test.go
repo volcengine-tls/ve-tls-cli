@@ -82,10 +82,21 @@ func TestSupplementalTLSOperationsMatchBackendContracts(t *testing.T) {
 	assertBodyRequired(t, byID["collector.parse-path"], "PathSample", "Regex")
 	assertBodyRequired(t, byID["collector.parse-time"], "TimeFormat", "TimeSample", "TimeZone")
 	assertBodyRequired(t, byID["collector.split"], "Delimiter", "LogSample")
+	consumeLogs := byID["log.consume"]
+	assertBodyRequired(t, consumeLogs, "Cursor")
+	assertSectionOmitsProperty(t, consumeLogs, "body", "Offset")
+	if consumeLogs.Wire.Codec != CodecConsumeLogs {
+		t.Fatalf("log.consume codec=%q, want %q", consumeLogs.Wire.Codec, CodecConsumeLogs)
+	}
+	for _, want := range []string{"cursor-based", "Offset", "ConsumeKafkaLogs"} {
+		if !strings.Contains(consumeLogs.Docs.UsageConstraints, want) {
+			t.Fatalf("log.consume usage constraints missing %q: %q", want, consumeLogs.Docs.UsageConstraints)
+		}
+	}
 	assertBodyRequired(t, byID["log.describe-latest-log"], "topicId")
 	assertBodyRequired(t, byID["log.preview"], "delimiter", "log", "topicId")
 	assertBodyRequired(t, byID["processor.exec-processor"],
-		"DSLContent", "ExecAction", "LogSample", "ProcessorDSLType", "ProcessorType")
+		"DSLContent", "ExecAction", "LogSample")
 
 	parseTime := byID["collector.parse-time"]
 	if !strings.Contains(parseTime.Docs.UsageConstraints, "nanoseconds") ||

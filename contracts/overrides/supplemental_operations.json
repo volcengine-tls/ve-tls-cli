@@ -379,6 +379,103 @@
       }
     },
     {
+      "id": "log.consume",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "ConsumeLogs",
+      "resource": "logs",
+      "verb": "consume",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/ConsumeLogs",
+        "request_format": "json",
+        "codec": "consumelogs"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "Compression": {
+              "description": "返回数据的压缩格式。目前支持lz4和zlib压缩。",
+              "type": "string"
+            },
+            "Cursor": {
+              "description": "游标，表示从什么位置开始读取数据，相当于起点。",
+              "type": "string"
+            },
+            "EndCursor": {
+              "description": "结束游标，表示读取数据到什么地方结束，相当于终点。EndCursor为空则不设end。",
+              "type": "string"
+            },
+            "LogCount": {
+              "type": "integer"
+            },
+            "LogGroupCount": {
+              "description": "想要返回的最大logGroup数量。最多1000个。",
+              "type": "integer"
+            },
+            "ProcessorId": {
+              "type": "string"
+            },
+            "Size": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "Cursor"
+          ],
+          "type": "object"
+        },
+        "header": {
+          "properties": {
+            "ConsumerGroupName": {
+              "description": "消费组名。与 ConsumerName 配对使用；仅消费组场景携带。",
+              "type": "string"
+            },
+            "ConsumerName": {
+              "description": "消费者名。与 ConsumerGroupName 配对使用；仅消费组场景携带。",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "query": {
+          "properties": {
+            "ShardId": {
+              "description": "日志分区ID。必填，非负整数（从0开始）。",
+              "type": "integer"
+            },
+            "TopicId": {
+              "description": "日志主题ID。必填，UUID。",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ShardId",
+            "TopicId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ConsumeLogs",
+        "source": "log-service log API",
+        "usage_constraints": "ConsumeLogs is cursor-based: body.Cursor is required. Offset is unsupported here and belongs to ConsumeKafkaLogs; do not send it to this operation."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "retry"
+      }
+    },
+    {
       "id": "log.describe-latest-log",
       "group": "log",
       "group_title": "日志管理",
@@ -528,22 +625,23 @@
                 "dsl",
                 "spl"
               ],
-              "description": "Processor language. This field is required by backend Validate even though the generated Swagger omits it from required."
+              "default": "dsl",
+              "description": "Processor language. Defaults to dsl when omitted."
             },
             "ProcessorType": {
               "type": "string",
               "enum": [
                 "ingester",
                 "consumer"
-              ]
+              ],
+              "default": "ingester",
+              "description": "Processor type. Defaults to ingester when omitted."
             }
           },
           "required": [
             "DSLContent",
             "ExecAction",
-            "LogSample",
-            "ProcessorDSLType",
-            "ProcessorType"
+            "LogSample"
           ]
         }
       },
@@ -557,7 +655,7 @@
       "docs": {
         "summary": "ExecProcessor",
         "source": "log-service processor API",
-        "usage_constraints": "This operation compiles and runs a processor against a sample without persisting processor state. Inspect ExecStatus even when HTTP status is 200; failed executions return ExecStatus=failed with Error."
+        "usage_constraints": "This operation compiles and runs a processor against a sample without persisting processor state. ProcessorDSLType defaults to dsl and ProcessorType defaults to ingester when omitted. Inspect ExecStatus even when HTTP status is 200; failed executions return ExecStatus=failed with Error."
       },
       "risk": {
         "level": "low",
@@ -3926,6 +4024,1453 @@
         "summary": "ManualMergeShard",
         "source": "log-service shard API",
         "usage_constraints": "Before execution, call shard.describe with all pages and verify that the selected shard is readwrite, is not the final key-range shard, and has a next contiguous readwrite shard. ManualMergeShard merges exactly that pair, and merge/split operations for the same topic are serialized. This operation mutates shard topology. Tool exec currently validates required-field presence locally; TopicId UUID syntax, ShardId range, and shard mergeability remain service-side validation. On success, read the resulting list from data.Shards. Do not retry automatically after an ambiguous failure; call shard.describe to reconcile the shard list and statuses."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "index.create",
+      "group": "index",
+      "group_title": "索引管理",
+      "action": "CreateIndex",
+      "resource": "index",
+      "verb": "create",
+      "family": "index",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/CreateIndex",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "EnableAutoIndex": {
+              "description": "自动索引开关",
+              "type": "boolean"
+            },
+            "EnablePhraseIndex": {
+              "description": "索引版短语查询开关",
+              "type": "boolean"
+            },
+            "FullText": {
+              "description": "全文索引配置。",
+              "properties": {
+                "CaseSensitive": {
+                  "description": "是否大小写敏感：true为大小写敏感；false为大小写不敏感。",
+                  "type": "boolean",
+                  "default": false
+                },
+                "Delimiter": {
+                  "description": "全文索引的分词符。\n- 字符串中每个字符代表一个分词符。\n- 长度最多256字节。\n- 仅支持以下字符中的一种或者多种 !@#%^&*()-_=\\\"', <>/?|;: \\n\\t\\r[]{}。\n- IncludeChinese未指定或为false时，Delimiter必填且不能为空；IncludeChinese为true时，Delimiter可省略或为空。",
+                  "type": "string"
+                },
+                "IncludeChinese": {
+                  "description": "默认为false。",
+                  "type": "boolean"
+                }
+              },
+              "type": "object",
+              "allOf": [
+                {
+                  "if": {
+                    "required": [
+                      "IncludeChinese"
+                    ],
+                    "properties": {
+                      "IncludeChinese": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "Delimiter": {
+                        "maxLength": 256
+                      }
+                    }
+                  },
+                  "else": {
+                    "required": [
+                      "Delimiter"
+                    ],
+                    "properties": {
+                      "Delimiter": {
+                        "minLength": 1,
+                        "maxLength": 256
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "KeyValue": {
+              "description": "键值索引配置。",
+              "items": {
+                "properties": {
+                  "Key": {
+                    "description": "需要配置键值索引的字段名称。\n- 仅支持字母、数字和_-./，并且不支持以_开头。\n- 同一个索引中key名称唯一。\n- 长度为1-128。",
+                    "type": "string"
+                  },
+                  "Value": {
+                    "description": "需要配置键值索引的字段描述信息。",
+                    "properties": {
+                      "AutoIndexFlag": {
+                        "description": "该索引是否是自动索引添加",
+                        "type": "boolean"
+                      },
+                      "CaseSensitive": {
+                        "description": "是否区分大小写，默认为false。",
+                        "type": "boolean"
+                      },
+                      "Delimiter": {
+                        "description": "字段的分词符，默认为空（\"\"）。\n- 字符串中每个字符代表一个分词符。\n- 长度为0-256字节，长度为0时不分词。\n- 仅支持以下字符中的一种或者多种 !@#%^&*()-_=\\\"', <>/?|;: \\n\\t\\r[]{}。\n- 包含中文和分词符不能同时配置。",
+                        "type": "string"
+                      },
+                      "IncludeChinese": {
+                        "description": "是否包含中文，默认为空（\"\"），包含中文和分词符不能同时配置。",
+                        "type": "boolean"
+                      },
+                      "IndexAll": {
+                        "description": "是否为JSON字段开启自动索引功能",
+                        "type": "boolean"
+                      },
+                      "IndexSQLAll": {
+                        "description": "是否为JSON字段开启自动索引+统计功能",
+                        "type": "boolean"
+                      },
+                      "JsonKeys": {
+                        "description": "嵌套JSON键值索引",
+                        "items": {
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "SqlFlag": {
+                        "description": "字段是否开启分析功能，默认为空（\"\"），开启统计分析功能后，不能配置分词符和包含中文。",
+                        "type": "boolean"
+                      },
+                      "ValueType": {
+                        "description": "字段类型。\n- 目前支持 long - 整型，double - 浮点型，text - 字符串，json - JSON对象。\n- long和double类型不支持配置分词符、包含中文、大小写敏感。\n- json类型的嵌套JsonKeys字段不允许再次配置json类型键值索引",
+                        "enum": [
+                          "long",
+                          "double",
+                          "text",
+                          "json"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ValueType"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "Key",
+                  "Value"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "LogReduce": {
+              "description": "日志聚类开关。开启后仅支持部分新架构日志主题；且黑名单与白名单不允许同时配置。",
+              "type": "boolean"
+            },
+            "LogReduceBlackList": {
+              "description": "日志聚类黑名单。仅在 LogReduce=true 时生效；与 LogReduceWhiteList 互斥。",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "LogReduceWhiteList": {
+              "description": "日志聚类白名单。仅在 LogReduce=true 时生效；与 LogReduceBlackList 互斥。",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "MaxTextLen": {
+              "default": 2048,
+              "description": "索引字段值的最大长度。取值范围 64~1048576；传 0 表示使用默认值 2048。",
+              "maximum": 1048576,
+              "minimum": 64,
+              "type": "integer"
+            },
+            "TopicId": {
+              "description": "日志主题ID。",
+              "type": "string"
+            },
+            "UserInnerKeyValue": {
+              "description": "内部字段索引配置",
+              "items": {
+                "properties": {
+                  "Key": {
+                    "description": "需要配置键值索引的字段名称。\n- 仅支持字母、数字和_-./，并且不支持以_开头。\n- 同一个索引中key名称唯一。\n- 长度为1-128。",
+                    "type": "string"
+                  },
+                  "Value": {
+                    "description": "需要配置键值索引的字段描述信息。",
+                    "properties": {
+                      "AutoIndexFlag": {
+                        "description": "该索引是否是自动索引添加",
+                        "type": "boolean"
+                      },
+                      "CaseSensitive": {
+                        "description": "是否区分大小写，默认为false。",
+                        "type": "boolean"
+                      },
+                      "Delimiter": {
+                        "description": "字段的分词符，默认为空（\"\"）。\n- 字符串中每个字符代表一个分词符。\n- 长度为0-256字节，长度为0时不分词。\n- 仅支持以下字符中的一种或者多种 !@#%^&*()-_=\\\"', <>/?|;: \\n\\t\\r[]{}。\n- 包含中文和分词符不能同时配置。",
+                        "type": "string"
+                      },
+                      "IncludeChinese": {
+                        "description": "是否包含中文，默认为空（\"\"），包含中文和分词符不能同时配置。",
+                        "type": "boolean"
+                      },
+                      "IndexAll": {
+                        "description": "是否为JSON字段开启自动索引功能",
+                        "type": "boolean"
+                      },
+                      "IndexSQLAll": {
+                        "description": "是否为JSON字段开启自动索引+统计功能",
+                        "type": "boolean"
+                      },
+                      "JsonKeys": {
+                        "description": "嵌套JSON键值索引",
+                        "items": {
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "SqlFlag": {
+                        "description": "字段是否开启分析功能，默认为空（\"\"），开启统计分析功能后，不能配置分词符和包含中文。",
+                        "type": "boolean"
+                      },
+                      "ValueType": {
+                        "description": "字段类型。\n- 目前支持 long - 整型，double - 浮点型，text - 字符串，json - JSON对象。\n- long和double类型不支持配置分词符、包含中文、大小写敏感。\n- json类型的嵌套JsonKeys字段不允许再次配置json类型键值索引",
+                        "enum": [
+                          "long",
+                          "double",
+                          "text",
+                          "json"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ValueType"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "Key",
+                  "Value"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "TopicId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "CreateIndex",
+        "source": "索引管理",
+        "usage_constraints": "FullText.CaseSensitive defaults to false. If IncludeChinese is omitted or false, Delimiter is required and must be non-empty; if IncludeChinese is true, Delimiter may be omitted or empty. Delimiter remains limited to 256 bytes. Tool exec checks required-field presence locally; conditional and range validation is finalized by the service."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "index.modify",
+      "group": "index",
+      "group_title": "索引管理",
+      "action": "ModifyIndex",
+      "resource": "index",
+      "verb": "modify",
+      "family": "index",
+      "visibility": "public",
+      "wire": {
+        "method": "PUT",
+        "path": "/ModifyIndex",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "EnableAutoIndex": {
+              "description": "自动索引开关",
+              "type": "boolean"
+            },
+            "EnablePhraseIndex": {
+              "description": "索引版短语查询开关",
+              "type": "boolean"
+            },
+            "FullText": {
+              "description": "全文索引配置。注意：此字段为null或者不配置，表示不开启全文索引。",
+              "properties": {
+                "CaseSensitive": {
+                  "description": "是否大小写敏感：true为大小写敏感；false为大小写不敏感。",
+                  "type": "boolean",
+                  "default": false
+                },
+                "Delimiter": {
+                  "description": "全文索引的分词符。\n- 字符串中每个字符代表一个分词符。\n- 长度最多256字节。\n- 仅支持以下字符中的一种或者多种 !@#%^&*()-_=\\\"', <>/?|;: \\n\\t\\r[]{}。\n- IncludeChinese未指定或为false时，Delimiter必填且不能为空；IncludeChinese为true时，Delimiter可省略或为空。",
+                  "type": "string"
+                },
+                "IncludeChinese": {
+                  "description": "默认为false。",
+                  "type": "boolean"
+                }
+              },
+              "type": "object",
+              "allOf": [
+                {
+                  "if": {
+                    "required": [
+                      "IncludeChinese"
+                    ],
+                    "properties": {
+                      "IncludeChinese": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "Delimiter": {
+                        "maxLength": 256
+                      }
+                    }
+                  },
+                  "else": {
+                    "required": [
+                      "Delimiter"
+                    ],
+                    "properties": {
+                      "Delimiter": {
+                        "minLength": 1,
+                        "maxLength": 256
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "KeyValue": {
+              "description": "键值索引配置。注意：此字段为null或者不配置，表示不开启键值索引。",
+              "items": {
+                "properties": {
+                  "Key": {
+                    "description": "需要配置键值索引的字段名称。\n- 仅支持字母、数字和_-./，并且不支持以_开头。\n- 同一个索引中key名称唯一。\n- 长度为1-128。",
+                    "type": "string"
+                  },
+                  "Value": {
+                    "description": "需要配置键值索引的字段描述信息。",
+                    "properties": {
+                      "AutoIndexFlag": {
+                        "description": "该索引是否是自动索引添加",
+                        "type": "boolean"
+                      },
+                      "CaseSensitive": {
+                        "description": "是否区分大小写，默认为false。",
+                        "type": "boolean"
+                      },
+                      "Delimiter": {
+                        "description": "字段的分词符，默认为空（\"\"）。\n- 字符串中每个字符代表一个分词符。\n- 长度为0-256字节，长度为0时不分词。\n- 仅支持以下字符中的一种或者多种 !@#%^&*()-_=\\\"', <>/?|;: \\n\\t\\r[]{}。\n- 包含中文和分词符不能同时配置。",
+                        "type": "string"
+                      },
+                      "IncludeChinese": {
+                        "description": "是否包含中文，默认为空（\"\"），包含中文和分词符不能同时配置。",
+                        "type": "boolean"
+                      },
+                      "IndexAll": {
+                        "description": "是否为JSON字段开启自动索引功能",
+                        "type": "boolean"
+                      },
+                      "IndexSQLAll": {
+                        "description": "是否为JSON字段开启自动索引+统计功能",
+                        "type": "boolean"
+                      },
+                      "JsonKeys": {
+                        "description": "嵌套JSON键值索引",
+                        "items": {
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "SqlFlag": {
+                        "description": "字段是否开启分析功能，默认为空（\"\"），开启统计分析功能后，不能配置分词符和包含中文。",
+                        "type": "boolean"
+                      },
+                      "ValueType": {
+                        "description": "字段类型。\n- 目前支持 long - 整型，double - 浮点型，text - 字符串，json - JSON对象。\n- long和double类型不支持配置分词符、包含中文、大小写敏感。\n- json类型的嵌套JsonKeys字段不允许再次配置json类型键值索引",
+                        "enum": [
+                          "long",
+                          "double",
+                          "text",
+                          "json"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ValueType"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "Key",
+                  "Value"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "LogReduce": {
+              "description": "日志聚类开关。开启后不允许同时配置 LogReduceBlackList 与 LogReduceWhiteList。",
+              "type": "boolean"
+            },
+            "LogReduceBlackList": {
+              "description": "日志聚类黑名单。仅在 LogReduce=true 时生效；与 LogReduceWhiteList 互斥。",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "LogReduceWhiteList": {
+              "description": "日志聚类白名单。仅在 LogReduce=true 时生效；与 LogReduceBlackList 互斥。",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "MaxTextLen": {
+              "default": 2048,
+              "description": "索引字段值的最大长度。传 0 表示使用默认值 2048；具体取值限制以服务端校验为准。",
+              "maximum": 1048576,
+              "minimum": 64,
+              "type": "integer"
+            },
+            "TopicId": {
+              "description": "日志主题ID。",
+              "type": "string"
+            },
+            "UserInnerKeyValue": {
+              "description": "内部字段索引配置",
+              "items": {
+                "properties": {
+                  "Key": {
+                    "description": "需要配置键值索引的字段名称。\n- 仅支持字母、数字和_-./，并且不支持以_开头。\n- 同一个索引中key名称唯一。\n- 长度为1-128。",
+                    "type": "string"
+                  },
+                  "Value": {
+                    "description": "需要配置键值索引的字段描述信息。",
+                    "properties": {
+                      "AutoIndexFlag": {
+                        "description": "该索引是否是自动索引添加",
+                        "type": "boolean"
+                      },
+                      "CaseSensitive": {
+                        "description": "是否区分大小写，默认为false。",
+                        "type": "boolean"
+                      },
+                      "Delimiter": {
+                        "description": "字段的分词符，默认为空（\"\"）。\n- 字符串中每个字符代表一个分词符。\n- 长度为0-256字节，长度为0时不分词。\n- 仅支持以下字符中的一种或者多种 !@#%^&*()-_=\\\"', <>/?|;: \\n\\t\\r[]{}。\n- 包含中文和分词符不能同时配置。",
+                        "type": "string"
+                      },
+                      "IncludeChinese": {
+                        "description": "是否包含中文，默认为空（\"\"），包含中文和分词符不能同时配置。",
+                        "type": "boolean"
+                      },
+                      "IndexAll": {
+                        "description": "是否为JSON字段开启自动索引功能",
+                        "type": "boolean"
+                      },
+                      "IndexSQLAll": {
+                        "description": "是否为JSON字段开启自动索引+统计功能",
+                        "type": "boolean"
+                      },
+                      "JsonKeys": {
+                        "description": "嵌套JSON键值索引",
+                        "items": {
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "SqlFlag": {
+                        "description": "字段是否开启分析功能，默认为空（\"\"），开启统计分析功能后，不能配置分词符和包含中文。",
+                        "type": "boolean"
+                      },
+                      "ValueType": {
+                        "description": "字段类型。\n- 目前支持 long - 整型，double - 浮点型，text - 字符串，json - JSON对象。\n- long和double类型不支持配置分词符、包含中文、大小写敏感。\n- json类型的嵌套JsonKeys字段不允许再次配置json类型键值索引",
+                        "enum": [
+                          "long",
+                          "double",
+                          "text",
+                          "json"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ValueType"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "Key",
+                  "Value"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "TopicId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ModifyIndex",
+        "source": "索引管理",
+        "usage_constraints": "FullText.CaseSensitive defaults to false. If IncludeChinese is omitted or false, Delimiter is required and must be non-empty; if IncludeChinese is true, Delimiter may be omitted or empty. Delimiter remains limited to 256 bytes. Tool exec checks required-field presence locally; conditional and range validation is finalized by the service."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "log.create-download-task",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "CreateDownloadTask",
+      "resource": "download-task",
+      "verb": "create",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/CreateDownloadTask",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "AllowIncomplete": {
+              "description": "AllowIncomplete 是否允许下载未完整结果。MustComplete=true 时 AllowIncomplete 只能为 false。",
+              "type": "boolean"
+            },
+            "Compression": {
+              "description": "返回数据的压缩格式。目前支持gzip/zip和不压缩。",
+              "enum": [
+                "gzip",
+                "zip",
+                "none"
+              ],
+              "type": "string"
+            },
+            "DataFormat": {
+              "description": "返回数据的格式。支持csv json。",
+              "enum": [
+                "json",
+                "csv",
+                "jsonl"
+              ],
+              "type": "string"
+            },
+            "EndTime": {
+              "description": "查询结束时间点，精确到毫秒。Unix 时间戳格式，表示从 1970-1-1 00:00:00 UTC 开始计算的毫秒数。如果指定为秒级别，服务端会自动转换精度为毫秒。",
+              "type": "integer"
+            },
+            "Limit": {
+              "description": "Limit 返回日志条数。TaskType=Analyze/Search 时必填；取值范围 (0, config.Conf.Download.DownloadDetailLimit]。",
+              "type": "integer"
+            },
+            "LogContextInfos": {
+              "description": "上下文查询所需的 ContextFlow, PackageOffset, Source",
+              "properties": {
+                "ContextFlow": {
+                  "type": "string"
+                },
+                "PackageOffset": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "Source": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "MustComplete": {
+              "description": "MustComplete 是否要求完全精确。MustComplete=true 时 AllowIncomplete 只能为 false。",
+              "type": "boolean"
+            },
+            "Query": {
+              "description": "查询语句，语句长度最大为4096。查询语法与规则见: https://bytedance.feishu.cn/wiki/wikcn5MxzYyrm4IOhq04CMHF6Qg",
+              "type": "string"
+            },
+            "Sort": {
+              "description": "- desc：按照时间逆序返回日志，新的日志在前。\n- asc：按照时间顺序返回日志，旧的日志在前。",
+              "enum": [
+                "desc",
+                "asc"
+              ],
+              "type": "string"
+            },
+            "StartTime": {
+              "description": "查询开始时间点，精确到毫秒。Unix 时间戳格式，表示从 1970-1-1 00:00:00 UTC 开始计算的毫秒数。如果指定为秒级别，服务端会自动转换精度为毫秒。",
+              "type": "integer"
+            },
+            "TaskName": {
+              "description": "TaskName 下载任务名称。必填；命名规则：\n- 正则：^[a-zA-Z0-9_\\\\p{Han}][a-zA-Z-_0-9\\\\p{Han}]{1,62}[a-zA-Z0-9_\\\\p{Han}]$\n- 长度：3~64；中间允许 '-'、'_'；首尾不允许 '-'\n- 不允许以保留前缀开头（如 tls_、tos_、tls-service-log_ 等）",
+              "type": "string"
+            },
+            "TaskType": {
+              "description": "下载的类型",
+              "enum": [
+                0,
+                1,
+                2
+              ],
+              "type": "integer"
+            },
+            "TopicId": {
+              "description": "日志主题ID。",
+              "type": "string"
+            }
+          },
+          "required": [
+            "Compression",
+            "DataFormat",
+            "EndTime",
+            "StartTime",
+            "TaskName",
+            "TaskType",
+            "TopicId"
+          ],
+          "type": "object",
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "TaskType"
+                ],
+                "properties": {
+                  "TaskType": {
+                    "enum": [
+                      0,
+                      1
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "Limit",
+                  "Sort"
+                ],
+                "properties": {
+                  "Limit": {
+                    "minimum": 1
+                  },
+                  "Sort": {
+                    "enum": [
+                      "asc",
+                      "desc"
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "required": [
+                  "TaskType"
+                ],
+                "properties": {
+                  "TaskType": {
+                    "const": 2
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "LogContextInfos"
+                ],
+                "properties": {
+                  "LogContextInfos": {
+                    "required": [
+                      "ContextFlow",
+                      "Source"
+                    ],
+                    "properties": {
+                      "ContextFlow": {
+                        "minLength": 1
+                      },
+                      "Source": {
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "CreateDownloadTask",
+        "source": "日志管理",
+        "usage_constraints": "TaskType=0 (Search) or 1 (Analyze) requires Limit > 0 and an explicit Sort of asc or desc. TaskType=2 (LogContext) requires non-empty LogContextInfos.ContextFlow and LogContextInfos.Source. MustComplete=true still requires AllowIncomplete=false. Tool exec checks only required-field presence locally; conditional and range validation is finalized by the service."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "log.track",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "WebTracks",
+      "resource": "web-tracks",
+      "verb": "track",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/WebTracks",
+        "request_format": "json",
+        "codec": "webtracks"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "Logs": {
+              "description": "日志组（LogGroup），表示由多个 Log 组成的集合，一个 Log 表示一条日志。 :::tip 一个 LogGroup 中 Log 个数不能超过 10000。 :::",
+              "items": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "type": "array",
+              "minItems": 1
+            },
+            "Source": {
+              "description": "日志来源，一般使用机器 IP 作为标识。",
+              "type": "string"
+            }
+          },
+          "type": "object",
+          "required": [
+            "Logs"
+          ]
+        },
+        "query": {
+          "properties": {
+            "ProjectId": {
+              "description": "日志项目id",
+              "type": "string"
+            },
+            "TopicId": {
+              "description": "日志主题id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ProjectId",
+            "TopicId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "WebTracks",
+        "source": "日志管理",
+        "usage_constraints": "Logs is required and each item is a string-valued map; Source is optional. Tool exec checks required-field presence and the codec parses string-valued maps; service-side validation finalizes item count and size."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "retry"
+      }
+    },
+    {
+      "id": "processor.create-processor",
+      "group": "processor",
+      "group_title": "数据处理器",
+      "action": "CreateProcessor",
+      "resource": "processor",
+      "verb": "create",
+      "family": "processor",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/CreateProcessor",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "DSLContent": {
+              "description": "DSLContent 处理规则内容。必填；长度 1~4000（按 byte 计数）；内容合法性由服务端按 DSLType/ProcessorType 校验。",
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "Description": {
+              "description": "Description 描述信息。选填；长度<=255（按 byte 计数）。",
+              "maxLength": 255,
+              "type": "string"
+            },
+            "FailStrategy": {
+              "default": "keep_raw",
+              "description": "keep_raw, drop_log",
+              "enum": [
+                "keep_raw",
+                "drop_log"
+              ],
+              "type": "string"
+            },
+            "MaxQps": {
+              "default": 0,
+              "description": "MaxQps 单 Processor 最大 QPS。默认 0；取值范围为 [0,+∞)。",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "ProcessorDSLType": {
+              "default": "dsl",
+              "description": "dsl, spl",
+              "enum": [
+                "dsl",
+                "spl"
+              ],
+              "type": "string"
+            },
+            "ProcessorName": {
+              "description": "ProcessorName 加工任务名称。必填；长度 1~63（按 byte 计数）；同一 Project 下不可重名（由服务端校验）。",
+              "maxLength": 63,
+              "minLength": 1,
+              "type": "string"
+            },
+            "ProcessorStatus": {
+              "default": "enabled",
+              "description": "enabled, disabled",
+              "enum": [
+                "enabled",
+                "disabled"
+              ],
+              "type": "string"
+            },
+            "ProcessorType": {
+              "description": "ingester, consumer",
+              "enum": [
+                "ingester",
+                "consumer"
+              ],
+              "type": "string",
+              "default": "ingester"
+            },
+            "ProjectId": {
+              "type": "string"
+            },
+            "TimeoutMs": {
+              "default": 5000,
+              "description": "TimeoutMs 超时（毫秒）。默认 5000；取值范围为 [0,+∞)。",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "DSLContent",
+            "ProcessorName",
+            "ProjectId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "CreateProcessor",
+        "source": "数据处理器",
+        "usage_constraints": "ProcessorType defaults to ingester when omitted. Description may be empty. MaxQps defaults to 0; TimeoutMs keeps its 5000 ms default. Remaining limits are finalized by the service."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "processor.describe-processor-functions",
+      "group": "processor",
+      "group_title": "数据处理器",
+      "action": "DescribeProcessorFunctions",
+      "resource": "processor-functions",
+      "verb": "describe",
+      "family": "processor",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeProcessorFunctions",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "properties": {
+            "ProcessorDSLType": {
+              "description": "处理器 DSL 类型",
+              "enum": [
+                "dsl",
+                "spl"
+              ],
+              "type": "string"
+            },
+            "ProcessorType": {
+              "description": "处理器类型",
+              "enum": [
+                "ingester",
+                "consumer"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "ProcessorType"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "envelope",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeProcessorFunctions",
+        "source": "数据处理器",
+        "usage_constraints": ""
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "project.create",
+      "group": "project",
+      "group_title": "日志项目管理",
+      "action": "CreateProject",
+      "resource": "project",
+      "verb": "create",
+      "family": "project",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/CreateProject",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "Description": {
+              "description": "日志项目描述信息。 * 不支持 <>、'、\\、\\\\ 和所有 emoji 表情符号。 * 长度为 0～64 个字符。",
+              "type": "string"
+            },
+            "IamProjectName": {
+              "description": "当前创建的日志项目所属的 IAM 项目。未指定此参数时，日志服务会将日志项目添加到名为 default的 IAM 项目中。",
+              "type": "string"
+            },
+            "ProjectName": {
+              "description": "日志项目的名称。命名规则请参考资源命名规则。 日志项目名称在同一账号的同一地域下需唯一。",
+              "type": "string"
+            },
+            "Region": {
+              "description": "地域。支持的地域列表请查看服务地址。",
+              "type": "string"
+            },
+            "Tags": {
+              "description": "日志项目标签信息。 标签用于云资源的标识与分类，您可以将日志项目、日志主题通过标签进行归类，便于资源的搜索和资源聚合。详细说明请参考标签管理。",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "Key": {
+                    "description": "标签键去除首尾空白后不能为空。",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "Value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "Key"
+                ]
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "ProjectName",
+            "Region"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "CreateProject",
+        "source": "日志项目管理",
+        "usage_constraints": ""
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "tag.add",
+      "group": "tag",
+      "group_title": "标签管理",
+      "action": "AddTagsToResource",
+      "resource": "tags-to-resource",
+      "verb": "add",
+      "family": "tag",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/AddTagsToResource",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "ResourceType": {
+              "description": "资源类型，支持设置为： * project：日志项目 * topic：日志主题",
+              "type": "string"
+            },
+            "ResourcesList": {
+              "description": "资源列表，即日志项目或日志主题的 ID 列表。 支持一次传入多个资源 ID，最多同时传入 50 个资源 ID。",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "Tags": {
+              "description": "需要绑定的标签键和标签值数组对象。 :::tip * 支持一次传入多组标签键值对像，多组标签键值对像间用英文逗号（,）分隔。最多同时添加 20 组标签键值对。 * 标签键值需满足设置规则，详细信息，请参见绑定标签。",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "Key": {
+                    "description": "标签键去除首尾空白后不能为空。",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "Value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "Key"
+                ]
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "ResourceType",
+            "ResourcesList",
+            "Tags"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "AddTagsToResource",
+        "source": "标签管理",
+        "usage_constraints": ""
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "retry"
+      }
+    },
+    {
+      "id": "tag.list",
+      "group": "tag",
+      "group_title": "标签管理",
+      "action": "ListTagsForResources",
+      "resource": "tags-for-resources",
+      "verb": "list",
+      "family": "tag",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/ListTagsForResources",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "MaxResults": {
+              "description": "分页大小。必填，取值范围为10~100；不自动注入默认值.",
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 100
+            },
+            "NextToken": {
+              "description": "分页查询凭证，用于标记分页的位置。 * 不填则从头开始查询。 * 传入之前调用本 API 返回的 NextToken值，则从该次 API 调用标记分页的位置往后开始查询。",
+              "type": "string"
+            },
+            "ResourceType": {
+              "description": "资源类型，支持设置为： * project：日志项目 * topic：日志主题",
+              "type": "string"
+            },
+            "ResourcesIds": {
+              "description": "资源列表，即日志项目或日志主题的 ID 列表。 支持一次传入多个资源 ID，最多同时传入 50 个资源 ID。",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "TagFilters": {
+              "description": "资源标签过滤器。",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "Key": {
+                    "type": "string"
+                  },
+                  "Values": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "ResourceType",
+            "MaxResults"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ListTagsForResources",
+        "source": "标签管理",
+        "usage_constraints": "MaxResults is required and must be between 10 and 100; the CLI does not inject a default because the service rejects zero. TagFilters uses objects with a string Key and a string-array Values."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "retry"
+      }
+    },
+    {
+      "id": "tag.tag-resources",
+      "group": "tag",
+      "group_title": "标签管理",
+      "action": "TagResources",
+      "resource": "tag-resources",
+      "verb": "create",
+      "family": "tag",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/TagResources",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "ResourceType": {
+              "description": "资源类型，支持设置为： * project：日志项目 * topic：日志主题",
+              "type": "string"
+            },
+            "ResourcesIds": {
+              "description": "资源列表，即日志项目或日志主题的 ID 列表。 支持一次传入多个资源 ID，最多同时传入 50 个资源 ID。",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "Tags": {
+              "description": "需要绑定的标签键和标签值数组对象。 :::tip * 支持一次传入多组标签键值对像，多组标签键值对像间用英文逗号（,）分隔。最多同时添加 20 组标签键值对。 * 标签键值需满足设置规则，详细信息，请参见绑定标签。",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "Key": {
+                    "description": "标签键去除首尾空白后不能为空。",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "Value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "Key"
+                ]
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "ResourceType",
+            "ResourcesIds",
+            "Tags"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "TagResources",
+        "source": "标签管理",
+        "usage_constraints": ""
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "retry"
+      }
+    },
+    {
+      "id": "topic.create",
+      "group": "topic",
+      "group_title": "日志主题管理",
+      "action": "CreateTopic",
+      "resource": "topic",
+      "verb": "create",
+      "family": "topic",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/CreateTopic",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "properties": {
+            "ArchiveTtl": {
+              "description": "归档存储时长。该时长取值范围为 60~3650。 满足如下任一条件时，可实现归档存储。 * 标准存储时长 30 天及以上。 * 标准存储时长 7 天及以上且低频存储时长 30 天及以上。 此参数仅在 EnableHotTtl 为 true 时生效。",
+              "type": "integer"
+            },
+            "AutoSplit": {
+              "description": "是否开启分区的自动分裂功能。 * true：当写入的数据量连续 5 分钟超过已有分区服务能力时，日志服务会根据数据量自动分裂分区以满足业务需求，但分裂后的分区数量不可超出最大分裂数。最近 15 分钟内分裂出来的新分区不会自动分裂。 * false：不开启分区的自动分裂。",
+              "type": "boolean"
+            },
+            "ColdTtl": {
+              "description": "低频存储时长。该时长取值范围为 1~3650。 标准存储时长 7 天及以上可实现低频存储。 此参数仅在 EnableHotTtl 为 true 时生效。",
+              "type": "integer"
+            },
+            "Description": {
+              "description": "日志主题描述信息。 * 不支持 <>、'、\\、\\\\、所有 emoji 表情符号。 * 长度为 0~64 个字符。",
+              "type": "string"
+            },
+            "EnableHotTtl": {
+              "description": "是否开启分层存储。开启后，日志服务支持标准存储、低频存储和归档存储。 设置 HotTtl、ArchiveTtl、ColdTtl 后，如果数据存储时间超过对应时长，那么数据会自动沉降至低频存储、归档存储进行后续保存，直到日志采集到服务端的总时长达到 Ttl 时，被后端服务自动清理。 :::tip Ttl 时长需与 HotTtl、ColdTtl 和 ArchiveTtl 总值相同。",
+              "type": "boolean"
+            },
+            "EnableTracking": {
+              "description": "是否开启 WebTracking 功能，开启后，可以通过 WebTracking 快速采集前端埋点数据。 * true：开启 WebTracking功能。 * false：（默认）关闭 WebTracking 功能。 :::tip 为日志主题开启 Web Tracking 后，通过 API 接口 WebTracks 写入数据时无需经过鉴权，相当于面向公网开放了匿名写入权限，可能产生脏数据。详细说明请参考通过 WebTracking 采集日志。",
+              "type": "boolean"
+            },
+            "EncryptConf": {
+              "description": "数据加密配置。",
+              "type": "object",
+              "properties": {
+                "enable": {
+                  "type": "boolean"
+                },
+                "encrypt_type": {
+                  "type": "string"
+                },
+                "user_cmk_info": {
+                  "type": "object",
+                  "properties": {
+                    "user_cmk_id": {
+                      "type": "string"
+                    },
+                    "trn": {
+                      "type": "string"
+                    },
+                    "region_id": {
+                      "type": "string"
+                    },
+                    "from_tls": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "HotTtl": {
+              "description": "标准存储时长。该时长默认为 30 天，取值范围为 7~3650。 此参数仅在 EnableHotTtl 为 true 时生效。",
+              "type": "integer"
+            },
+            "LogPublicIP": {
+              "description": "是否开启记录外网 IP 功能。默认为开启状态。开启后日志服务会自动在日志内容中添加以下元数据字段。 * __tag____client_ip__：日志来源设备的公网 IP 地址。使用日志服务的私网域名写入日志数据时，则记录私网 IP 地址。 * __tag____receive_time__：日志达到服务端的时间，格式为 10 位的 Unixtime 时间戳。 :::tip 通过 Web Tracking 方式写入日志时，日志服务通过 clientAddr 记录来源设备的公网 IP 地址。",
+              "type": "boolean"
+            },
+            "MaxSplitShard": {
+              "description": "分区的最大分裂数，即分区分裂后，所有分区的最大数量。取值范围为 1~256，默认为 256。 :::tip * 仅在开启自动分裂日志分区，即 AutoSplit 为 true 时必选。 * MaxSplitShard 必须大于指定的 ShardCount，否则日志服务无法自动分裂分区。",
+              "type": "integer"
+            },
+            "MeteringMode": {
+              "description": "日志主题的计费模式。 * ChargeByFunction（默认值）：按功能计费模式。 * ChargeByDataIngest：按写入数据量计费模式。",
+              "type": "string"
+            },
+            "ProjectId": {
+              "description": "日志主题所属的日志项目 ID。",
+              "type": "string"
+            },
+            "ShardCount": {
+              "description": "日志分区的数量，默认创建 1 个分区，取值范围为 1～10。 每个分区提供的写入能力为 5MiB/s、500 次/s，读取能力为 20 MiB/s、100 次/s。请在创建日志主题时合理规划分区，创建后暂不支持修改分区数量。",
+              "type": "integer",
+              "default": 1
+            },
+            "Tags": {
+              "description": "日志主题标签信息。 标签用于云资源的标识与分类，您可以将日志项目、日志主题通过标签进行归类，便于资源的搜索和资源聚合。详细说明请参考标签管理。",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "Key": {
+                    "description": "标签键去除首尾空白后不能为空。",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "Value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "Key"
+                ]
+              },
+              "type": "array"
+            },
+            "TopicName": {
+              "description": "日志主题名称。命名规则请参考资源命名规则。",
+              "type": "string"
+            },
+            "Ttl": {
+              "description": "日志在日志服务中的总保存时间，超过指定的日志存储时长后，此日志主题中的过期日志会被自动清除。 单位为天，默认为 30 天。取值范围为 1～3650，指定为 3650 天表示永久存储。 :::tip 设置 EnableHotTtl为 true 后，Ttl 时长需与 HotTtl、ColdTtl 和 ArchiveTtl 总值相同。",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "ProjectId",
+            "TopicName",
+            "Ttl"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "CreateTopic",
+        "source": "日志主题管理",
+        "usage_constraints": "EncryptConf is an object with enable, encrypt_type, and user_cmk_info fields; user_cmk_info accepts user_cmk_id, trn, region_id, and from_tls. ShardCount defaults to 1 when omitted. Remaining encryption and shard constraints are finalized by the service."
       },
       "risk": {
         "level": "high",
