@@ -32,12 +32,23 @@ Upgrade checks and installs are explicit only; `volclog` never performs a backgr
 
 ```bash
 volclog upgrade --check
-volclog upgrade --version 1.0.7
-volclog upgrade --version 1.0.7 --yes
+volclog upgrade --version 1.1.0
+volclog upgrade --version 1.1.0 --yes
 volclog upgrade --yes
 ```
 
 `--check` and a version selection without `--yes` do not write files. npm installations delegate to npm. Standalone binaries require release checksum verification and use an atomic replacement.
+
+### Upgrading to 1.1.0
+
+Update saved commands, scripts, and Agent tool references to use the new download-task IDs:
+
+- `log.create` → `log.create-download-task`
+- `log.cancel` → `log.cancel-download-task`
+
+The old short names are removed, not kept as aliases. Calls using them fail with a replacement-name hint; the underlying API actions, HTTP methods, and paths are unchanged. Creating a download task remains asynchronous and does not download a local file.
+
+Request contracts have also been corrected: `log.consume` requires `Cursor`, not the Kafka-only `Offset`; `tag.list` requires an explicit `MaxResults` between 10 and 100. Refresh cached contracts with `volclog tool describe <tool-id> --view full`. Defaults describe server behavior and are not injected by the CLI; dry-run does not replace service-side type, range, enum, or conditional validation.
 
 ### Skill lifecycle
 

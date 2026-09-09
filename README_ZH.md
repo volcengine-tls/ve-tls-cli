@@ -21,7 +21,7 @@
 Unix：
 
 ```bash
-tag=volclog-v1.0.7
+tag=volclog-v1.1.0
 base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
 curl -fsSLO "${base_url}/install-binary.sh"
 VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh
@@ -31,7 +31,7 @@ export PATH="$HOME/.local/bin:$PATH"
 Windows PowerShell：
 
 ```powershell
-$tag = "volclog-v1.0.7"
+$tag = "volclog-v1.1.0"
 $baseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/download/$tag"
 Invoke-WebRequest -Uri "$baseUrl/install.ps1" -OutFile install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -BaseUrl $baseUrl

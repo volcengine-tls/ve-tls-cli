@@ -32,12 +32,23 @@ volclog --version
 
 ```bash
 volclog upgrade --check
-volclog upgrade --version 1.0.7
-volclog upgrade --version 1.0.7 --yes
+volclog upgrade --version 1.1.0
+volclog upgrade --version 1.1.0 --yes
 volclog upgrade --yes
 ```
 
 `--check` 以及不带 `--yes` 的版本选择不会写文件。npm 安装会委托 npm；独立二进制需要校验发布 checksum，并使用原子替换。
+
+### 升级到 1.1.0
+
+请把保存的命令、脚本和 Agent 工具引用中的下载任务 ID 更新为：
+
+- `log.create` → `log.create-download-task`
+- `log.cancel` → `log.cancel-download-task`
+
+旧短名已移除，不保留为别名。使用旧名会报错并提示替代名称；底层 API action、HTTP 方法和路径不变。创建下载任务仍是异步操作，不会直接下载文件到本地。
+
+本版本还修正了请求契约：`log.consume` 必须提供 `Cursor`，不再声明或要求 Kafka 专用的 `Offset`；`tag.list` 必须显式提供 10～100 的 `MaxResults`。请通过 `volclog tool describe <tool-id> --view full` 刷新缓存的契约。契约中的默认值描述服务端行为，CLI 不会自动注入；dry-run 不能替代服务端的类型、范围、枚举或条件校验。
 
 ### Skill 生命周期
 

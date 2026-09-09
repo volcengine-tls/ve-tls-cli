@@ -75,7 +75,7 @@ CLI 校验本地契约形状（输入模式、必填字段）并将请求传输�
 
 仅在用 `--help` 确认确切语法后，才使用 `skill list` 和 `skill install --name <name> --dir <dir>`。遵循 发现 → 描述 → 预执行 → 执行 的顺序：检查契约、本地校验、然后发送。
 
-1.0.7 内置两个 Skill：
+1.1.0 内置两个 Skill：
 
 - `volclog-core`：通用的契约优先运行时、路由、交付和恢复模型。
 - `tls-logcollector`：LogCollector 采集设计、非持久化样本校验、TLS 资源对账、Linux/Kubernetes 部署指导及端到端验收。
@@ -112,8 +112,8 @@ volclog skill uninstall --dir <agent-skills-dir> [--name <name>] [--force]
 
 ```bash
 volclog upgrade --check
-volclog upgrade --version 1.0.7
-volclog upgrade --version 1.0.7 --yes
+volclog upgrade --version 1.1.0
+volclog upgrade --version 1.1.0 --yes
 volclog upgrade --yes
 ```
 
