@@ -1,0 +1,263 @@
+{
+  "create_defaults": {
+    "action": "metric-topic.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "ProjectId": "metric-create-project-id",
+          "ShardCount": 2,
+          "TopicName": "metric-create-topic",
+          "Ttl": 30
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateMetricTopic",
+        "query": {}
+      }
+    }
+  },
+  "create_flags_override_request": {
+    "action": "metric-topic.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "AutoSplit": true,
+          "Description": "flag-description",
+          "MaxSplitShard": 16,
+          "ProjectId": "flag-project",
+          "ShardCount": 8,
+          "Tags": [
+            {
+              "Key": "source",
+              "Value": "flag"
+            }
+          ],
+          "TopicName": "flag-topic",
+          "Ttl": 60
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateMetricTopic",
+        "query": {}
+      }
+    }
+  },
+  "create_request_only": {
+    "action": "metric-topic.create",
+    "data": {
+      "request_preview": {
+        "body": {
+          "AutoSplit": false,
+          "Description": "request-only-description",
+          "ProjectId": "request-only-project",
+          "ShardCount": 2,
+          "Tags": [
+            {
+              "Key": "source",
+              "Value": "request"
+            }
+          ],
+          "TopicName": "request-only-topic",
+          "Ttl": 30
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/CreateMetricTopic",
+        "query": {}
+      }
+    }
+  },
+  "delete": {
+    "action": "metric-topic.delete",
+    "data": {
+      "request_preview": {
+        "body": {
+          "TopicId": "metric-delete-topic-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "DELETE",
+        "path": "/DeleteMetricTopic",
+        "query": {}
+      }
+    }
+  },
+  "get": {
+    "action": "metric-topic.get",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeMetricTopic",
+        "query": {
+          "TopicId": "metric-get-topic-id"
+        }
+      }
+    }
+  },
+  "list_all_first_request": {
+    "action": "metric-topic.list",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "Content-Md5",
+          "Content-Type",
+          "Host",
+          "User-Agent",
+          "X-Content-Sha256",
+          "X-Date",
+          "X-Tls-Apiversion"
+        ],
+        "method": "GET",
+        "path": "/DescribeMetricTopics",
+        "query": {
+          "Favourite": [
+            "true"
+          ],
+          "PageNumber": [
+            "1"
+          ],
+          "PageSize": [
+            "17"
+          ],
+          "ProjectId": [
+            "metric-list-all-project-id"
+          ]
+        }
+      }
+    },
+    "pagination": {
+      "merged": true,
+      "mode": "page_all",
+      "pageCount": 1,
+      "pageSize": 17
+    }
+  },
+  "list_common_flags": {
+    "action": "metric-topic.list",
+    "data": {
+      "request_preview": {
+        "body": {},
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeMetricTopics",
+        "query": {
+          "Description": "metric topic description",
+          "Favourite": "false",
+          "FuzzySearchKey": "metric",
+          "IsFullName": "false",
+          "OrderByProject": "false",
+          "PageNumber": "3",
+          "PageSize": "25",
+          "ProjectId": "metric-list-project-id",
+          "ProjectName": "metric-list-project",
+          "Region": "cn-beijing",
+          "Tags": "[{\"Key\":\"tier\",\"Value\":\"baseline\"}]",
+          "TopicName": "metric-list-topic"
+        }
+      }
+    }
+  },
+  "modify_auto_split_false": {
+    "action": "metric-topic.modify",
+    "data": {
+      "request_preview": {
+        "body": {
+          "AutoSplit": false,
+          "TopicId": "metric-modify-false-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "PUT",
+        "path": "/ModifyMetricTopic",
+        "query": {}
+      }
+    }
+  },
+  "modify_auto_split_true": {
+    "action": "metric-topic.modify",
+    "data": {
+      "request_preview": {
+        "body": {
+          "AutoSplit": true,
+          "MaxSplitShard": 16,
+          "TopicId": "metric-modify-true-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "PUT",
+        "path": "/ModifyMetricTopic",
+        "query": {}
+      }
+    }
+  },
+  "modify_auto_split_unset": {
+    "action": "metric-topic.modify",
+    "data": {
+      "request_preview": {
+        "body": {
+          "Description": "auto split remains absent",
+          "TopicId": "metric-modify-unset-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "PUT",
+        "path": "/ModifyMetricTopic",
+        "query": {}
+      }
+    }
+  },
+  "search": {
+    "action": "metric-topic.search",
+    "data": {
+      "request_preview": {
+        "body": {
+          "AccurateQuery": false,
+          "Context": "metric-search-context",
+          "EndTime": 1700000060000,
+          "HighLight": true,
+          "Limit": 25,
+          "MustComplete": true,
+          "Offset": 3,
+          "Query": "error",
+          "Sort": "asc",
+          "StartTime": 1700000000000,
+          "TopicId": "metric-search-topic-id"
+        },
+        "header": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "POST",
+        "path": "/SearchLogs",
+        "query": {}
+      }
+    }
+  }
+}

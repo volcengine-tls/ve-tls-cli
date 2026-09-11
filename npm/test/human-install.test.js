@@ -24,6 +24,21 @@ test('human resolveInstallPlan uses human release artifact names', () => {
   assert.equal(plan.binaryPath, '/tmp/pkg-human/.volclog-human/bin/volclog-human');
 });
 
+test('human resolveInstallPlan preserves prerelease identifiers in release URLs', () => {
+  const plan = resolveInstallPlan({
+    pkgVersion: '1.0.5-rc.1',
+    env: {},
+    platform: 'darwin',
+    arch: 'arm64',
+    packageRoot: '/tmp/pkg-human',
+  });
+
+  assert.equal(
+    plan.downloadURL,
+    'https://github.com/volcengine-tls/ve-tls-cli/releases/download/volclog-v1.0.5-rc.1/volclog-human_darwin_arm64.tar.gz',
+  );
+});
+
 test('human resolveInstallPlan ignores default-package download URL override', () => {
   const plan = resolveInstallPlan({
     pkgVersion: '1.0.4',

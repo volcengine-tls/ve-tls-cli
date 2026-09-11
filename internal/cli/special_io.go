@@ -53,7 +53,10 @@ const (
 )
 
 func prepareSpecialIORequest(meta apiIOMeta, header map[string]string, body []byte) (map[string]string, []byte, *specialIOState, bool, error) {
-	profile := resolveSpecialIOProfile(meta)
+	return prepareSpecialIORequestForProfile(resolveSpecialIOProfile(meta), meta, header, body)
+}
+
+func prepareSpecialIORequestForProfile(profile specialIOProfile, meta apiIOMeta, header map[string]string, body []byte) (map[string]string, []byte, *specialIOState, bool, error) {
 	if profile == specialIOProfileNone {
 		return cloneStringMap(header), body, nil, false, nil
 	}
@@ -109,10 +112,13 @@ func prepareSpecialIORequest(meta apiIOMeta, header map[string]string, body []by
 }
 
 func decodeSpecialIOResponse(meta apiIOMeta, state *specialIOState, resp tlsapi.Response) (any, bool, error) {
+	return decodeSpecialIOResponseForProfile(resolveSpecialIOProfile(meta), meta, state, resp)
+}
+
+func decodeSpecialIOResponseForProfile(profile specialIOProfile, meta apiIOMeta, state *specialIOState, resp tlsapi.Response) (any, bool, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, false, nil
 	}
-	profile := resolveSpecialIOProfile(meta)
 	switch profile {
 	case specialIOProfileConsumeLogs, specialIOProfileConsumeOriginalLogs, specialIOProfileConsumeKafkaLogs:
 	default:

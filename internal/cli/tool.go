@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
@@ -53,7 +54,7 @@ func runToolList(ctx *Context, args []string) (any, error) {
 	if ctx != nil && format == "json" {
 		ctx.FormatOverride = output.FormatJSON
 	}
-	tools := loadToolCatalogEntries(group, verb, "")
+	tools := loadToolOperations(group, verb, "")
 	if format == "json" {
 		if strings.TrimSpace(group) != "" {
 			return buildToolListJSONByGroup(tools, group, verb), nil
@@ -100,7 +101,7 @@ func parseToolListArgs(args []string) (group string, verb string, format string,
 	return group, verb, format, nil
 }
 
-func buildToolListJSONGroups(tools []toolCatalog, verb string) map[string]any {
+func buildToolListJSONGroups(tools []contract.Operation, verb string) map[string]any {
 	countByGroup := map[string]int{}
 	for _, tool := range tools {
 		group := strings.TrimSpace(tool.Group)
@@ -130,18 +131,18 @@ func buildToolListJSONGroups(tools []toolCatalog, verb string) map[string]any {
 	return out
 }
 
-func buildToolListJSONByGroup(tools []toolCatalog, group, verb string) map[string]any {
+func buildToolListJSONByGroup(tools []contract.Operation, group, verb string) map[string]any {
 	items := make([]map[string]any, 0, len(tools))
 	for _, tool := range tools {
 		items = append(items, map[string]any{
-			"id":      strings.TrimSpace(tool.ID),
+			"id":      strings.TrimSpace(string(tool.ID)),
 			"group":   strings.TrimSpace(tool.Group),
 			"action":  strings.TrimSpace(tool.Action),
 			"verb":    strings.TrimSpace(semanticToolVerb(tool)),
 			"family":  strings.TrimSpace(tool.Family),
-			"summary": strings.TrimSpace(tool.Summary),
-			"method":  strings.TrimSpace(tool.Method),
-			"path":    strings.TrimSpace(tool.Path),
+			"summary": strings.TrimSpace(tool.Docs.Summary),
+			"method":  strings.TrimSpace(tool.Wire.Method),
+			"path":    strings.TrimSpace(tool.Wire.Path),
 		})
 	}
 	out := map[string]any{
@@ -170,7 +171,7 @@ func runToolDescribe(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return buildToolDescribeOutput(tool, resolveToolDescribeView(ctx, view)), nil
+	return buildToolDescribeOutput(tool, resolveToolDescribeView(ctx, view))
 }
 
 func parseToolDescribeArgs(args []string) (string, toolDescribeView, error) {

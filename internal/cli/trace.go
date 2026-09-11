@@ -1,14 +1,19 @@
 package cli
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	appruntime "github.com/volcengine-tls/ve-tls-cli/internal/app/runtime"
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 )
 
 type traceEvent struct {
@@ -25,6 +30,36 @@ type traceEvent struct {
 	RespSHA256      string   `json:"resp_body_sha256,omitempty"`
 	ErrorMessage    string   `json:"error_message,omitempty"`
 }
+
+type contextRuntimeTracer struct {
+	context *Context
+}
+
+func (t contextRuntimeTracer) TraceRequest(_ context.Context, request execution.Request) {
+	if t.context == nil {
+		return
+	}
+	t.context.traceRequest(request.Method, request.Path, request.Query, request.Body)
+}
+
+func (t contextRuntimeTracer) TraceResponse(_ context.Context, response execution.Response, elapsed time.Duration, err error) {
+	if t.context == nil {
+		return
+	}
+	if err != nil {
+		t.context.traceResponse(0, "", elapsed, nil, err)
+		return
+	}
+	t.context.traceResponse(
+		response.StatusCode,
+		response.Header.Get("x-tls-requestid"),
+		elapsed,
+		response.Body,
+		nil,
+	)
+}
+
+var _ appruntime.Tracer = contextRuntimeTracer{}
 
 func (c *Context) initTrace() error {
 	if strings.TrimSpace(c.TraceDir) == "" {
@@ -56,12 +91,20 @@ func (c *Context) traceRequest(method, path string, query map[string]string, bod
 	if err := c.initTrace(); err != nil {
 		return
 	}
-	keys := make([]string, 0, len(query))
+	path, pathQueryKeys := tracePath(path)
+	keySet := make(map[string]struct{}, len(query)+len(pathQueryKeys))
 	for k := range query {
 		kk := strings.TrimSpace(k)
 		if kk != "" {
-			keys = append(keys, kk)
+			keySet[kk] = struct{}{}
 		}
+	}
+	for _, key := range pathQueryKeys {
+		keySet[key] = struct{}{}
+	}
+	keys := make([]string, 0, len(keySet))
+	for key := range keySet {
+		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	evt := traceEvent{
@@ -74,6 +117,23 @@ func (c *Context) traceRequest(method, path string, query map[string]string, bod
 		BodySHA256:      sha256Hex(body),
 	}
 	_ = c.writeTrace(evt)
+}
+
+func tracePath(raw string) (string, []string) {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.RawQuery == "" {
+		return raw, nil
+	}
+	keys := make([]string, 0, len(parsed.Query()))
+	for key := range parsed.Query() {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	parsed.RawQuery = ""
+	return parsed.String(), keys
 }
 
 func (c *Context) traceResponse(status int, requestID string, elapsed time.Duration, body []byte, err error) {
@@ -134,6 +194,28 @@ func (c *Context) tracePlan(method, path string, query map[string]string, header
 		BodySHA256:      sha256Hex(body),
 	}
 	if valid, ok := plan["valid"].(bool); ok && !valid {
+		evt.ErrorMessage = "dry-run local checks failed"
+	}
+	_ = c.writeTrace(evt)
+}
+
+func (c *Context) traceToolExecutionPlan(plan *execution.DryRunPlan) {
+	if plan == nil || strings.TrimSpace(c.TraceDir) == "" {
+		return
+	}
+	if err := c.initTrace(); err != nil {
+		return
+	}
+	evt := traceEvent{
+		TS:              time.Now().UTC().Format(time.RFC3339Nano),
+		Type:            "plan",
+		Method:          plan.Method,
+		Path:            plan.Path,
+		QueryKeys:       append([]string(nil), plan.QueryKeys...),
+		HeadersRedacted: append([]string(nil), plan.HeadersRedacted...),
+		BodySHA256:      plan.BodySHA256,
+	}
+	if !plan.Valid {
 		evt.ErrorMessage = "dry-run local checks failed"
 	}
 	_ = c.writeTrace(evt)

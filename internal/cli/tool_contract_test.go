@@ -23,16 +23,13 @@ func TestToolListDefaultsToGroups(t *testing.T) {
 		t.Fatalf("empty tool list output: %q", text)
 	}
 
-	catalog, err := loadToolCatalog()
-	if err != nil {
-		t.Fatalf("load tool catalog failed: %v", err)
-	}
-	if len(catalog.Tools) == 0 {
+	operations := loadToolOperations("", "", "")
+	if len(operations) == 0 {
 		t.Fatalf("expected non-empty tool catalog")
 	}
 
 	expectedGroups := map[string]struct{}{}
-	for _, tool := range catalog.Tools {
+	for _, tool := range operations {
 		g := strings.TrimSpace(tool.Group)
 		if g != "" {
 			expectedGroups[strings.ToLower(g)] = struct{}{}
@@ -72,17 +69,14 @@ func TestToolRootIdentityAliasDescribe(t *testing.T) {
 }
 
 func TestToolListFiltersByGroupAndVerb(t *testing.T) {
-	catalog, err := loadToolCatalog()
-	if err != nil {
-		t.Fatalf("load tool catalog failed: %v", err)
-	}
-	if len(catalog.Tools) == 0 {
+	operations := loadToolOperations("", "", "")
+	if len(operations) == 0 {
 		t.Fatalf("expected non-empty tool catalog")
 	}
 
 	group := ""
 	verb := ""
-	for _, tool := range catalog.Tools {
+	for _, tool := range operations {
 		if strings.TrimSpace(tool.Group) == "" {
 			continue
 		}
@@ -107,9 +101,9 @@ func TestToolListFiltersByGroupAndVerb(t *testing.T) {
 	}
 
 	expectedActionsByGroup := map[string]struct{}{}
-	for _, tool := range catalog.Tools {
+	for _, tool := range operations {
 		if strings.EqualFold(strings.TrimSpace(tool.Group), strings.TrimSpace(group)) {
-			action := strings.TrimSpace(tool.ID)
+			action := strings.TrimSpace(string(tool.ID))
 			if action != "" {
 				expectedActionsByGroup[action] = struct{}{}
 			}
@@ -134,10 +128,10 @@ func TestToolListFiltersByGroupAndVerb(t *testing.T) {
 		t.Fatalf("filtered list should not be empty")
 	}
 	expectedFiltered := map[string]struct{}{}
-	for _, tool := range catalog.Tools {
+	for _, tool := range operations {
 		if strings.EqualFold(strings.TrimSpace(tool.Group), strings.TrimSpace(group)) &&
 			strings.EqualFold(strings.TrimSpace(tool.Verb), strings.TrimSpace(verb)) {
-			action := strings.TrimSpace(tool.ID)
+			action := strings.TrimSpace(string(tool.ID))
 			if action != "" {
 				expectedFiltered[action] = struct{}{}
 			}
@@ -326,7 +320,7 @@ func TestToolListCreateVerbIsTrustworthyForLogGroup(t *testing.T) {
 	if len(tools) != 1 {
 		t.Fatalf("expected only one true create action in log group, got %#v", tools)
 	}
-	if normalizeToken(asStringOrEmpty(tools[0]["id"])) != "log.create" {
+	if normalizeToken(asStringOrEmpty(tools[0]["id"])) != "log.create-download-task" {
 		t.Fatalf("unexpected create action list: %#v", tools)
 	}
 }
@@ -474,8 +468,20 @@ func TestToolDescribeCLIDefaultUsesCompactView(t *testing.T) {
 	if strings.TrimSpace(stderr.String()) != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
-	if got := len(stdout.String()); got >= 8000 {
-		t.Fatalf("expected compact describe output under 8000 chars, got %d", got)
+	const compactOutputBudget = 8 * 1024
+	if got := len(stdout.Bytes()); got > compactOutputBudget {
+		t.Fatalf("expected compact describe output within %d-byte budget, got %d", compactOutputBudget, got)
+	}
+
+	var explicitStdout, explicitStderr bytes.Buffer
+	if code := Run([]string{"tool", "describe", "topic.create", "--view", "compact"}, &explicitStdout, &explicitStderr); code != 0 {
+		t.Fatalf("explicit compact exit=%d stdout=%q stderr=%q", code, explicitStdout.String(), explicitStderr.String())
+	}
+	if strings.TrimSpace(explicitStderr.String()) != "" {
+		t.Fatalf("expected empty explicit compact stderr, got %q", explicitStderr.String())
+	}
+	if explicitStdout.String() != stdout.String() {
+		t.Fatalf("default and explicit compact output differ: default=%q explicit=%q", stdout.String(), explicitStdout.String())
 	}
 
 	var out map[string]any
@@ -660,17 +666,18 @@ func TestToolDescribeOmitsExamplesAndKeepsRequiredFields(t *testing.T) {
 		t.Fatalf("expected TopicName schema to omit example: %#v", topicName)
 	}
 	required := toolRequiredFields(body["required"])
-	for _, key := range []string{"ProjectId", "ShardCount", "TopicName", "Ttl"} {
-		found := false
-		for _, item := range required {
-			if item == key {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Fatalf("expected required field %q in input schema: %#v", key, body)
-		}
+	sort.Strings(required)
+	wantRequired := []string{"ProjectId", "TopicName", "Ttl"}
+	sort.Strings(wantRequired)
+	if !reflect.DeepEqual(required, wantRequired) {
+		t.Fatalf("required fields=%v, want exactly %v", required, wantRequired)
+	}
+	shardCount, ok := props["ShardCount"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected ShardCount schema map, got %#v", props["ShardCount"])
+	}
+	if defaultValue, ok := shardCount["default"].(float64); !ok || defaultValue != 1 {
+		t.Fatalf("expected ShardCount default=1, got %#v", shardCount["default"])
 	}
 }
 

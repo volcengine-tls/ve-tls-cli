@@ -49,7 +49,10 @@ func runWorkflowList(ctx *Context, args []string) (any, error) {
 	if ctx != nil && format == "json" {
 		ctx.FormatOverride = output.FormatJSON
 	}
-	items := workflowCatalogEntries(group)
+	items, err := workflowCatalogEntries(group)
+	if err != nil {
+		return nil, err
+	}
 	if format == "json" {
 		if strings.TrimSpace(group) != "" {
 			return buildWorkflowListJSONByGroup(items, group), nil
@@ -174,7 +177,7 @@ func runWorkflowDescribe(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return workflowDescribeOutput(spec), nil
+	return workflowDescribeOutput(spec)
 }
 
 func runWorkflowExec(ctx *Context, args []string) (any, error) {
@@ -259,6 +262,10 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 			return nil, err
 		}
 	}
+	compiledProjection, err := output.Compile(options.Projection)
+	if err != nil {
+		return nil, fmt.Errorf("invalid execution.projection: %w", err)
+	}
 
 	workflowArgs, cleanup, err := workflowExecArgs(spec, input)
 	if err != nil {
@@ -266,11 +273,11 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 	}
 	defer cleanup()
 
-	out, err := dispatchWorkflowExec(ctx, spec, workflowArgs)
+	out, err := dispatchWorkflowExec(ctx, spec, input, workflowArgs)
 	if err != nil {
 		return nil, err
 	}
-	filtered, err := applyToolExecFilters(out, options.Projection)
+	filtered, err := applyCompiledToolExecFilter(out, compiledProjection)
 	if err != nil {
 		return nil, err
 	}
@@ -422,8 +429,12 @@ func workflowInputValue(input map[string]any, rawName string) (any, bool) {
 	return nil, false
 }
 
-func dispatchWorkflowExec(ctx *Context, spec workflowCatalog, args []string) (any, error) {
+func dispatchWorkflowExec(ctx *Context, spec workflowCatalog, input map[string]any, args []string) (any, error) {
 	switch spec.ID {
+	case appResolveResourcesWorkflowID:
+		return appResolveResources(ctx, input)
+	case appResolveTopicIDsWorkflowID:
+		return appResolveTopicIDs(ctx, input)
 	case "log.ingest":
 		return logIngest(ctx, args)
 	case "log.export":

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
@@ -96,10 +98,35 @@ func hostGroupList(ctx *Context, args []string) (any, error) {
 		}
 	}
 	if all {
-		return listAllByPageNumber(ctx, "/DescribeHostGroupsV2", query, "HostGroupHostsRulesInfos")
+		return executeShortcutOperation(ctx, shortcutExecutionRequest{
+			OperationID: "host-group.describe-host-groups-v2",
+			Input: execution.Input{
+				Query: shortcutQueryInput(query),
+				Body:  shortcutEmptyJSONBodyInput(),
+			},
+			PageAll: true,
+			LegacyPageAll: &legacyPageAllPolicy{
+				ListField:  "HostGroupHostsRulesInfos",
+				ForceTotal: true,
+				PaginationOverride: &contract.PaginationSpec{
+					Mode:            contract.PaginationPageNumber,
+					PageNumberParam: "PageNumber",
+					PageSizeParam:   "PageSize",
+					ItemsField:      "HostGroupHostsRulesInfos",
+					TotalField:      "Total",
+					DefaultPageSize: 100,
+					MaxPages:        1000,
+				},
+			},
+		})
 	}
-	body, _ := util.MustJSON(map[string]any{})
-	return ctx.Do("GET", "/DescribeHostGroupsV2", query, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "host-group.describe-host-groups-v2",
+		Input: execution.Input{
+			Query: shortcutQueryInput(query),
+			Body:  shortcutEmptyJSONBodyInput(),
+		},
+	})
 }
 
 func hostGroupGet(ctx *Context, args []string) (any, error) {
@@ -120,8 +147,13 @@ func hostGroupGet(ctx *Context, args []string) (any, error) {
 	if hostGroupID == "" {
 		return nil, errors.New("missing --host-group-id")
 	}
-	body, _ := util.MustJSON(map[string]any{})
-	return ctx.Do("GET", "/DescribeHostGroupV2", map[string]string{"HostGroupId": hostGroupID}, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "host-group.describe-host-group-v2",
+		Input: execution.Input{
+			Query: shortcutQueryInput(map[string]string{"HostGroupId": hostGroupID}),
+			Body:  shortcutEmptyJSONBodyInput(),
+		},
+	})
 }
 
 func hostGroupCreate(ctx *Context, args []string) (any, error) {
@@ -129,11 +161,12 @@ func hostGroupCreate(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("POST", "/CreateHostGroup", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "host-group.create",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(req),
+		},
+	})
 }
 
 func hostGroupModify(ctx *Context, args []string) (any, error) {
@@ -141,11 +174,12 @@ func hostGroupModify(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("PUT", "/ModifyHostGroup", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "host-group.modify-host-group",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(req),
+		},
+	})
 }
 
 func hostGroupDelete(ctx *Context, args []string) (any, error) {
@@ -166,91 +200,12 @@ func hostGroupDelete(ctx *Context, args []string) (any, error) {
 	if hostGroupID == "" {
 		return nil, errors.New("missing --host-group-id")
 	}
-	body, err := util.MustJSON(map[string]any{"HostGroupId": hostGroupID})
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("DELETE", "/DeleteHostGroup", nil, nil, body)
-}
-
-func hostGroupBindRules(ctx *Context, args []string) (any, error) {
-	req, err := buildHostGroupRuleBindingBody(args)
-	if err != nil {
-		return nil, err
-	}
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("PUT", "/ApplyHostGroupToRules", nil, nil, body)
-}
-
-func hostGroupUnbindRules(ctx *Context, args []string) (any, error) {
-	req, err := buildHostGroupRuleBindingBody(args)
-	if err != nil {
-		return nil, err
-	}
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("PUT", "/DeleteHostGroupFromRules", nil, nil, body)
-}
-
-func hostGroupDeleteHost(ctx *Context, args []string) (any, error) {
-	var (
-		hostGroupID string
-		ip          string
-		requestArg  string
-	)
-	for len(args) > 0 {
-		switch args[0] {
-		case "--host-group-id":
-			if len(args) < 2 {
-				return nil, errors.New("missing --host-group-id value")
-			}
-			hostGroupID = args[1]
-			args = args[2:]
-		case "--ip":
-			if len(args) < 2 {
-				return nil, errors.New("missing --ip value")
-			}
-			ip = args[1]
-			args = args[2:]
-		case "--request":
-			if len(args) < 2 {
-				return nil, errors.New("missing --request value")
-			}
-			requestArg = args[1]
-			args = args[2:]
-		default:
-			return nil, errors.New("unknown flag: " + args[0])
-		}
-	}
-	req, err := readJSONObjectRequestArg(requestArg)
-	if err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(requestArg) == "" {
-		for _, pair := range []struct {
-			name  string
-			value string
-		}{
-			{"--host-group-id", hostGroupID},
-			{"--ip", ip},
-		} {
-			if strings.TrimSpace(pair.value) == "" {
-				return nil, errors.New("missing " + pair.name)
-			}
-		}
-	}
-	maybeSetStringField(req, "HostGroupId", hostGroupID)
-	maybeSetStringField(req, "Ip", ip)
-	body, err := util.MustJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	return ctx.Do("DELETE", "/DeleteHost", nil, nil, body)
+	return executeShortcutOperation(ctx, shortcutExecutionRequest{
+		OperationID: "host-group.delete-host-group",
+		Input: execution.Input{
+			Body: shortcutJSONBodyInput(map[string]any{"HostGroupId": hostGroupID}),
+		},
+	})
 }
 
 func buildHostGroupBody(args []string, modify bool) (map[string]any, error) {
@@ -381,60 +336,6 @@ func buildHostGroupBody(args []string, modify bool) (map[string]any, error) {
 			return nil, err
 		}
 		req["HostIpList"] = ips
-	}
-	return req, nil
-}
-
-func buildHostGroupRuleBindingBody(args []string) (map[string]any, error) {
-	var (
-		hostGroupID string
-		ruleIDsArg  string
-		requestArg  string
-	)
-	for len(args) > 0 {
-		switch args[0] {
-		case "--host-group-id":
-			if len(args) < 2 {
-				return nil, errors.New("missing --host-group-id value")
-			}
-			hostGroupID = args[1]
-			args = args[2:]
-		case "--rule-ids":
-			if len(args) < 2 {
-				return nil, errors.New("missing --rule-ids value")
-			}
-			ruleIDsArg = args[1]
-			args = args[2:]
-		case "--request":
-			if len(args) < 2 {
-				return nil, errors.New("missing --request value")
-			}
-			requestArg = args[1]
-			args = args[2:]
-		default:
-			return nil, errors.New("unknown flag: " + args[0])
-		}
-	}
-	req, err := readJSONObjectRequestArg(requestArg)
-	if err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(requestArg) == "" {
-		for _, pair := range []struct {
-			name  string
-			value string
-		}{
-			{"--host-group-id", hostGroupID},
-			{"--rule-ids", ruleIDsArg},
-		} {
-			if strings.TrimSpace(pair.value) == "" {
-				return nil, errors.New("missing " + pair.name)
-			}
-		}
-	}
-	maybeSetStringField(req, "HostGroupId", hostGroupID)
-	if err := maybeSetStringListField(req, "RuleIds", ruleIDsArg); err != nil {
-		return nil, err
 	}
 	return req, nil
 }

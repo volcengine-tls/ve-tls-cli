@@ -366,9 +366,9 @@ func doStream(ctx context.Context, c *tlsapi.Client, method, path string, query 
 	for k, v := range header {
 		req.Header.Set(k, v)
 	}
-	req = c.Creds.Sign(req)
-	if strings.TrimSpace(req.Header.Get("Authorization")) == "" {
-		return nil, errors.New("signing failed: missing Authorization header")
+	req, err = c.Sign(ctx, req)
+	if err != nil {
+		return nil, err
 	}
 	return c.HTTP.Do(req)
 }

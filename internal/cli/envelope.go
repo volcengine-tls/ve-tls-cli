@@ -60,6 +60,9 @@ func newAPISuccessEnvelope(ctx *Context, group string, data any, outputMode stri
 	if artifacts == nil {
 		artifacts = []map[string]any{}
 	}
+	if ctx == nil {
+		ctx = &Context{}
+	}
 	summary := map[string]any{
 		"outputMode":   outputMode,
 		"deliveryMode": deliveryMode,
@@ -67,7 +70,7 @@ func newAPISuccessEnvelope(ctx *Context, group string, data any, outputMode stri
 		"itemCount":    envelopeItemCount(data),
 		"totalBytes":   0,
 	}
-	if ctx != nil && ctx.PaginationMeta != nil {
+	if ctx.PaginationMeta != nil {
 		summary["pagination"] = ctx.PaginationMeta
 	}
 	if strings.TrimSpace(ctx.TracePath) != "" {

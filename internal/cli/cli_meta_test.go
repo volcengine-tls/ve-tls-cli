@@ -27,6 +27,28 @@ func TestUsageTextIncludesAllCliGroupsAndGlobalFlags(t *testing.T) {
 	}
 }
 
+func TestGlobalRuntimeFlagsArePublishedAsValueFlags(t *testing.T) {
+	specs := cliGlobalFlagSpecs()
+	for _, want := range []string{"--region", "--endpoint"} {
+		found := false
+		for _, spec := range specs {
+			if spec.Name != want {
+				continue
+			}
+			found = true
+			if !spec.TakesValue {
+				t.Fatalf("%s must take a value: %+v", want, spec)
+			}
+			if strings.TrimSpace(spec.Usage) == "" || strings.TrimSpace(spec.Description) == "" {
+				t.Fatalf("%s metadata is incomplete: %+v", want, spec)
+			}
+		}
+		if !found {
+			t.Fatalf("global metadata missing %s", want)
+		}
+	}
+}
+
 func TestToolCommandAppearsInTopLevelUsage(t *testing.T) {
 	text := usageText()
 	if !strings.Contains(text, "  tool") {

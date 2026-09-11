@@ -21,15 +21,15 @@ func TestWorkflowListSupportsJSONFormat(t *testing.T) {
 		t.Fatalf("invalid stdout json: %v", err)
 	}
 	groups, ok := out["groups"].([]any)
-	if !ok || len(groups) != 1 {
-		t.Fatalf("expected single workflow group, got %#v", out["groups"])
+	if !ok || len(groups) != 2 {
+		t.Fatalf("expected app and log workflow groups, got %#v", out["groups"])
 	}
-	item, ok := groups[0].(map[string]any)
-	if !ok {
-		t.Fatalf("expected group object, got %#v", groups[0])
-	}
-	if item["group"] != "log" || item["count"] != float64(3) {
-		t.Fatalf("unexpected workflow group summary: %#v", item)
+	want := map[string]float64{"app": 2, "log": 3}
+	for _, raw := range groups {
+		item, ok := raw.(map[string]any)
+		if !ok || want[item["group"].(string)] != item["count"] {
+			t.Fatalf("unexpected workflow group summary: %#v", item)
+		}
 	}
 }
 
@@ -200,7 +200,7 @@ func TestWorkflowIdsDoNotLeakIntoToolList(t *testing.T) {
 			t.Fatalf("expected tool object, got %#v", item)
 		}
 		id, _ := m["id"].(string)
-		if id == "log.ingest" || id == "log.export" || id == "log.export-analysis" {
+		if id == "log.ingest" || id == "log.export" || id == "log.export-analysis" || id == appResolveResourcesWorkflowID || id == appResolveTopicIDsWorkflowID {
 			t.Fatalf("workflow id leaked into tool list: %q", id)
 		}
 	}

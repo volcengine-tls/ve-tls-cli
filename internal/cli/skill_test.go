@@ -31,15 +31,21 @@ func TestSkillListOutputsBundledSkills(t *testing.T) {
 	if len(skills) == 0 {
 		t.Fatalf("expected bundled skills in this checkout")
 	}
-	var foundCore bool
+	var foundCore, foundLogCollector bool
 	for _, skill := range skills {
-		if name, _ := skill.(string); name == "volclog-core" {
+		name, _ := skill.(string)
+		if name == "volclog-core" {
 			foundCore = true
-			break
+		}
+		if name == "tls-logcollector" {
+			foundLogCollector = true
 		}
 	}
 	if !foundCore {
 		t.Fatalf("expected volclog-core in bundled skills: %v", out)
+	}
+	if !foundLogCollector {
+		t.Fatalf("expected tls-logcollector in bundled skills: %v", out)
 	}
 }
 
@@ -82,6 +88,14 @@ func TestSkillInstallAllToTargetDir(t *testing.T) {
 		filepath.Join("volclog-core", "references", "routing.md"),
 		filepath.Join("volclog-core", "references", "sops.md"),
 		filepath.Join("volclog-core", "references", "best-practices.md"),
+		filepath.Join("tls-logcollector", "SKILL.md"),
+		filepath.Join("tls-logcollector", "agents", "openai.yaml"),
+		filepath.Join("tls-logcollector", "references", "config-validation.md"),
+		filepath.Join("tls-logcollector", "references", "tls-resources.md"),
+		filepath.Join("tls-logcollector", "references", "linux-host.md"),
+		filepath.Join("tls-logcollector", "references", "kubernetes-daemonset.md"),
+		filepath.Join("tls-logcollector", "references", "kubernetes-controller.md"),
+		filepath.Join("tls-logcollector", "references", "verification.md"),
 	} {
 		if _, err := os.Stat(filepath.Join(dest, rel)); err != nil {
 			t.Fatalf("missing installed file %s: %v", rel, err)

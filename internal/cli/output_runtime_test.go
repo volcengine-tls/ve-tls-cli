@@ -805,24 +805,6 @@ func outputRuntimeSummary(t *testing.T, env map[string]any) map[string]any {
 	return summary
 }
 
-func outputRuntimeArtifactPath(t *testing.T, env map[string]any) string {
-	t.Helper()
-
-	artifacts, ok := env["artifacts"].([]any)
-	if !ok || len(artifacts) != 1 {
-		t.Fatalf("unexpected artifacts: %#v", env["artifacts"])
-	}
-	artifact, ok := artifacts[0].(map[string]any)
-	if !ok {
-		t.Fatalf("unexpected artifact: %#v", artifacts[0])
-	}
-	path, _ := artifact["path"].(string)
-	if path == "" {
-		t.Fatalf("missing artifact path: %#v", artifact)
-	}
-	return path
-}
-
 func outputRuntimeMapKeys(v map[string]any) []string {
 	keys := make([]string, 0, len(v))
 	for key := range v {

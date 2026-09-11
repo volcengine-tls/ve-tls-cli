@@ -1,0 +1,191 @@
+{
+  "forced_file_delivery": {
+    "exitCode": 0,
+    "fileEnvelope": {
+      "action": "raw.call",
+      "artifacts": [
+        {
+          "format": "json",
+          "path": "\u003cTEMP\u003e/raw-\u003cTIMESTAMP\u003e.json",
+          "sizeBytes": "\u003cFILE_BYTES\u003e"
+        }
+      ],
+      "data": {
+        "body_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "checks": [
+          {
+            "detail": "https://tls-output-baseline.invalid",
+            "name": "endpoint",
+            "ok": true
+          },
+          {
+            "detail": "cn-output-baseline",
+            "name": "region",
+            "ok": true
+          }
+        ],
+        "headers_redacted": [
+          "Authorization",
+          "X-Security-Token"
+        ],
+        "method": "GET",
+        "path": "/DescribeProjects",
+        "query_keys": [],
+        "request_preview": {
+          "body": {},
+          "query": {}
+        },
+        "type": "plan",
+        "valid": true
+      },
+      "error": null,
+      "requestId": "",
+      "status": "success",
+      "summary": {
+        "deliveryMode": "file_forced",
+        "dryRun": true,
+        "itemCount": 0,
+        "outputMode": "file",
+        "totalBytes": "\u003cFILE_BYTES\u003e"
+      }
+    },
+    "notice": "结果已写入文件。\n文件: \u003cTEMP\u003e/raw-\u003cTIMESTAMP\u003e.json\n",
+    "stderr": ""
+  },
+  "jmes_filter_data_scope": {
+    "exitCode": 0,
+    "expression": "data.request_preview.body.ProjectName",
+    "result": "baseline-filter",
+    "stderr": ""
+  },
+  "pagination_total_item_counts": {
+    "action": "project.list",
+    "artifacts": [],
+    "data": {
+      "Projects": [
+        {
+          "ProjectId": "project-1"
+        },
+        {
+          "ProjectId": "project-2"
+        },
+        {
+          "ProjectId": "project-3"
+        }
+      ],
+      "Total": 3
+    },
+    "error": null,
+    "requestId": "req-output-baseline-page-2",
+    "status": "success",
+    "summary": {
+      "deliveryMode": "stdout",
+      "dryRun": false,
+      "itemCount": 3,
+      "outputMode": "stdout",
+      "pagination": {
+        "merged": true,
+        "mode": "page_all",
+        "pageCount": 2,
+        "pageSize": 2
+      },
+      "totalBytes": 599
+    }
+  },
+  "run_failed_invalid_input": {
+    "exitCode": 1,
+    "stderr": "",
+    "stdout": {
+      "action": "raw.call",
+      "artifacts": [],
+      "data": null,
+      "error": {
+        "code": "CLIError",
+        "hint": "inspect constraints with 'volclog tool describe \u003cgroup.action\u003e' or 'volclog workflow describe \u003cgroup.command\u003e', or run --help",
+        "kind": "usage",
+        "message": "missing --path",
+        "requestId": "",
+        "source": "cli",
+        "statusCode": 0
+      },
+      "requestId": "",
+      "status": "failed",
+      "summary": {
+        "deliveryMode": "stdout",
+        "dryRun": false,
+        "itemCount": 0,
+        "outputMode": "stdout",
+        "totalBytes": 0
+      }
+    }
+  },
+  "stdout_success_envelope": {
+    "action": "raw.call",
+    "artifacts": [],
+    "data": {
+      "body_sha256": "7ff023a880d40d59178cb0b114001943727d82c9bd06dac478e2ed5922f3f4f4",
+      "checks": [
+        {
+          "detail": "https://tls-output-baseline.invalid",
+          "name": "endpoint",
+          "ok": true
+        },
+        {
+          "detail": "cn-output-baseline",
+          "name": "region",
+          "ok": true
+        },
+        {
+          "name": "body_json",
+          "ok": true
+        }
+      ],
+      "headers_redacted": [
+        "Authorization",
+        "X-Baseline",
+        "X-Security-Token"
+      ],
+      "method": "POST",
+      "path": "/CreateProject",
+      "query_keys": [
+        "alpha",
+        "zeta"
+      ],
+      "request_preview": {
+        "body": {
+          "Description": "snapshot",
+          "ProjectName": "baseline-project"
+        },
+        "query": {
+          "alpha": "1",
+          "zeta": "last"
+        }
+      },
+      "type": "plan",
+      "valid": true
+    },
+    "error": null,
+    "requestId": "",
+    "status": "success",
+    "summary": {
+      "deliveryMode": "stdout",
+      "dryRun": true,
+      "itemCount": 0,
+      "outputMode": "stdout",
+      "totalBytes": 1110
+    }
+  },
+  "table_eligibility_matrix": {
+    "index.get": true,
+    "log.search": true,
+    "metric-topic.get": true,
+    "metric-topic.list": true,
+    "project.create": false,
+    "project.get": true,
+    "project.list": true,
+    "raw.call": false,
+    "topic.delete": false,
+    "topic.get": true,
+    "topic.list": true
+  }
+}

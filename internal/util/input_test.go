@@ -1,11 +1,35 @@
 package util
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestReadJSONValueMaybeFilePreservesNumbersAndRejectsTrailingValues(t *testing.T) {
+	value, err := ReadJSONValueMaybeFile(`{"big":9007199254740993,"decimal":0.12345678901234567890123456789}`)
+	if err != nil {
+		t.Fatalf("ReadJSONValueMaybeFile() error = %v", err)
+	}
+	object, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("value type = %T, want map[string]any", value)
+	}
+	for key, want := range map[string]string{
+		"big":     "9007199254740993",
+		"decimal": "0.12345678901234567890123456789",
+	} {
+		number, ok := object[key].(json.Number)
+		if !ok || number.String() != want {
+			t.Errorf("%s = %#v, want json.Number(%q)", key, object[key], want)
+		}
+	}
+	if _, err := ReadJSONValueMaybeFile(`{"ok":true} {"second":true}`); err == nil {
+		t.Fatal("ReadJSONValueMaybeFile() error = nil, want trailing value error")
+	}
+}
 
 func TestReadMaybeFile_BarePath(t *testing.T) {
 	dir := t.TempDir()

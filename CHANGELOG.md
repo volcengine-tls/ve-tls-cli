@@ -1,6 +1,66 @@
 # Changelog
 
-## Unreleased
+## volclog-v1.1.0
+
+- Support both local browser callback + PKCE Console Login (default) and explicit Device Code authorization for remote or sandboxed environments, while retaining locked caches, atomic configuration writes, refresh behavior, and secret redaction.
+- Preserve `json.Number` across dynamic request, response, envelope, JSONL, and JMESPath processing, and reject invalid filters or projections before any TLS request is sent.
+- Add machine-readable build and catalog metadata through `volclog version`.
+- Add explicit-only CLI upgrades for npm and standalone installations; no background update checks are performed.
+- Add managed skill status, safe update, and uninstall commands with version and digest based modification detection.
+- Expose `ManualMergeShard` as the high-risk `shard.merge` operation with contract-first dry-run support and `shard.describe` reconciliation guidance.
+- Fix the `log.consume` request contract: `Cursor` is required, while the Kafka-only `Offset` field is no longer exposed or required.
+- Correct existing log, processor, index, project, topic, tag, and download-task request contracts, including nested object types, server-owned defaults, and conditional requirements. No new AI assistant or Copilot APIs are exposed.
+
+### Upgrade notes
+
+- Replace `log.create` with `log.create-download-task`, and `log.cancel` with `log.cancel-download-task` in scripts and Agent tool references. The old short names are removed, not retained as aliases; calls using them fail with a replacement-name hint. The underlying API actions, HTTP methods, and paths are unchanged.
+- Pass an explicit `MaxResults` between 10 and 100 to `tag.list`; do not rely on the previously documented default of 20.
+- Refresh cached tool contracts with `volclog tool describe <tool-id> --view full` before authoring requests. Schema defaults describe server behavior and are not injected by the CLI; dry-run does not replace service-side type, range, enum, or conditional validation.
+
+## volclog-v1.0.6
+
+- Bundle the `tls-logcollector` Agent skill for contract-first LogCollector resource setup, parser and processor validation, Linux or Kubernetes deployment guidance, and end-to-end heartbeat, binding, and ingestion verification.
+- Expose TLS account activation and collector configuration validation helpers, including regex generation, sample parsing, delimiter preview, latest-log inspection, and corrected processor debug contracts.
+- Align log-back-flow contracts to the current server model, including ETL and AgentLoop evaluation-set delivery fields and removal of retired scheduled-SQL inputs.
+- Add 24 atomic App, LogApp, Trace span-search, and TraceScore operations aligned to the pinned log-service server implementation.
+- Add `app.resolve-resources` and `app.resolve-topic-ids` workflows for normalized App resource traversal and deduplicated LogApp Topic resolution.
+- Preserve repeated query parameters such as `DescribeTraceScores.SpanIds` through execution, runtime transport, and redacted tracing.
+- Document the supplemental-operation source revision and symbol mapping, and update the bundled `volclog-core` routing and SOP guidance.
+- Build local and release macOS binaries with the external Go linker so generated Mach-O executables contain the `LC_UUID` required by dyld, while keeping the deployment target at macOS 11.0.
+
+## volclog-v1.0.5
+
+- Add standalone Console Login, SSO, RAM Role ARN, OIDC, and ECS Role authentication while preserving legacy AK/SK and manual STS behavior.
+- Unify explicit TLS region, endpoint, and timeout configuration across authentication modes, with safer runtime validation and authentication help discovery.
+- Unify agent and human execution around one generated Operation catalog and reusable Executor while preserving the legacy tool contract surface.
+- Remove unreachable and duplicated CLI/catalog code, harden runtime boundaries, and retain default and human quality gates.
+- Publish verified Unix and Windows binary installers and support stable npm installation for both `volclog` and `volclog-human`.
+
+## volclog-v1.0.5-rc.3
+
+- Unify public tool and ordinary human CRUD execution around one generated Operation catalog and reusable Executor while preserving all 125 legacy tool contract digests.
+- Derive capabilities and request templates from the canonical catalog, removing duplicated generated metadata and stale static templates.
+- Separate runtime selector, authentication provider, TLS client, transport, and tracing responsibilities from CLI parsing and presentation.
+- Remove unreachable command islands, enforce default and human quality gates, and harden typed-nil runtime boundaries without changing legacy AK/SK behavior.
+- Improve authentication help discovery and guide users from profile setup through `doctor` to the first `tool exec` request.
+
+## volclog-v1.0.5-rc.2
+
+- Let ECS Role refresh use the caller's timeout budget so the documented retry policy can complete.
+- Restore the default SSO scopes when older configuration contains an empty scope list.
+- Normalize secure-store and documentation roots on macOS before enforcing path boundaries.
+- Publish the Unix and Windows binary installers with each GitHub Release, reject downloaded checksum mismatches on Windows, and document checkout-free installation.
+
+## volclog-v1.0.5-rc.1
+
+- Add standalone SSO and Console Login (`mode=sso` / `mode=console-login`) with no runtime dependency on `ve`, `~/.volcengine`, or `volcengine-cli`.
+- Add standalone workload providers for RAM Role ARN, OIDC, and ECS Role.
+- Store SSO and Console Login token/STS caches in `0600` files under `<state-root>/sso/cache/` and `<state-root>/login/cache/`; cache roots can be overridden with `VOLCLOG_SSO_CACHE_DIRECTORY` / `VOLCLOG_LOGIN_CACHE_DIRECTORY`.
+- Dynamic mode never falls back to static AK/SK on failure; `ReauthRequired` errors recover with `volclog login --profile NAME` or `volclog sso login --profile NAME`.
+- Legacy AK/SK, environment variables, `--secrets-file`, `cred-ref`, and manual STS behaviors are unchanged.
+- Add `volclog login [--profile NAME] [--remote]`, `volclog logout [--profile NAME|--all]`, `volclog configure sso-session`, `volclog configure sso`, `volclog sso login|logout`.
+- Unify explicit TLS region, endpoint, and timeout configuration across authentication modes without deriving endpoints from regions.
+- Reject runtime and context fields placed in `tool exec --input`, including sectioned input, instead of silently ignoring them.
 
 ## volclog-v1.0.0
 

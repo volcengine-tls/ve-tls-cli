@@ -1,3 +1,6 @@
 package version
 
-var Version = "v1.0.4"
+var (
+	Version = "volclog-v1.1.0"
+	Commit  = "unknown"
+)

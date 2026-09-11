@@ -1,3 +1,5 @@
+//go:build human
+
 package cli
 
 import (
@@ -52,31 +54,47 @@ func validateIndexBody(path string, body map[string]any) error {
 }
 
 func indexBodyFieldSpec(action string) (map[string]struct{}, []string, error) {
-	doc, err := loadAPICapabilities()
-	if err != nil {
-		return nil, nil, err
-	}
-	ops := buildAPIIndex(doc)["index"][normalizeActionToken(action)]
-	if len(ops) == 0 {
+	operationID := ""
+	switch normalizeActionToken(action) {
+	case normalizeActionToken("CreateIndex"):
+		operationID = "index.create"
+	case normalizeActionToken("ModifyIndex"):
+		operationID = "index.modify"
+	default:
 		return nil, nil, errors.New("index action not found: " + action)
 	}
+	operation, ok := loadToolOperation(operationID)
+	if !ok {
+		return nil, nil, errors.New("index action not found: " + action)
+	}
+	body, ok := operation.InputSchema["body"].(map[string]any)
+	if !ok {
+		return nil, nil, errors.New("index action body schema not found: " + action)
+	}
+	properties, _ := body["properties"].(map[string]any)
+
+	// These fields exist in the lower-level Operation contract, but the human
+	// shortcut has never accepted them. Keep that compatibility boundary until
+	// the user-facing index command explicitly adopts them.
+	legacyUnsupported := map[string]struct{}{
+		"EnablePhraseIndex":  {},
+		"LogReduce":          {},
+		"LogReduceBlackList": {},
+		"LogReduceWhiteList": {},
+	}
 	fields := map[string]struct{}{}
-	requiredSet := map[string]struct{}{}
-	for _, p := range ops[0].Cmd.RequestParamsDoc {
-		if !strings.EqualFold(strings.TrimSpace(p.In), "body") {
-			continue
-		}
-		name := strings.TrimSpace(p.Name)
-		if name == "" {
+	for name := range properties {
+		if _, unsupported := legacyUnsupported[name]; unsupported {
 			continue
 		}
 		fields[name] = struct{}{}
-		if isDocRequired(p.RequiredText) {
-			requiredSet[name] = struct{}{}
-		}
 	}
+	requiredSet := shortcutSchemaRequiredSet(body)
 	required := make([]string, 0, len(requiredSet))
 	for name := range requiredSet {
+		if _, allowed := fields[name]; !allowed {
+			continue
+		}
 		required = append(required, name)
 	}
 	sort.Strings(required)

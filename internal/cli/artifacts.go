@@ -92,17 +92,6 @@ func writeOutputFileToDir(outputFile string, baseDir string, group string, out a
 	return p, nil
 }
 
-func writeEnvelopeFileToDir(outputFile string, baseDir string, group string, env map[string]any) (string, error) {
-	p, err := resolveOutputFilePath(outputFile, baseDir, group, output.FormatJSON)
-	if err != nil {
-		return "", err
-	}
-	if err := writeValueToPath(p, env, output.FormatJSON); err != nil {
-		return "", err
-	}
-	return p, nil
-}
-
 func preflightOutputFilePath(outputFile string, baseDir string, group string, format output.Format) error {
 	p, err := resolveOutputFilePath(outputFile, baseDir, group, format)
 	if err != nil {

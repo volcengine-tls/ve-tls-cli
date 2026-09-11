@@ -105,9 +105,9 @@ if [[ -z "$DOWNLOAD_URL" ]]; then
   if [[ -z "$BASE_URL" ]]; then
     echo "missing VOLCLOG_DOWNLOAD_URL or VOLCLOG_BASE_URL" >&2
     echo "examples:" >&2
-    echo "  VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash scripts/install-binary.sh" >&2
-    echo "  VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash scripts/install-binary.sh --edition human" >&2
-    echo "  VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/download/<tag> bash scripts/install-binary.sh" >&2
+    echo "  VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash install-binary.sh" >&2
+    echo "  VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download bash install-binary.sh --edition human" >&2
+    echo "  VOLCLOG_BASE_URL=https://github.com/volcengine-tls/ve-tls-cli/releases/download/volclog-vX.Y.Z bash install-binary.sh" >&2
     exit 2
   fi
   pkg="volclog_${os}_${arch}.tar.gz"
