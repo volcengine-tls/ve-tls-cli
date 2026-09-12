@@ -24,7 +24,7 @@ func TestAlignedContractsBuildAcceptedRequestShapes(t *testing.T) {
 		{
 			name: "processor debugger uses backend enum defaults",
 			id:   "processor.exec-processor", method: "POST", path: "/ExecProcessor",
-			body: `{"ExecAction":"debug","DSLContent":"test","LogSample":{"message":"test"}}`,
+			body: `{"ExecAction":"debug","DSLContent":"test","LogSample":{"message":"test"},"ProcessorType":"ingester","ProcessorDSLType":"dsl"}`,
 		},
 		{
 			name: "processor creation allows empty description and omitted type",
@@ -159,7 +159,7 @@ func TestAlignedContractsStillRejectMissingRequiredFields(t *testing.T) {
 	}{
 		{"log.track", `{"ProjectId":"project-1","TopicId":"topic-1"}`, "missing required field: input.body.Logs"},
 		{"tag.list", `{"ResourceType":"topic"}`, "missing required field: input.body.MaxResults"},
-		{"processor.exec-processor", `{"ExecAction":"debug","LogSample":{}}`, "missing required field: input.body.DSLContent"},
+		{"processor.exec-processor", `{"ExecAction":"debug","LogSample":{}}`, "missing required fields: input.body.DSLContent, input.body.ProcessorDSLType, input.body.ProcessorType"},
 		{"index.create", `{"FullText":{"IncludeChinese":true}}`, "missing required field: input.body.TopicId"},
 		{"topic.create", `{"ProjectId":"project-1","Ttl":30}`, "missing required field: input.body.TopicName"},
 	} {

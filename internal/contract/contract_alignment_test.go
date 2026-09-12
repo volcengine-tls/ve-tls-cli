@@ -38,7 +38,7 @@ func TestSupplementalSchemaCorrections(t *testing.T) {
 	}
 
 	exec := operations["processor.exec-processor"]
-	assertBodyRequired(t, exec, "DSLContent", "ExecAction", "LogSample")
+	assertBodyRequired(t, exec, "DSLContent", "ExecAction", "LogSample", "ProcessorType", "ProcessorDSLType")
 	assertPropertyDefault(t, bodyProperty(t, exec, "ProcessorDSLType"), "dsl")
 	assertPropertyDefault(t, bodyProperty(t, exec, "ProcessorType"), "ingester")
 	if strings.Contains(bodyProperty(t, exec, "ProcessorDSLType")["description"].(string), "required") ||
@@ -85,8 +85,8 @@ func TestSupplementalSchemaCorrections(t *testing.T) {
 
 	assertTagsObject(t, operations, "project.create", []string{"ProjectName", "Region"})
 	assertTagsObject(t, operations, "topic.create", []string{"ProjectId", "TopicName", "Ttl"})
-	assertTagsObject(t, operations, "tag.add", []string{"ResourceType", "ResourcesList", "Tags"})
-	assertTagsObject(t, operations, "tag.tag-resources", []string{"ResourceType", "ResourcesIds", "Tags"})
+	assertTagsObject(t, operations, "tag.add", []string{"ResourceType", "ResourcesList"})
+	assertTagsObject(t, operations, "tag.tag-resources", []string{"ResourceType", "ResourcesIds"})
 
 	topicBody := schemaObject(t, operations["topic.create"].InputSchema["body"])
 	encryptConf := schemaProperty(t, topicBody, "EncryptConf")
