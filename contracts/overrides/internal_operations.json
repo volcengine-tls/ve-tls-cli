@@ -19,19 +19,45 @@
         "query": {
           "type": "object",
           "properties": {
-            "PageNumber": {"type": "integer"},
-            "PageSize": {"type": "integer"},
-            "Region": {"type": "string"},
-            "ProjectId": {"type": "string"},
-            "ProjectName": {"type": "string"},
-            "TopicId": {"type": "string"},
-            "TopicName": {"type": "string"},
-            "FuzzySearchKey": {"type": "string"},
-            "Description": {"type": "string"},
-            "Tags": {"type": "string"},
-            "IsFullName": {"type": "boolean"},
-            "Favourite": {"type": "boolean"},
-            "OrderByProject": {"type": "boolean"}
+            "PageNumber": {
+              "type": "integer"
+            },
+            "PageSize": {
+              "type": "integer"
+            },
+            "Region": {
+              "type": "string"
+            },
+            "ProjectId": {
+              "type": "string"
+            },
+            "ProjectName": {
+              "type": "string"
+            },
+            "TopicId": {
+              "type": "string"
+            },
+            "TopicName": {
+              "type": "string"
+            },
+            "FuzzySearchKey": {
+              "type": "string"
+            },
+            "Description": {
+              "type": "string"
+            },
+            "Tags": {
+              "type": "string"
+            },
+            "IsFullName": {
+              "type": "boolean"
+            },
+            "Favourite": {
+              "type": "boolean"
+            },
+            "OrderByProject": {
+              "type": "boolean"
+            }
           }
         }
       },
@@ -44,14 +70,22 @@
         "default_page_size": 100,
         "max_pages": 1000
       },
-      "runtime": {"supports_dry_run": true},
-      "output": {"policy": "envelope", "is_envelope_output": true},
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "envelope",
+        "is_envelope_output": true
+      },
       "docs": {
         "summary": "Describe metric topics",
         "source": "internal operation override",
         "usage_constraints": "Internal operation used by the human shortcut executor."
       },
-      "risk": {"level": "low", "error_recovery": "safe-retry"}
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
     },
     {
       "id": "metric-topic.describe-metric-topic",
@@ -72,19 +106,31 @@
         "query": {
           "type": "object",
           "properties": {
-            "TopicId": {"type": "string"}
+            "TopicId": {
+              "type": "string"
+            }
           },
-          "required": ["TopicId"]
+          "required": [
+            "TopicId"
+          ]
         }
       },
-      "runtime": {"supports_dry_run": true},
-      "output": {"policy": "envelope", "is_envelope_output": true},
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "envelope",
+        "is_envelope_output": true
+      },
       "docs": {
         "summary": "Describe a metric topic",
         "source": "internal operation override",
         "usage_constraints": "Internal operation used by the human shortcut executor."
       },
-      "risk": {"level": "low", "error_recovery": "safe-retry"}
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
     },
     {
       "id": "metric-topic.create",
@@ -105,35 +151,65 @@
         "body": {
           "type": "object",
           "properties": {
-            "ProjectId": {"type": "string"},
-            "TopicName": {"type": "string"},
-            "Ttl": {"type": "integer"},
-            "ShardCount": {"type": "integer"},
-            "Description": {"type": "string"},
-            "AutoSplit": {"type": "boolean"},
-            "MaxSplitShard": {"type": "integer"},
+            "ProjectId": {
+              "type": "string"
+            },
+            "TopicName": {
+              "type": "string"
+            },
+            "Ttl": {
+              "type": "integer"
+            },
+            "ShardCount": {
+              "type": "integer"
+            },
+            "Description": {
+              "type": "string"
+            },
+            "AutoSplit": {
+              "type": "boolean"
+            },
+            "MaxSplitShard": {
+              "type": "integer"
+            },
             "Tags": {
               "type": "array",
               "items": {
                 "type": "object",
                 "properties": {
-                  "Key": {"type": "string"},
-                  "Value": {"type": "string"}
+                  "Key": {
+                    "type": "string"
+                  },
+                  "Value": {
+                    "type": "string"
+                  }
                 }
               }
             }
           },
-          "required": ["ProjectId", "TopicName", "Ttl", "ShardCount"]
+          "required": [
+            "ProjectId",
+            "TopicName",
+            "Ttl"
+          ]
         }
       },
-      "runtime": {"supports_dry_run": true},
-      "output": {"policy": "full", "is_envelope_output": true},
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
       "docs": {
         "summary": "Create a metric topic",
         "source": "internal operation override",
         "usage_constraints": "Internal operation used by the human shortcut executor."
       },
-      "risk": {"level": "high", "error_recovery": "high-risk-retry"}
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
     },
     {
       "id": "metric-topic.modify",
@@ -154,25 +230,49 @@
         "body": {
           "type": "object",
           "properties": {
-            "TopicId": {"type": "string"},
-            "TopicName": {"type": "string"},
-            "Description": {"type": "string"},
-            "Ttl": {"type": "integer"},
-            "Favourite": {"type": "boolean"},
-            "AutoSplit": {"type": "boolean"},
-            "MaxSplitShard": {"type": "integer"}
+            "TopicId": {
+              "type": "string"
+            },
+            "TopicName": {
+              "type": "string"
+            },
+            "Description": {
+              "type": "string"
+            },
+            "Ttl": {
+              "type": "integer"
+            },
+            "Favourite": {
+              "type": "boolean"
+            },
+            "AutoSplit": {
+              "type": "boolean"
+            },
+            "MaxSplitShard": {
+              "type": "integer"
+            }
           },
-          "required": ["TopicId"]
+          "required": [
+            "TopicId"
+          ]
         }
       },
-      "runtime": {"supports_dry_run": true},
-      "output": {"policy": "full", "is_envelope_output": true},
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
       "docs": {
         "summary": "Modify a metric topic",
         "source": "internal operation override",
         "usage_constraints": "Internal operation used by the human shortcut executor."
       },
-      "risk": {"level": "high", "error_recovery": "high-risk-retry"}
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
     },
     {
       "id": "metric-topic.delete",
@@ -193,19 +293,31 @@
         "body": {
           "type": "object",
           "properties": {
-            "TopicId": {"type": "string"}
+            "TopicId": {
+              "type": "string"
+            }
           },
-          "required": ["TopicId"]
+          "required": [
+            "TopicId"
+          ]
         }
       },
-      "runtime": {"supports_dry_run": true},
-      "output": {"policy": "full", "is_envelope_output": true},
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
       "docs": {
         "summary": "Delete a metric topic",
         "source": "internal operation override",
         "usage_constraints": "Internal operation used by the human shortcut executor."
       },
-      "risk": {"level": "high", "error_recovery": "high-risk-retry"}
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
     },
     {
       "id": "collector.describe-rules-v2",
@@ -226,19 +338,45 @@
         "query": {
           "type": "object",
           "properties": {
-            "ProjectId": {"type": "string"},
-            "ProjectName": {"type": "string"},
-            "IamProjectName": {"type": "string"},
-            "RuleId": {"type": "string"},
-            "RuleName": {"type": "string"},
-            "TopicId": {"type": "string"},
-            "TopicName": {"type": "string"},
-            "LogType": {"type": "string"},
-            "RuleType": {"type": "integer"},
-            "Pause": {"type": "integer"},
-            "Hidden": {"type": "boolean"},
-            "PageNumber": {"type": "integer"},
-            "PageSize": {"type": "integer"}
+            "ProjectId": {
+              "type": "string"
+            },
+            "ProjectName": {
+              "type": "string"
+            },
+            "IamProjectName": {
+              "type": "string"
+            },
+            "RuleId": {
+              "type": "string"
+            },
+            "RuleName": {
+              "type": "string"
+            },
+            "TopicId": {
+              "type": "string"
+            },
+            "TopicName": {
+              "type": "string"
+            },
+            "LogType": {
+              "type": "string"
+            },
+            "RuleType": {
+              "type": "integer"
+            },
+            "Pause": {
+              "type": "integer"
+            },
+            "Hidden": {
+              "type": "boolean"
+            },
+            "PageNumber": {
+              "type": "integer"
+            },
+            "PageSize": {
+              "type": "integer"
+            }
           }
         }
       },
@@ -251,14 +389,22 @@
         "default_page_size": 100,
         "max_pages": 1000
       },
-      "runtime": {"supports_dry_run": true},
-      "output": {"policy": "envelope", "is_envelope_output": true},
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "envelope",
+        "is_envelope_output": true
+      },
       "docs": {
         "summary": "Describe collector rules",
         "source": "internal operation override",
         "usage_constraints": "Internal operation used by the human shortcut executor."
       },
-      "risk": {"level": "low", "error_recovery": "safe-retry"}
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
     }
   ]
 }

@@ -1,9 +1,7 @@
 {
-  "schema_version": 1,
+  "catalog_digest": "7b693cc12cfcd7ea80a8a64ea5693e9dd2ea23a10e5de1a78fe2e7a458dfc776",
   "contract_version": "v1",
   "digest_algorithm": "sha256/go-json-v1",
-  "catalog_digest": "b124bdd54c4c253fc65646cb3adde1003ea5705ea681d5f9d2f699fd9c6f9254",
-  "operation_count": 165,
   "generation_mode": "bootstrap",
   "inputs": [
     {
@@ -54,12 +52,14 @@
     {
       "name": "override_internal_operations",
       "path": "contracts/overrides/internal_operations.json",
-      "sha256": "913390273713f988ed58f4bed3b92f067d92366e1715169fec5a149f13584bd7"
+      "sha256": "4f0930960c5b8af58d15e557609cdd19e515c8b1af73db2f892001d467f59f5b"
     },
     {
       "name": "override_supplemental_operations",
       "path": "contracts/overrides/supplemental_operations.json",
-      "sha256": "1b6d0595bfcedc4cb65ca3d54666cc9d75344bdf63e15f4279d11f69e0291268"
+      "sha256": "e708d6aed714d3dbc55a3190be38b2c59e9d680f45074a6f46572bcfce66abb8"
     }
-  ]
+  ],
+  "operation_count": 165,
+  "schema_version": 1
 }

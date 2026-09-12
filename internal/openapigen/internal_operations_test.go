@@ -70,7 +70,7 @@ func TestCommittedInternalOperationOverridesAreExact(t *testing.T) {
 	})
 	assertOperationSchema(t, operations, "metric-topic.describe-metric-topic", "query", []string{"TopicId"}, []string{"TopicId"})
 	assertOperationSchema(t, operations, "metric-topic.create", "body",
-		[]string{"ProjectId", "TopicName", "Ttl", "ShardCount"},
+		[]string{"ProjectId", "TopicName", "Ttl"},
 		[]string{"ProjectId", "TopicName", "Ttl", "ShardCount", "Description", "AutoSplit", "MaxSplitShard", "Tags"})
 	assertOperationSchema(t, operations, "metric-topic.modify", "body",
 		[]string{"TopicId"},

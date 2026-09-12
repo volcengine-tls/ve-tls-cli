@@ -68,8 +68,6 @@
             }
           },
           "required": [
-            "BeginRegex",
-            "LogRegex",
             "LogSample"
           ]
         }
@@ -641,7 +639,9 @@
           "required": [
             "DSLContent",
             "ExecAction",
-            "LogSample"
+            "LogSample",
+            "ProcessorType",
+            "ProcessorDSLType"
           ]
         }
       },
@@ -2144,7 +2144,6 @@
           },
           "required": [
             "AppName",
-            "AppType",
             "TemplateId"
           ],
           "type": "object"
@@ -2680,7 +2679,6 @@
           },
           "required": [
             "LogAppName",
-            "LogAppType",
             "ProjectId"
           ],
           "type": "object"
@@ -2827,8 +2825,7 @@
             }
           },
           "required": [
-            "LogAppId",
-            "TemplateId"
+            "LogAppId"
           ],
           "type": "object"
         }
@@ -3019,9 +3016,6 @@
               "type": "string"
             }
           },
-          "required": [
-            "LogAppType"
-          ],
           "type": "object"
         }
       },
@@ -3078,10 +3072,7 @@
             }
           },
           "required": [
-            "LogAppId",
-            "SessionId",
-            "StartTime",
-            "EndTime"
+            "LogAppId"
           ],
           "type": "object"
         }
@@ -3220,8 +3211,7 @@
             }
           },
           "required": [
-            "LogAppId",
-            "TraceId"
+            "LogAppId"
           ],
           "type": "object"
         }
@@ -5147,8 +5137,7 @@
           },
           "required": [
             "ResourceType",
-            "ResourcesList",
-            "Tags"
+            "ResourcesList"
           ],
           "type": "object"
         }
@@ -5304,8 +5293,7 @@
           },
           "required": [
             "ResourceType",
-            "ResourcesIds",
-            "Tags"
+            "ResourcesIds"
           ],
           "type": "object"
         }

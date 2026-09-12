@@ -76,7 +76,7 @@ func TestSupplementalTLSOperationsMatchBackendContracts(t *testing.T) {
 		}
 	}
 
-	assertBodyRequired(t, byID["collector.extract"], "BeginRegex", "LogRegex", "LogSample")
+	assertBodyRequired(t, byID["collector.extract"], "LogSample")
 	assertBodyRequired(t, byID["collector.generate-begin-regex"], "LogSample")
 	assertBodyRequired(t, byID["collector.generate-log-regex"], "End", "LogSample", "Start")
 	assertBodyRequired(t, byID["collector.parse-path"], "PathSample", "Regex")
@@ -96,7 +96,7 @@ func TestSupplementalTLSOperationsMatchBackendContracts(t *testing.T) {
 	assertBodyRequired(t, byID["log.describe-latest-log"], "topicId")
 	assertBodyRequired(t, byID["log.preview"], "delimiter", "log", "topicId")
 	assertBodyRequired(t, byID["processor.exec-processor"],
-		"DSLContent", "ExecAction", "LogSample")
+		"DSLContent", "ExecAction", "LogSample", "ProcessorType", "ProcessorDSLType")
 
 	parseTime := byID["collector.parse-time"]
 	if !strings.Contains(parseTime.Docs.UsageConstraints, "nanoseconds") ||
