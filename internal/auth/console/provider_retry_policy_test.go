@@ -21,8 +21,13 @@ func TestConsoleRefreshRetryBudgetIsPerRetrieve(t *testing.T) {
 	cache.data[session] = seed
 	var requests int
 	var waits []time.Duration
+	var jitterCalls int
 	retry := &httpx.RetryClient{
 		MaxAttempts: RetryAttempts,
+		Jitter: func() time.Duration {
+			jitterCalls++
+			return 50 * time.Millisecond
+		},
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			requests++
 			return newResponse(429, `{"error":"temporarily_unavailable"}`, map[string]string{RequestIDHeader: "test-refresh-request"}), nil
@@ -45,11 +50,45 @@ func TestConsoleRefreshRetryBudgetIsPerRetrieve(t *testing.T) {
 			t.Fatalf("after Retrieve %d: requests = %d, want %d", call, requests, call*RetryAttempts)
 		}
 	}
-	wantWaits := []time.Duration{200 * time.Millisecond, 400 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond}
+	wantWaits := []time.Duration{250 * time.Millisecond, 450 * time.Millisecond, 250 * time.Millisecond, 450 * time.Millisecond}
 	if !reflect.DeepEqual(waits, wantWaits) {
 		t.Fatalf("retry waits = %v, want %v", waits, wantWaits)
 	}
+	if jitterCalls != 4 {
+		t.Fatalf("jitter calls = %d, want exactly one per retry wait", jitterCalls)
+	}
 	if cache.writeCnt != 0 || !bytes.Equal(cache.data[session], seed) {
 		t.Fatal("failed refresh must not overwrite the token cache")
+	}
+}
+
+func TestConsoleDeviceTokenPollingDoesNotAddHTTPJitter(t *testing.T) {
+	var requests, jitterCalls, sleepCalls int
+	client, err := NewConsoleOAuthClient(&ConsoleOAuthClientConfig{RetryClient: &httpx.RetryClient{
+		MaxAttempts: RetryAttempts,
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			requests++
+			return newResponse(429, `{"error":"slow_down"}`, nil), nil
+		})},
+		Jitter: func() time.Duration {
+			jitterCalls++
+			return 50 * time.Millisecond
+		},
+		Sleeper: func(context.Context, time.Duration) error {
+			sleepCalls++
+			return nil
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.ExchangeTokenOnce(context.Background(), &ConsoleTokenRequest{
+		GrantType: GrantTypeDeviceCode, ClientID: ClientIDCrossDevice, Scope: Scope, DeviceCode: "test-device-code",
+	})
+	if err == nil {
+		t.Fatal("expected slow_down response")
+	}
+	if requests != 1 || jitterCalls != 0 || sleepCalls != 0 {
+		t.Fatalf("polling added HTTP retries: requests=%d jitter=%d sleeps=%d", requests, jitterCalls, sleepCalls)
 	}
 }
