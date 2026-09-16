@@ -75,7 +75,7 @@ If `ResultStatus=incomplete`, narrow the time range and rerun before trusting co
 
 Use `skill list` and `skill install --name <name> --dir <dir>` only after verifying their exact syntax with `--help`. Follow the discover → describe → dry-run → execute order: inspect the contract, validate locally, then send.
 
-The 1.1.0 build bundles two skills:
+The 1.1.1 build bundles two skills:
 
 - `volclog-core`: the generic contract-first runtime, routing, delivery, and recovery model.
 - `tls-logcollector`: LogCollector collection design, non-persistent sample validation, TLS resource reconciliation, Linux/Kubernetes deployment guidance, and end-to-end verification.
@@ -112,8 +112,8 @@ Upgrade is explicit only and never runs a background check:
 
 ```bash
 volclog upgrade --check
-volclog upgrade --version 1.1.0
-volclog upgrade --version 1.1.0 --yes
+volclog upgrade --version 1.1.1
+volclog upgrade --version 1.1.1 --yes
 volclog upgrade --yes
 ```
 
