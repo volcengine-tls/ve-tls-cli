@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -34,6 +35,7 @@ const DefaultMaxRetryAfter = time.Minute
 const (
 	defaultBaseDelay = 200 * time.Millisecond
 	defaultMaxDelay  = 2 * time.Second
+	defaultJitterMax = 100 * time.Millisecond
 )
 
 // ErrBodyTooLarge is returned when a response body exceeds the configured
@@ -73,6 +75,11 @@ type RetryClient struct {
 	MaxAttempts int
 	// Sleeper waits between attempts. If nil, a context-aware real sleeper is used.
 	Sleeper Sleeper
+	// Jitter returns an additional delay for fallback exponential backoff. If nil,
+	// each Do invocation creates an independent random source and samples uniformly
+	// from [0, 100ms). An injected function must be safe for concurrent use by the
+	// caller.
+	Jitter func() time.Duration
 	// Clock interprets Retry-After HTTP-date values. If nil, the system clock is used.
 	Clock Clock
 	// MaxBodySize caps response body bytes read into memory. Defaults to DefaultMaxBodySize.
@@ -115,6 +122,19 @@ func (c *RetryClient) sleeper() Sleeper {
 		return c.Sleeper
 	}
 	return defaultSleeper
+}
+
+func (c *RetryClient) jitterFunc() func() time.Duration {
+	if c.Jitter != nil {
+		return c.Jitter
+	}
+	// Keep the random source local to this Do invocation. The source behind a
+	// math/rand.Rand is not safe for concurrent use, so it must not be shared by
+	// concurrent Do calls on the same RetryClient.
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	return func() time.Duration {
+		return time.Duration(rng.Int63n(int64(defaultJitterMax)))
+	}
 }
 
 func (c *RetryClient) clock() Clock {
@@ -203,6 +223,7 @@ func (c *RetryClient) Do(ctx context.Context, factory RequestFactory) (*http.Res
 	clock := c.clock()
 	maxBody := c.maxBodySize()
 	maxRA := c.maxRetryAfter()
+	jitter := c.jitterFunc()
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if err := ctx.Err(); err != nil {
@@ -230,7 +251,7 @@ func (c *RetryClient) Do(ctx context.Context, factory RequestFactory) (*http.Res
 			if !isRetryableNetError(err) || attempt == maxAttempts {
 				return nil, sanitizeTransportError(err)
 			}
-			if err := sleep(ctx, sleeper, nil, attempt, clock, maxRA); err != nil {
+			if err := sleep(ctx, sleeper, nil, attempt, clock, maxRA, jitter); err != nil {
 				return nil, err
 			}
 			continue
@@ -256,7 +277,7 @@ func (c *RetryClient) Do(ctx context.Context, factory RequestFactory) (*http.Res
 		// can be reused, then close it before sleeping.
 		drainAndClose(resp.Body, maxBody)
 
-		if err := sleep(ctx, sleeper, resp, attempt, clock, maxRA); err != nil {
+		if err := sleep(ctx, sleeper, resp, attempt, clock, maxRA, jitter); err != nil {
 			return nil, err
 		}
 	}
@@ -352,15 +373,19 @@ func isRetryableNetError(err error) bool {
 
 // sleep waits before the next attempt. It honors a Retry-After header from the
 // last response when present and valid; otherwise it uses a deterministic
-// exponential backoff (no jitter) bounded by defaultMaxDelay. The resulting
-// delay is clamped to maxRetryAfter so a malicious or buggy server cannot force
-// an unbounded wait.
-func sleep(ctx context.Context, sleeper Sleeper, resp *http.Response, attempt int, clock Clock, maxRetryAfter time.Duration) error {
+// exponential backoff bounded by defaultMaxDelay, then adds jitter. The
+// resulting delay is clamped to maxRetryAfter so a malicious or
+// buggy server cannot force an unbounded wait.
+func sleep(ctx context.Context, sleeper Sleeper, resp *http.Response, attempt int, clock Clock, maxRetryAfter time.Duration, jitter func() time.Duration) error {
 	delay := backoff(attempt)
 	if resp != nil {
 		if ra, ok := parseRetryAfter(resp.Header.Get("Retry-After"), clock.Now()); ok {
 			delay = ra
+		} else {
+			delay = addJitter(delay, jitter)
 		}
+	} else {
+		delay = addJitter(delay, jitter)
 	}
 	if delay > maxRetryAfter {
 		delay = maxRetryAfter
@@ -369,6 +394,24 @@ func sleep(ctx context.Context, sleeper Sleeper, resp *http.Response, attempt in
 		return nil
 	}
 	return sleeper(ctx, delay)
+}
+
+// addJitter adds one injected jitter sample to a fallback delay. Values outside
+// the default jitter interval, including negative durations, are treated as
+// zero so an injected function cannot create a negative sleep or overflow the
+// duration arithmetic.
+func addJitter(delay time.Duration, jitter func() time.Duration) time.Duration {
+	if jitter == nil {
+		return delay
+	}
+	extra := jitter()
+	if extra < 0 || extra >= defaultJitterMax {
+		return delay
+	}
+	if delay > time.Duration(math.MaxInt64)-extra {
+		return time.Duration(math.MaxInt64)
+	}
+	return delay + extra
 }
 
 // backoff returns a deterministic exponential delay for the given attempt

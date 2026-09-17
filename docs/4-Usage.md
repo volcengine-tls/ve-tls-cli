@@ -32,8 +32,8 @@ Upgrade checks and installs are explicit only; `volclog` never performs a backgr
 
 ```bash
 volclog upgrade --check
-volclog upgrade --version 1.1.0
-volclog upgrade --version 1.1.0 --yes
+volclog upgrade --version 1.1.1
+volclog upgrade --version 1.1.1 --yes
 volclog upgrade --yes
 ```
 

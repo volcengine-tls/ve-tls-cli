@@ -1,5 +1,12 @@
 # Changelog
 
+## volclog-v1.1.1
+
+- Preserve safe Console Login diagnostics through CLI error handling, including the failing stage, allowlisted OAuth error codes, HTTP status, and validated request IDs, without exposing tokens or raw response bodies.
+- Distinguish browser callback rejection, missing authorization codes, state mismatches, callback timeouts, cancellation, and network/DNS/TLS failures instead of reporting only `console login failed`.
+- Provide targeted guidance for sign-in HTTP 429 and 403 responses, and add regression coverage for nested errors, secret redaction, and the existing per-call token refresh retry budget.
+- Align ordinary authentication HTTP retry backoff with `ve` CLI by adding less than 100ms of random jitter to the existing exponential delay. Preserve valid `Retry-After` precedence and the delay cap; retry counts, token refresh timing, default login flow, and device-code polling intervals are unchanged.
+
 ## volclog-v1.1.0
 
 - Support both local browser callback + PKCE Console Login (default) and explicit Device Code authorization for remote or sandboxed environments, while retaining locked caches, atomic configuration writes, refresh behavior, and secret redaction.

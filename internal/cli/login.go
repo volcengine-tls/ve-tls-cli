@@ -143,8 +143,12 @@ func newConsoleLoginError(deviceCode bool, cause error) error {
 	if deviceCode {
 		flow = "device-code"
 	}
+	desc := "console login failed"
+	if diagnostic := console.DiagnoseError(cause); diagnostic.Message != "" {
+		desc += ": " + diagnostic.Message
+	}
 	return &safeCLIError{
-		desc:      "console login failed",
+		desc:      desc,
 		cause:     cause,
 		loginFlow: flow,
 	}

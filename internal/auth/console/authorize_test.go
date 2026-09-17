@@ -899,6 +899,160 @@ func TestLocalAuthorizerWaitErrorWrappedSafely(t *testing.T) {
 	}
 }
 
+func TestLocalAuthorizerCallbackOAuthErrorsAreTypedAndSafe(t *testing.T) {
+	const (
+		allowedCode = "access_denied"
+		unknownCode = "secret-oauth-code"
+		secret      = "callback-secret-value"
+	)
+	cases := []struct {
+		name           string
+		oauthCode      string
+		wantMessage    string
+		wantDiagnostic string
+	}{
+		{
+			name:           "allowed oauth code",
+			oauthCode:      allowedCode,
+			wantMessage:    "authorization failed: oauth error access_denied",
+			wantDiagnostic: "authorization failed: oauth error access_denied",
+		},
+		{
+			name:           "unknown oauth code",
+			oauthCode:      unknownCode,
+			wantMessage:    "authorization failed: oauth error returned by provider",
+			wantDiagnostic: "authorization failed: oauth error returned by provider",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			auth := newTestLocalAuthorizer(&AuthorizationResult{
+				Error:            tc.oauthCode,
+				ErrorDescription: secret,
+				State:            secret,
+				Code:             secret,
+			})
+
+			_, _, err := auth.Authorize(context.Background())
+			if err == nil {
+				t.Fatal("expected callback OAuth error")
+			}
+			var callbackErr *callbackError
+			if !errors.As(err, &callbackErr) {
+				t.Fatalf("errors.As did not find callbackError: %v", err)
+			}
+			if callbackErr.oauthCode != tc.oauthCode {
+				t.Errorf("oauthCode = %q, want retained raw code %q", callbackErr.oauthCode, tc.oauthCode)
+			}
+			if got := err.Error(); got != tc.wantMessage {
+				t.Errorf("Error() = %q, want %q", got, tc.wantMessage)
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Errorf("callback error leaks callback secret: %q", err.Error())
+			}
+			if got := DiagnoseError(err).Message; got != tc.wantDiagnostic {
+				t.Errorf("diagnostic Message = %q, want %q", got, tc.wantDiagnostic)
+			}
+		})
+	}
+}
+
+func TestLocalAuthorizerCallbackValidationErrorsAreTypedAndDiagnosable(t *testing.T) {
+	const secret = "callback-state-or-code-secret"
+	cases := []struct {
+		name        string
+		result      *AuthorizationResult
+		wantMessage string
+	}{
+		{
+			name:        "missing code",
+			result:      &AuthorizationResult{State: "state"},
+			wantMessage: "authorization failed: missing authorization code",
+		},
+		{
+			name:        "state mismatch",
+			result:      &AuthorizationResult{Code: secret, State: "unexpected-state"},
+			wantMessage: "authorization failed: state mismatch",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			auth := newTestLocalAuthorizer(tc.result)
+			auth.state = "state"
+			_, _, err := auth.Authorize(context.Background())
+			if err == nil {
+				t.Fatal("expected callback validation error")
+			}
+			var callbackErr *callbackError
+			if !errors.As(err, &callbackErr) {
+				t.Fatalf("errors.As did not find callbackError: %v", err)
+			}
+			if got := err.Error(); got != tc.wantMessage {
+				t.Errorf("Error() = %q, want %q", got, tc.wantMessage)
+			}
+			if got := DiagnoseError(err).Message; got != tc.wantMessage {
+				t.Errorf("diagnostic Message = %q, want %q", got, tc.wantMessage)
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Errorf("callback validation error leaks secret: %q", err.Error())
+			}
+		})
+	}
+}
+
+func TestLocalAuthorizerCallbackWaitDiagnosticsPreserveContextCause(t *testing.T) {
+	cases := []struct {
+		name        string
+		waitErr     error
+		wantMessage string
+	}{
+		{name: "timeout", waitErr: context.DeadlineExceeded, wantMessage: "wait for callback failed: waiting for browser callback timed out"},
+		{name: "canceled", waitErr: context.Canceled, wantMessage: "wait for callback failed: console login canceled"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &fakeCallbackServer{
+				port:        12345,
+				redirectURI: "http://127.0.0.1:12345/oauth/callback",
+				waitErr:     tc.waitErr,
+			}
+			auth := newTestLocalAuthorizerWithServer(fake)
+			_, _, err := auth.Authorize(context.Background())
+			if err == nil {
+				t.Fatal("expected callback wait error")
+			}
+			if !errors.Is(err, tc.waitErr) {
+				t.Errorf("errors.Is did not preserve wait cause %v: %v", tc.waitErr, err)
+			}
+			if got := DiagnoseError(err).Message; got != tc.wantMessage {
+				t.Errorf("diagnostic Message = %q, want %q", got, tc.wantMessage)
+			}
+		})
+	}
+}
+
+func newTestLocalAuthorizer(result *AuthorizationResult) *LocalAuthorizer {
+	return newTestLocalAuthorizerWithServer(&fakeCallbackServer{
+		port:        12345,
+		redirectURI: "http://127.0.0.1:12345/oauth/callback",
+		result:      result,
+	})
+}
+
+func newTestLocalAuthorizerWithServer(server *fakeCallbackServer) *LocalAuthorizer {
+	return &LocalAuthorizer{
+		client: &fakeOAuthClient{
+			authorizeURL: "https://signin.example.com/authorize?x=1",
+			endpointURL:  "https://signin.example.com",
+		},
+		callbackFactory: func() (callbackServer, error) { return server, nil },
+		opener:          &fakeOpener{},
+		prompt:          io.Discard,
+		state:           "state",
+		codeChallenge:   "challenge",
+	}
+}
+
 // TestNewDefaultLocalAuthorizerDefersSocketBinding verifies the exported
 // constructor installs a non-nil callback server factory but does not invoke it
 // during construction. The factory wraps NewCallbackServer(nil), which binds a

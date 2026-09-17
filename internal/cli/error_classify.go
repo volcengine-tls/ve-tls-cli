@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth"
+	"github.com/volcengine-tls/ve-tls-cli/internal/auth/console"
 	"github.com/volcengine-tls/ve-tls-cli/internal/config"
 )
 
@@ -59,13 +60,19 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 	}
 	var loginFlowErr *safeCLIError
 	if errors.As(err, &loginFlowErr) && loginFlowErr.loginFlow != "" {
+		diagnostic := console.DiagnoseError(loginFlowErr.cause)
 		hint := "check browser callback access, or retry explicitly with 'volclog login --device-code' when loopback is unavailable"
 		if loginFlowErr.loginFlow == "device-code" {
 			hint = "complete device authorization, or rerun 'volclog login --device-code --no-browser' and follow the printed URL and user code"
 		}
+		if diagnostic.StatusCode == 429 {
+			hint = "console sign-in service rate limited the request; wait before retrying and reduce concurrent login/refresh requests from the same egress IP"
+		} else if diagnostic.StatusCode == 403 {
+			hint = "console sign-in service rejected the request; check browser authorization and contact support with the requestId when available"
+		}
 		return errPayload{
-			RequestID:  requestID,
-			StatusCode: statusCode,
+			RequestID:  diagnostic.RequestID,
+			StatusCode: diagnostic.StatusCode,
 			Kind:       "auth",
 			Hint:       hint,
 		}, 2
