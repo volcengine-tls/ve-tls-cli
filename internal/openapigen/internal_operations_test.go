@@ -70,7 +70,7 @@ func TestCommittedInternalOperationOverridesAreExact(t *testing.T) {
 	})
 	assertOperationSchema(t, operations, "metric-topic.describe-metric-topic", "query", []string{"TopicId"}, []string{"TopicId"})
 	assertOperationSchema(t, operations, "metric-topic.create", "body",
-		[]string{"ProjectId", "TopicName", "Ttl", "ShardCount"},
+		[]string{"ProjectId", "TopicName", "Ttl"},
 		[]string{"ProjectId", "TopicName", "Ttl", "ShardCount", "Description", "AutoSplit", "MaxSplitShard", "Tags"})
 	assertOperationSchema(t, operations, "metric-topic.modify", "body",
 		[]string{"TopicId"},
@@ -208,7 +208,7 @@ func TestMergeInternalOperationsIntoCheckedInCatalogUpdatesLock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load regenerated catalog: %v", err)
 	}
-	if got, want := len(catalog.Operations), 165; got != want {
+	if got, want := len(catalog.Operations), 169; got != want {
 		t.Fatalf("regenerated operations=%d, want %d", got, want)
 	}
 	raw, err = os.ReadFile(lockPath)

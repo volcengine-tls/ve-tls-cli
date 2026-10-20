@@ -2,6 +2,35 @@
 
 This directory contains reviewed inputs to the checked-in operation catalog. Override files are not a live mirror of a service repository: they must remain reviewable, reproducible inputs whose generated catalog and lock are committed together.
 
+## SavedSearch alignment baseline
+
+The four `log.*-saved-search*` operations are aligned to log-service branch
+`epic_v6.7.2`, commit `f1bea8b442882269447a166fea07bc59e6c0f5d0`.
+They are explicitly reviewed server-source supplements, not published OpenAPI
+reference entries. No human shortcut or service-side implementation is added.
+
+| Operation ID | Method and path | Server request symbol |
+| --- | --- | --- |
+| `log.create-saved-search` | `POST /CreateSavedSearch` | `api/rest/saved_search/create.go::CreateSavedSearch` |
+| `log.delete-saved-search` | `DELETE /DeleteSavedSearch` | `api/rest/saved_search/delete.go::DeleteSavedSearchReq` |
+| `log.describe-saved-search` | `GET /DescribeSavedSearch` | `api/rest/saved_search/describe.go::DescribeSavedSearchReq` |
+| `log.describe-saved-searches` | `GET /DescribeSavedSearches` | `api/rest/saved_search/describes.go::DescribeSavedSearchesReq` |
+
+`api/handler/precheck.go::savedSearchPreCheck` resolves the saved query's Topic
+before detail/delete authorization; `api/auth/libiam/policy.go` models all four
+actions as Topic resources. `api/handler/saved_search.go` stores shared Topic
+metadata, applies the configured per-Topic creation limit (default 10), and lists
+all saved queries without pagination. The create body uses `TopicID`; the list
+query parser uses `TopicId`. Request `SavedSearchID` remains uppercase in both
+the DELETE body and the GET query.
+
+Creation explicitly requires `DisplayName` in the CLI because the pinned
+server's `Validate` dereferences that pointer without a nil check. This does not
+fix the server or imply that `binding:"required"` is enforced. Creation has no
+idempotency token. After an ambiguous create/delete result, clients must read
+back state before retrying. The server reports `SavedSearchAlreadyExist` as HTTP
+409 and missing detail/delete resources as HTTP 400 `SavedSearchNotExist`.
+
 ## Supplemental operation policy
 
 `supplemental_operations.json` adds an operation when its ID is absent from the source catalog and replaces the complete operation when the ID already exists. The merge is strict JSON and validates every supplemental entry as a complete contract before updating the catalog.

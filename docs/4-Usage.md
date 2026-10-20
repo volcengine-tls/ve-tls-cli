@@ -136,6 +136,33 @@ volclog --profile default tool exec project.create \
 
 `--page-all` is a direct flag for `tool exec` and requests all pages of a paginated result.
 
+### 3.3 Saved queries
+
+These four supplemental operations follow the server contract and are not yet covered by the public OpenAPI reference. Availability depends on the deployed service and IAM permissions. Saved queries are shared configuration scoped to a Topic.
+
+| Tool ID | Request parameters | Response fields |
+| --- | --- | --- |
+| `log.create-saved-search` | POST body: `TopicID`, `DisplayName`, `SearchQuery` | `SavedSearchID` |
+| `log.delete-saved-search` | DELETE body: `SavedSearchID` | Empty object |
+| `log.describe-saved-search` | GET query: `SavedSearchID` | `SavedSearch` |
+| `log.describe-saved-searches` | GET query: `TopicId` | `SavedSearches` array |
+
+```bash
+volclog tool describe log.create-saved-search --view full
+volclog --profile default tool exec log.create-saved-search \
+  --input '{"body":{"TopicID":"<topic-id>","DisplayName":"errors","SearchQuery":"level:error"}}' --dry-run
+volclog --profile default tool exec log.describe-saved-searches \
+  --input '{"query":{"TopicId":"<topic-id>"}}'
+volclog --profile default tool exec log.describe-saved-search \
+  --input '{"query":{"SavedSearchID":"savedsearch-1692687047134"}}'
+volclog --profile default tool exec log.delete-saved-search \
+  --input '{"body":{"SavedSearchID":"savedsearch-1692687047134"}}' --dry-run
+```
+
+Creation uses body key `TopicID`, listing uses query key `TopicId`, and returned items use `TopicID`; preserve the spelling. `DisplayName` is required and must be 3–64 characters, with name validation performed by the service. Creation stores the expression without executing it. The default limit is 10 saved queries per Topic and is configurable by the service. Listing returns every item in one response and does not support `--page-all`.
+
+Do not retry creation or deletion automatically after an ambiguous result; reconcile with a list or detail request first. Creation can return HTTP 409 `SavedSearchAlreadyExist`. Repeated deletion returns HTTP 400 `SavedSearchNotExist`; the CLI preserves the service error.
+
 ## 4. `workflow exec`
 
 `workflow exec` runs a CLI-provided higher-level workflow by its `<group.command>` identity. Workflows wrap one or more tools with orchestration logic; the public API tool surface remains available through `tool exec`.
