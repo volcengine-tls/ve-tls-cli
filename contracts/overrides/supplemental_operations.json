@@ -3292,6 +3292,209 @@
       "output": {"policy": "full", "is_envelope_output": true},
       "docs": {"summary": "CreateTopic", "source": "日志主题管理", "usage_constraints": "EncryptConf is an object with enable, encrypt_type, and user_cmk_info fields; user_cmk_info accepts user_cmk_id, trn, region_id, and from_tls. ShardCount defaults to 1 when omitted. Remaining encryption and shard constraints are finalized by the service."},
       "risk": {"level": "high", "error_recovery": "high-risk-retry"}
+    },
+    {
+      "id": "log.create-saved-search",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "CreateSavedSearch",
+      "resource": "saved-search",
+      "verb": "create",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/CreateSavedSearch",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "TopicID": {
+              "type": "string",
+              "description": "TLS topic ID. The JSON body key is TopicID, with an uppercase ID.",
+              "minLength": 1
+            },
+            "DisplayName": {
+              "type": "string",
+              "description": "Saved query name, validated by the service; internal reserved prefixes are not allowed.",
+              "minLength": 3,
+              "maxLength": 64
+            },
+            "SearchQuery": {
+              "type": "string",
+              "description": "Query or SQL expression to save; it is stored without executing the query.",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "TopicID",
+            "DisplayName",
+            "SearchQuery"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "Create a saved query for a topic",
+        "source": "log-service saved-search API",
+        "usage_constraints": "Server-source contract; not yet covered by the public OpenAPI reference. Availability and IAM permissions depend on the deployed service. Saved queries are shared metadata scoped to a Topic, not per-user favorites. Body keys are case-sensitive: TopicID, DisplayName, SearchQuery. The default per-topic limit is 10 and may be configured by the service. The response contains SavedSearchID. No idempotency token is supported. Do not retry automatically after an ambiguous failure; use log.describe-saved-searches with query.TopicId to reconcile DisplayName and SearchQuery first. SavedSearchAlreadyExist is reported as HTTP 409."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "log.delete-saved-search",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "DeleteSavedSearch",
+      "resource": "saved-search",
+      "verb": "delete",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "DELETE",
+        "path": "/DeleteSavedSearch",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "SavedSearchID": {
+              "type": "string",
+              "description": "Saved query ID returned by CreateSavedSearch, for example savedsearch-1692687047134.",
+              "pattern": "^savedsearch-[0-9]{13}$",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "SavedSearchID"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "Delete a saved query",
+        "source": "log-service saved-search API",
+        "usage_constraints": "Server-source contract; not yet covered by the public OpenAPI reference. Availability and IAM permissions depend on the deployed service. Deleting a saved query affects the shared Topic resource. Send SavedSearchID in the JSON body, not the query string. The server resolves its Topic and checks Topic IAM permissions. A repeated delete returns HTTP 400 SavedSearchNotExist rather than success. Do not retry automatically after an ambiguous failure; use log.describe-saved-search to reconcile whether the resource still exists."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "log.describe-saved-search",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "DescribeSavedSearch",
+      "resource": "saved-search",
+      "verb": "describe",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeSavedSearch",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "SavedSearchID": {
+              "type": "string",
+              "description": "Saved query ID returned by CreateSavedSearch, for example savedsearch-1692687047134.",
+              "pattern": "^savedsearch-[0-9]{13}$",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "SavedSearchID"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "Describe a saved query",
+        "source": "log-service saved-search API",
+        "usage_constraints": "Server-source contract; not yet covered by the public OpenAPI reference. Availability and IAM permissions depend on the deployed service. Reads a saved query shared by its Topic under Topic IAM permissions. Send query.SavedSearchID with an uppercase ID. The response contains SavedSearch with SavedSearchID, TopicID, DisplayName, and SearchQuery. A missing resource returns HTTP 400 SavedSearchNotExist. This operation has no pagination; --page-all is not supported."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "log.describe-saved-searches",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "DescribeSavedSearches",
+      "resource": "saved-search",
+      "verb": "describe",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeSavedSearches",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "TopicId": {
+              "type": "string",
+              "description": "TLS topic ID. The query parameter is TopicId, unlike the create body field TopicID.",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "TopicId"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "List saved queries for a topic",
+        "source": "log-service saved-search API",
+        "usage_constraints": "Server-source contract; not yet covered by the public OpenAPI reference. Availability and IAM permissions depend on the deployed service. Returns all saved queries shared by the Topic under Topic IAM permissions. Send query.TopicId; the response contains SavedSearches whose items use TopicID, SavedSearchID, DisplayName, and SearchQuery. There is no pagination or page-size parameter; --page-all is not supported. The default per-topic limit is 10 and may be configured by the service."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
     }
   ]
 }
