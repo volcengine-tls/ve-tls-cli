@@ -550,15 +550,14 @@ func TestOutputRuntimeFilterDisablesAutoFile(t *testing.T) {
 	}
 }
 
-func TestOutputRuntimeFilterRejectsForcedFile(t *testing.T) {
+func TestOutputRuntimeFilterWritesForcedFile(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
 	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{
+	notice, outFile := runOutputRuntimeNotice(t, []string{
 		"--dry-run",
 		"--output-mode", "file",
 		"--output-dir", t.TempDir(),
@@ -566,26 +565,20 @@ func TestOutputRuntimeFilterRejectsForcedFile(t *testing.T) {
 		"raw",
 		"--method", "GET",
 		"--path", "/DescribeProjects",
-	}, &stdout, &stderr)
-	if code == 0 {
-		t.Fatalf("expected forced file + filter rejection stdout=%q stderr=%q", stdout.String(), stderr.String())
+	})
+	if want := "结果已写入文件。\n文件: " + outFile + "\n"; notice != want {
+		t.Fatalf("notice=%q, want %q", notice, want)
 	}
-	if strings.TrimSpace(stderr.String()) != "" {
-		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	raw, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("read filtered file: %v", err)
 	}
-	var out map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
-		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
+	var delivery string
+	if err := json.Unmarshal(raw, &delivery); err != nil {
+		t.Fatalf("invalid filtered file json: %v content=%q", err, raw)
 	}
-	errObj, ok := out["error"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected error object, got %#v", out["error"])
-	}
-	if got := errObj["kind"]; got != "incompatible_flags" {
-		t.Fatalf("expected incompatible_flags kind, got %#v", got)
-	}
-	if msg, _ := errObj["message"].(string); !strings.Contains(msg, "--jmes-filter") {
-		t.Fatalf("expected filter/file error, got %#v", errObj)
+	if delivery != "file_forced" {
+		t.Fatalf("deliveryMode=%q, want file_forced", delivery)
 	}
 }
 

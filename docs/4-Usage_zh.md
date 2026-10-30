@@ -251,14 +251,14 @@ volclog --profile default raw --method POST --path /CreateProject \
 
 默认情况下，结果写入标准输出。使用 `--output-mode file`（强制文件模式）时，输出契约取决于所调用的命令面：
 
-- 对于 `raw`、`tool exec` 和 `workflow exec`，完整的信封会写入 `--output-dir` 下的工件文件。标准输出只包含固定的中文文件通知（`结果已写入文件。\n文件: <path>\n`），而不是信封。自动化必须从通知中读取工件路径并读取文件。
+- 对于 `raw`、`tool exec` 和 `workflow exec`，成功结果会写入 `--output-dir` 下的工件文件：通常是完整信封；设置 `--jmes-filter` 时则是选中的值。标准输出只包含固定的中文文件通知（`结果已写入文件。\n文件: <path>\n`）。自动化必须从通知中读取工件路径并读取文件。
 - 对于非信封命令组，原始结果会写入所选文件，标准输出只输出裸文件路径。
 - 对于通用人类快捷方式信封命令（例如 `project list`、`topic create`），信封工件会写入文件，同时完整的信封也会输出到标准输出。
-- 对于人类 `volclog-human log export` / `log export-analysis`，导出的数据行会流式写入文件工件（对于 `--output json` 为 JSON 数组，对于 `--output jsonl` 为 JSONL 行），标准输出会输出包含工件元数据的完整信封。工件本身不是信封。
+- 对于不设置 `--jmes-filter` 的人类 `volclog-human log export` / `log export-analysis`，导出的数据行会流式写入文件工件（对于 `--output json` 为 JSON 数组，对于 `--output jsonl` 为 JSONL 行），标准输出会输出包含工件元数据的完整信封。工件本身不是信封。
 
 自动化必须遵循其所调用命令面的输出契约；固定的中文通知规则专门适用于 `raw`、`tool exec` 和 `workflow exec`。人类日志导出不使用固定通知。
 
-例外：默认的 `workflow exec log.export` 和 `log.export-analysis` 将导出的行直接流式写入数据工件（对于 `--output json` 为 JSON 数组，对于 `--output jsonl` 为 JSONL 行），而不是写入信封。数据工件不是信封，也不包含信封元数据。标准输出仍然只包含带有数据工件路径的固定文件通知。详见 [高级](6-Advanced_zh.md) 第 2 节。
+例外：不设置 `--jmes-filter` 时，默认的 `workflow exec log.export` 和 `log.export-analysis` 将导出的行直接流式写入数据工件（对于 `--output json` 为 JSON 数组，对于 `--output jsonl` 为 JSONL 行），而不是写入信封。数据工件不是信封，也不包含信封元数据。标准输出仍然只包含带有数据工件路径的固定文件通知。设置 `--jmes-filter` 后，这些导出会在内存中累积结果，再过滤并写入文件。大导出应优先使用无过滤的流式导出，或在支持时使用服务端字段选择；客户端过滤不会减少服务端扫描或网络流量。详见 [高级](6-Advanced_zh.md) 第 2 节。
 
 `--output-file` 对 `tool`、`workflow` 和 `raw` 是被拒绝的；对这些组使用 `--output-dir`。其他组可以使用 `--output-file` 或 `--output-dir`。
 
@@ -285,19 +285,39 @@ CLI 会在发送任何请求前编译并校验 `--jmes-filter`。表达式无效
 
 ### 8.2 空值、缺失路径与无效表达式
 
-- 如果过滤器解析为现有的 `null` 值，命令打印字面量 `null` 并成功。
-- 如果过滤器路径不存在（缺失键、越界索引），命令失败并报 `filter matched no value` 错误，退出码为 `3`。
+- 如果过滤器解析为现有的 `null` 值，命令成功，并将字面量 `null` 输出到标准输出或写入所请求的文件。
+- 如果过滤器路径不存在（缺失键、越界索引），命令失败并报 `filter matched no value` 错误，退出码为 `3`；文件交付不会新建或覆盖结果文件。
 - 如果过滤器表达式无效，命令失败并报 `invalid jmes-filter expression`，退出码为 `3`。
 
-### 8.3 与文件交付不兼容
+### 8.3 筛选后写入文件
 
-`--jmes-filter` 不能与 `--output-mode file` 组合用于 `raw`、`tool exec` 和 `workflow exec`。对于其他组，该组合是允许的。
+对于 `raw`、`tool exec` 和 `workflow exec`，可将 `--jmes-filter` 与 `--output-mode file` 组合，把完整成功信封中选中的值写成单个 JSON 文档。`tool exec` 和 `workflow exec` 也支持通过上下文中的 `execution.artifact` 请求文件交付。即使设置 `--output jsonl`，文件仍是 JSON 而不是 JSONL；内容可以是数组、标量或 `null`，不一定是信封。标准输出只输出固定的中文文件通知，路径指向该文件。不设置过滤器时，普通文件输出保留完整信封；上述无过滤流式导出例外保持不变。
+
+过滤器看到的 `summary.deliveryMode` 是 `file_forced`。`summary.totalBytes` 表示过滤前信封的大小，而不是筛选文件的大小。全局过滤器会禁用自动溢出。如果上游操作在文件模式失败，命令输出完整错误并返回非零退出码，不会把错误过滤到文件中。
+
+例如，从信封中选择项目名称并写入 `./out`：
+
+```bash
+volclog --profile default --output jsonl --output-mode file --output-dir ./out \
+  --jmes-filter 'data.Projects[].ProjectName' \
+  tool exec project.describe-projects --input '{"PageSize":20}'
+```
+
+也可以先投影原始结果，再选择信封的 `data`，并通过上下文请求文件交付：
+
+```bash
+volclog --profile default --output-dir ./out --jmes-filter 'data' \
+  tool exec project.describe-projects --input '{"PageSize":20}' \
+  --context '{"execution":{"projection":"Projects[].ProjectName","artifact":true}}'
+```
+
+两个示例都将选中的项目名称数组写为 JSON。从标准输出通知中读取路径后即可打开文件。
 
 ### 8.4 CLI 信封过滤与 `execution.projection`
 
 `--jmes-filter` 会在请求前编译，然后在收到响应后作为 CLI 级过滤器应用于最终信封（或非信封组的原始结果）。
 
-`execution.projection`（在 `tool exec` 和 `workflow exec` 的 `--context` JSON 中）会在请求前编译，并在收到响应后、CLI 构建信封之前作用于原始结果。它不是服务器端的。它使用与 `--jmes-filter` 相同的 JMESPath 引擎，但作用于原始结果而不是最终信封。
+`execution.projection`（在 `tool exec` 和 `workflow exec` 的 `--context` JSON 中）会在请求前编译，并在收到响应后、CLI 构建信封之前作用于原始结果。它不是服务器端的。它使用与 `--jmes-filter` 相同的 JMESPath 引擎，但作用于原始结果而不是最终信封。上面的示例在信封过滤中使用 `data.Projects[].ProjectName`，在更早的原始结果投影中使用 `Projects[].ProjectName`；两者同时使用时，过滤器在 `data` 下看到的是投影后的结果。
 
 动态 JSON 在请求体、服务响应、信封、JSONL 和 JMESPath 求值的全链路保留 `json.Number`，不会先转换为 `float64` 而损失精度。因此大整数和长小数可以保持原始精度。
 

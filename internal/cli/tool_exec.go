@@ -94,9 +94,6 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 	}
 	options.DryRun = ctx.DryRun
 	if options.Artifact {
-		if strings.TrimSpace(ctx.Filter) != "" {
-			return nil, errors.New("--jmes-filter cannot be combined with file delivery for tool exec")
-		}
 		ctx.OutputMode = "file"
 		if strings.TrimSpace(options.ArtifactPath) != "" {
 			ctx.OutputFile = strings.TrimSpace(options.ArtifactPath)

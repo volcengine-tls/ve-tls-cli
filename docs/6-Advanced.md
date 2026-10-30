@@ -8,30 +8,42 @@ This guide covers advanced operational decisions, edge cases, and patterns. For 
 
 `--jmes-filter` is compiled and validated before any request is dispatched. It is then applied after the response is received to the final envelope (for `raw`, `tool exec`, and `workflow exec`) or to the raw result (for other groups).
 
-`execution.projection` (in the `--context` JSON for `tool exec` and `workflow exec`) is compiled before the request and applied to the raw result after the response is received and before the CLI builds the envelope. It is not server-side. It uses the same JMESPath engine as `--jmes-filter` but operates on the raw result rather than the final envelope.
+`execution.projection` (in the `--context` JSON for `tool exec` and `workflow exec`) is compiled before the request and applied to the raw result after the response is received and before the CLI builds the envelope. It is not server-side. It uses the same JMESPath engine as `--jmes-filter` but operates on the raw result rather than the final envelope: for project names, use `data.Projects[].ProjectName` as the envelope filter and `Projects[].ProjectName` as the raw-result projection. When both run, the filter sees the projected result under `data`.
 
 Dynamic JSON keeps `json.Number` through request decoding, service responses, envelopes, JSONL output, and JMESPath evaluation. Large integers and long decimals are not converted through `float64`, so their precision is preserved. Invalid filters and projections fail during local preflight and do not send a request.
 
 Behavior:
 
-- If the filter resolves to an existing `null` value, the command prints literal `null` and succeeds.
-- If the filter path does not exist (missing key, out-of-range index), the command fails with `filter matched no value` and exit code `3`.
+- If the filter resolves to an existing `null` value, the command succeeds and emits literal `null` to stdout or writes it to the requested file.
+- If the filter path does not exist (missing key, out-of-range index), the command fails with `filter matched no value` and exit code `3`; file delivery does not create or overwrite the result file.
 - If the filter expression is invalid, the command fails with `invalid jmes-filter expression` and exit code `3`.
 
-`--jmes-filter` cannot be combined with `--output-mode file` for `raw`, `tool exec`, and `workflow exec`. For other groups, the combination is allowed.
+For `raw`, `tool exec`, and `workflow exec`, `--jmes-filter` can be combined with `--output-mode file`; `tool exec` and `workflow exec` can also request file delivery through context `execution.artifact`. The selected value from the complete success envelope is written as one JSON document, including when `--output jsonl` is selected. It may be an array, scalar, or `null`, rather than an envelope. stdout emits the fixed Chinese file notice with the path. Without a filter, ordinary file delivery retains the full envelope; unfiltered streamed exports remain an exception.
+
+In the file-mode filtering view, `summary.deliveryMode=file_forced`, and `summary.totalBytes` measures the envelope before filtering rather than the selected file. A global filter disables automatic spill. When an upstream operation fails in file mode, the full error is emitted with a non-zero exit code and is not filtered into a file.
+
+```bash
+volclog --profile default --output jsonl --output-mode file --output-dir ./out \
+  --jmes-filter 'data.Projects[].ProjectName' \
+  tool exec project.describe-projects --input '{"PageSize":20}'
+```
+
+Read the file path from the stdout notice; the file contains the selected project-name array as JSON. See [Usage](4-Usage.md) section 8.3 for the `execution.artifact` and projection variant.
 
 ## 2. Large-result delivery
 
 Forced file mode (`--output-mode file`) behavior depends on the command surface:
 
-- `raw`, `tool exec`, `workflow exec`: the complete envelope is written to an artifact under `--output-dir`; stdout contains only the fixed Chinese file notice.
+- `raw`, `tool exec`, `workflow exec`: the complete success envelope, or the value selected by `--jmes-filter`, is written to an artifact under `--output-dir`; stdout contains only the fixed Chinese file notice.
 - Non-envelope groups: the raw result is written to the selected file and stdout emits only the bare file path.
 - Generic human-shortcut envelope commands (for example `project list`, `topic create`): the envelope artifact is written to the file and the complete envelope is also emitted to stdout.
-- Human `volclog-human log export` / `log export-analysis`: exported data rows are streamed into the file artifact (JSON array for `--output json`, JSONL rows for `--output jsonl`) and stdout emits the complete envelope containing artifact metadata. The artifact itself is not an envelope.
+- Human `volclog-human log export` / `log export-analysis` without `--jmes-filter`: exported data rows are streamed into the file artifact (JSON array for `--output json`, JSONL rows for `--output jsonl`) and stdout emits the complete envelope containing artifact metadata. The artifact itself is not an envelope.
 
 The fixed Chinese notice is limited to `raw`, `tool exec`, and `workflow exec`; human log exports do not use it. Automation must follow the output contract of the command surface it invokes.
 
 Automatic spill (`file_auto`) applies to `tool exec` and `workflow exec` when all of these hold: output format is JSON (`--output json`, default or explicit), output mode is `stdout` and not explicitly set, there is no `--jmes-filter`, and no `execution.artifact`/`execution.projection`. When the estimated envelope size exceeds 16 KiB, the complete envelope is written to a file under `--output-dir`; stdout emits only the fixed file notice. If `--output-dir` is missing or unwritable, the command errors with `result too large for stdout; specify --output-dir <writable-dir> to allow automatic file delivery`.
+
+The following default streamed-export behavior applies without `--jmes-filter`. With a filter, the streamed writer is disabled and results are accumulated in memory before filtering and file delivery. For large exports, prefer unfiltered streaming or server-side field selection where available; client-side filtering does not reduce server scanning or network traffic.
 
 Default `workflow exec log.export` and `log.export-analysis` stream exported rows directly into the data artifact (JSON array for `--output json`, JSONL rows for `--output jsonl`) rather than writing an envelope. The data artifact is not an envelope and does not contain `status`, `summary.deliveryMode`, `requestId`, or `ResultStatus`. stdout still contains only the fixed file notice with the data-artifact path. `log.export` auto-paginates pure-search results; it defaults to at most 100 pages when `MaxPages` is omitted and can stop at the selected/default page limit without exposing a "more pages remained" signal. The exported data artifact contains rows only and does not preserve `ResultStatus` or the final `ListOver` state. Command success and file existence therefore prove only that those rows were exported, not that the evidence set is complete. For evidence-grade export, inspect a bounded preview first, do not proceed as complete when preview `ResultStatus=incomplete`, narrow or split the time window or query, and explicitly choose `MaxPages` based on expected volume. `log.export-analysis` performs analysis export and does not auto-paginate analysis rows (SQL `limit`/`offset` semantics apply).
 

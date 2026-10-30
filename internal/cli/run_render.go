@@ -15,6 +15,9 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 	flags := invocation.flags
 	format := invocation.format
 	outputMode := invocation.outputMode
+	if strings.TrimSpace(ctx.Filter) != "" && filterTargetsEnvelope(group, rest) && ctx.OutputMode == "file" {
+		outputMode = ctx.OutputMode
+	}
 
 	if ctx.FormatOverride != "" {
 		format = ctx.FormatOverride
@@ -30,7 +33,7 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 				_ = ctx.initTrace()
 			}
 			env := buildAPIErrorEnvelope(ctx, group, err, outputMode)
-			if ctx.Filter != "" && filterTargetsEnvelope(group, rest) {
+			if ctx.Filter != "" && filterTargetsEnvelope(group, rest) && outputMode != "file" {
 				filtered, err2 := applyEnvelopeFilterResult(env, ctx.Filter)
 				if err2 != nil {
 					appendEnvelopeWarning(env, map[string]any{
@@ -52,6 +55,19 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 		return writeStructuredError(stdout, stderr, err, ctx.RequestID, ctx.StatusCode, group, nil)
 	}
 	applyEnvelopeFilter := filterTargetsEnvelope(group, rest)
+	if strings.TrimSpace(ctx.Filter) != "" && applyEnvelopeFilter && outputMode == "file" {
+		env, ok := structuredEnvelopeOutput(out)
+		// Raw service data must always be wrapped locally; do not trust a
+		// response that happens to resemble a CLI envelope or artifact path.
+		if group == "raw" || !ok {
+			var err error
+			env, err = buildAPIEnvelope(ctx, group, out, outputMode, ctx.OutputFile, format)
+			if err != nil {
+				return writeRunError(ctx, stdout, stderr, group, rest, err, "filesystem", "check the output directory and artifact path", outputMode, 2)
+			}
+		}
+		return renderFilteredEnvelopeFile(ctx, stdout, stderr, group, rest, env, exitCode)
+	}
 	if ctx.Filter != "" && !applyEnvelopeFilter {
 		filterTarget := out
 		out, err = output.ApplyFilter(out, ctx.Filter)

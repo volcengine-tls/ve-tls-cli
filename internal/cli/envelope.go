@@ -34,6 +34,12 @@ func buildAPIEnvelope(ctx *Context, group string, out any, outputMode string, ou
 	}
 	env := newAPISuccessEnvelope(ctx, group, out, outputMode, deliveryMode, nil)
 	if outputMode == "file" {
+		if ctx != nil && strings.TrimSpace(ctx.Filter) != "" && (group == "raw" || group == "tool" || group == "workflow") {
+			if err := prepareFilteredEnvelopeFile(ctx, group, out, env, outputFile); err != nil {
+				return nil, err
+			}
+			return env, nil
+		}
 		if fileOut, ok := out.(fileArtifactOutput); ok {
 			env["artifacts"] = []map[string]any{buildOutputArtifact(fileOut.Path, fileOut.Format)}
 			if err := updateEnvelopeTotalBytes(env); err != nil {

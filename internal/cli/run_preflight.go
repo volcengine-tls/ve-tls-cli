@@ -35,9 +35,6 @@ func preflightRunInvocation(invocation *runInvocation, stdout, stderr io.Writer)
 	if outputMode != "stdout" && outputMode != "file" {
 		return writeRunError(ctx, stdout, stderr, group, rest, errors.New("unsupported output-mode: "+flags.OutputMode), "usage", "invalid --output-mode", outputMode, 1), true
 	}
-	if outputMode == "file" && strings.TrimSpace(flags.Filter) != "" && filterTargetsEnvelope(group, rest) {
-		return writeRunError(ctx, stdout, stderr, group, rest, errors.New("--jmes-filter cannot be combined with file delivery"), "incompatible_flags", "remove --jmes-filter or use stdout delivery", outputMode, 1), true
-	}
 	if rejectsOutputFileForGroup(group) && strings.TrimSpace(flags.OutputFile) != "" {
 		return writeRunError(ctx, stdout, stderr, group, rest, errors.New("--output-file is not supported for "+strings.TrimSpace(group)), "usage", "use output_dir-based delivery instead", outputMode, 1), true
 	}

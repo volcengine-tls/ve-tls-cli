@@ -293,6 +293,7 @@ func usageText() string {
 		b.WriteString("  filter matched no value / invalid --jmes-filter 属于 decode，返回 exit 3。\n")
 		b.WriteString("  zsh/bash 下建议写成 --jmes-filter \"keys(@)\"；fish/PowerShell 下优先用单引号。\n\n")
 	}
+	b.WriteString("  --jmes-filter 可与 --output-mode file 组合；筛选后的值以 JSON 写入文件，stdout 仅输出文件通知。\n\n")
 	for _, group := range cliGroups() {
 		if !group.Primary {
 			continue

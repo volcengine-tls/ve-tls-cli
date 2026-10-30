@@ -251,9 +251,6 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 		ctx.DryRun = true
 	}
 	if options.Artifact {
-		if strings.TrimSpace(ctx.Filter) != "" {
-			return nil, errors.New("--jmes-filter cannot be combined with file delivery for workflow exec")
-		}
 		ctx.OutputMode = "file"
 		if strings.TrimSpace(options.ArtifactPath) != "" {
 			ctx.OutputFile = strings.TrimSpace(options.ArtifactPath)
@@ -447,7 +444,7 @@ func dispatchWorkflowExec(ctx *Context, spec workflowCatalog, input map[string]a
 }
 
 func finalizeWorkflowExecEnvelope(ctx *Context, result any, env map[string]any, options toolExecutionOptions) (map[string]any, error) {
-	if ctx == nil || ctx.OutputMode != "stdout" || ctx.OutputModeExplicit || ctx.Format != output.FormatJSON || options.Artifact || strings.TrimSpace(options.Projection) != "" {
+	if ctx == nil || ctx.OutputMode != "stdout" || ctx.OutputModeExplicit || ctx.Format != output.FormatJSON || options.Artifact || strings.TrimSpace(options.Projection) != "" || strings.TrimSpace(ctx.Filter) != "" {
 		return env, nil
 	}
 	size, err := estimateOutputBytes(env, ctx.Format)
