@@ -106,8 +106,7 @@ func hostGroupList(ctx *Context, args []string) (any, error) {
 			},
 			PageAll: true,
 			LegacyPageAll: &legacyPageAllPolicy{
-				ListField:  "HostGroupHostsRulesInfos",
-				ForceTotal: true,
+				ListField: "HostGroupHostsRulesInfos",
 				PaginationOverride: &contract.PaginationSpec{
 					Mode:            contract.PaginationPageNumber,
 					PageNumberParam: "PageNumber",

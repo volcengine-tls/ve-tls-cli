@@ -88,19 +88,30 @@
     "requestId": "req-output-baseline-page-2",
     "status": "success",
     "summary": {
+      "completeness": {
+        "complete": true,
+        "itemCount": 3,
+        "pageCount": 2,
+        "resumable": false,
+        "stopReason": "total_reached"
+      },
       "deliveryMode": "stdout",
       "deliveryOutcome": "success",
       "dryRun": false,
       "itemCount": 3,
       "outputMode": "stdout",
       "pagination": {
+        "complete": true,
+        "itemCount": 3,
         "merged": true,
         "mode": "page_all",
         "pageCount": 2,
-        "pageSize": 2
+        "pageSize": 2,
+        "resumable": false,
+        "stopReason": "total_reached"
       },
       "remoteOutcome": "success",
-      "totalBytes": 665
+      "totalBytes": 933
     }
   },
   "run_failed_invalid_input": {

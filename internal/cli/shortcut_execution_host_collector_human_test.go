@@ -33,8 +33,8 @@ func TestHostGroupListAllUsesShortcutOnlyPaginationOverride(t *testing.T) {
 	if !ok {
 		t.Fatalf("result type = %T, want object", out)
 	}
-	if data["Total"] != 3 {
-		t.Fatalf("Total = %#v, want 3", data["Total"])
+	if total, ok := data["Total"]; ok {
+		t.Fatalf("Total = %#v, want absent", total)
 	}
 	if len(transport.requests) != 2 {
 		t.Fatalf("request count = %d, want 2", len(transport.requests))
@@ -52,8 +52,8 @@ func TestHostGroupListAllUsesShortcutOnlyPaginationOverride(t *testing.T) {
 	}
 }
 
-func TestCollectorListAllForcesTotalAndPreservesPaginationFailures(t *testing.T) {
-	t.Run("success forces total when service omits it", func(t *testing.T) {
+func TestCollectorListAllPreservesServerTotalAndPaginationFailures(t *testing.T) {
+	t.Run("success leaves total absent when service omits it", func(t *testing.T) {
 		ctx, transport := newShortcutExecutionCaptureContext(t, []shortcutExecutionResponse{
 			{body: `{"Rules":[{"RuleId":"r1"},{"RuleId":"r2"}]}`},
 			{body: `{"Rules":[{"RuleId":"r3"}]}`},
@@ -66,8 +66,8 @@ func TestCollectorListAllForcesTotalAndPreservesPaginationFailures(t *testing.T)
 		if !ok {
 			t.Fatalf("result type = %T, want object", out)
 		}
-		if data["Total"] != 3 {
-			t.Fatalf("Total = %#v, want 3", data["Total"])
+		if total, ok := data["Total"]; ok {
+			t.Fatalf("Total = %#v, want absent", total)
 		}
 		if len(transport.requests) != 2 {
 			t.Fatalf("request count = %d, want 2", len(transport.requests))
@@ -97,7 +97,7 @@ func TestCollectorListAllForcesTotalAndPreservesPaginationFailures(t *testing.T)
 		}
 	})
 
-	t.Run("transport error keeps pagination metadata nil", func(t *testing.T) {
+	t.Run("transport error exposes incomplete pagination", func(t *testing.T) {
 		const canary = "collector-transport-cause-canary"
 		sentinel := errors.New(canary)
 		ctx, _ := newShortcutExecutionCaptureContext(t, []shortcutExecutionResponse{
@@ -107,14 +107,14 @@ func TestCollectorListAllForcesTotalAndPreservesPaginationFailures(t *testing.T)
 		if !errors.Is(err, sentinel) {
 			t.Fatalf("original transport cause lost: %v", err)
 		}
-		if err.Error() != "request result unknown after transport failure" || strings.Contains(err.Error(), canary) {
+		if err.Error() != "result incomplete: request_failed" || strings.Contains(err.Error(), canary) {
 			t.Fatalf("unsafe or unexpected public error: %q", err.Error())
 		}
 		if ctx.RemoteOutcome != execution.OutcomeUnknown {
 			t.Fatalf("remote outcome = %q, want unknown", ctx.RemoteOutcome)
 		}
-		if ctx.PaginationMeta != nil {
-			t.Fatalf("pagination metadata = %#v, want nil", ctx.PaginationMeta)
+		if ctx.Completeness == nil || ctx.Completeness.Complete || ctx.Completeness.PageCount != 0 || ctx.PaginationMeta["stopReason"] != "request_failed" {
+			t.Fatalf("pagination metadata = %#v, want incomplete request failure", ctx.PaginationMeta)
 		}
 	})
 }

@@ -36,7 +36,7 @@ func prepareFilteredEnvelopeFile(ctx *Context, group string, out any, env map[st
 		if targetPath == dataPath {
 			return &os.PathError{Op: "write filtered result", Path: path, Err: errors.New("output path conflicts with an existing data artifact")}
 		}
-		artifacts = append(artifacts, buildOutputArtifact(fileOut.Path, fileOut.Format))
+		artifacts = append(artifacts, fileArtifactDescriptor(fileOut))
 	}
 	env["artifacts"] = artifacts
 	return updateEnvelopeTotalBytes(env)

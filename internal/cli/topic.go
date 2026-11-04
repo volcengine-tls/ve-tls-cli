@@ -49,8 +49,7 @@ func topicList(ctx *Context, args []string) (any, error) {
 			},
 			PageAll: true,
 			LegacyPageAll: &legacyPageAllPolicy{
-				ListField:  "Topics",
-				ForceTotal: true,
+				ListField: "Topics",
 			},
 		})
 	}

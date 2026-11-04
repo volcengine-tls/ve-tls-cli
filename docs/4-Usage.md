@@ -138,6 +138,8 @@ volclog --profile default tool exec project.create \
 
 `--page-all` is a direct flag for `tool exec` and requests all pages of a paginated result.
 
+Inspect `summary.completeness` even when pages were merged: `summary.pagination.merged=true` means pages were accumulated, not that the result is complete. The service's `data.Total` is preserved; `summary.itemCount` is the number collected. Completeness reports `complete`, `stopReason`, `pageCount`, `itemCount`, `resumable`, and, when available, `next`. Reaching a page budget or a later request failure returns nonzero while retaining collected data. When `next` is present, invoke its `operationId` and `input` as an ordinary `tool exec` request with the same runtime selectors and no `--page-all` or enabled page-all context; `next.pageAll` is `false`.
+
 ## 4. `workflow exec`
 
 `workflow exec` runs a CLI-provided higher-level workflow by its `<group.command>` identity. Workflows wrap one or more tools with orchestration logic; the public API tool surface remains available through `tool exec`.
@@ -168,6 +170,8 @@ volclog --profile default workflow exec log.export \
 ```
 
 Before running a workflow, use `workflow list` or `workflow describe` to confirm that the workflow ID is available in the current installation.
+
+For SearchLogs, `ListOver` is a completion signal only for pure search. SQL/analysis results are complete only when `ResultStatus=complete`; `incomplete` and `time_out` are reported as incomplete, and `error` as a failure. Do not invent a SQL `OFFSET` to resume an incomplete response. An explicitly written SQL `LIMIT`/`OFFSET` is a separate query and does not guarantee a shared snapshot.
 
 ### 4.3 App resource-resolution workflows
 
@@ -266,7 +270,9 @@ By default, results are written to stdout. With `--output-mode file` (forced fil
 
 Automation must follow the output contract of the command surface it invokes; the fixed Chinese notice rule applies specifically to `raw`, `tool exec`, and `workflow exec`. Human log exports do not use the fixed notice.
 
-Exception: without `--jmes-filter`, default `workflow exec log.export` and `log.export-analysis` stream exported rows directly into the data artifact (JSON array for `--output json`, JSONL rows for `--output jsonl`) rather than writing an envelope. The data artifact is not an envelope and does not contain envelope metadata. stdout still contains only the fixed file notice with the data-artifact path. With `--jmes-filter`, these exports accumulate their results in memory before filtering and file delivery. For large exports, prefer unfiltered streaming or server-side field selection where available; client-side filtering does not reduce server scanning or network traffic. See [Advanced](6-Advanced.md) section 2 for details.
+Exception: without `--jmes-filter`, default `workflow exec log.export` and `log.export-analysis` stream exported rows directly into the data artifact (JSON array for `--output json`, JSONL rows for `--output jsonl`) rather than writing an envelope. The data artifact is not an envelope and does not contain envelope metadata. On success, stdout contains only the fixed file notice with the data-artifact path. With `--jmes-filter`, these exports accumulate their results in memory before filtering and file delivery. For large exports, prefer unfiltered streaming or server-side field selection where available; client-side filtering does not reduce server scanning or network traffic. See [Advanced](6-Advanced.md) section 2 for details.
+
+When a streamed export stops at its page budget or a later failure, it returns nonzero. When valid written rows can be retained, they go to a unique partial file without replacing the completed target. The failure envelope's artifact descriptor reports `completeness` and `metadataPath`; the latter points to the partial file's `.meta.json` sidecar. If metadata delivery itself fails, the retained data path is reported with the delivery error.
 
 `--output-file` is rejected for `tool`, `workflow`, and `raw`; use `--output-dir` for those groups. Other groups may use either `--output-file` or `--output-dir`.
 
@@ -331,9 +337,9 @@ Dynamic JSON is decoded and encoded with `json.Number` preserved across request 
 
 ### 8.5 Envelope fields and error output
 
-Success envelope: `status`, `action`, `requestId`, `summary` (`outputMode`, `deliveryMode`, `remoteOutcome`, `deliveryOutcome`, `dryRun`, `itemCount`, `totalBytes`, optional `pagination`/`tracePath`), `artifacts`, `data`, `error` (`null`).
+Success envelope: `status`, `action`, `requestId`, `summary` (`outputMode`, `deliveryMode`, `remoteOutcome`, `deliveryOutcome`, `dryRun`, `itemCount`, `totalBytes`, optional `pagination`/`completeness`/`tracePath`), `artifacts`, `data`, `error` (`null`).
 
-Error envelope: `status` (`failed`), `action`, `requestId`, `summary`, `artifacts` (empty), `data` (normally `null`, with progress for batch-ingest failures), `error` (`source`, `code`, `message`, `requestId`, `statusCode`, `kind`, `hint`, optional `details`).
+Error envelope: `status` (`failed`), `action`, `requestId`, `summary`, `artifacts`, `data`, `error` (`source`, `code`, `message`, `requestId`, `statusCode`, `kind`, `hint`, optional `details`). `data` is normally `null`, but may contain retained partial results or batch-ingest progress; `artifacts` may describe a retained partial file.
 
 Structured error envelopes are used by `raw`, all `tool` commands (including `list`/`describe`), all `workflow` commands (including `list`/`describe`), and the human-shortcut envelope groups (`project`, `topic`, `metric-topic`, `index`, `log`). Other non-envelope groups write flat JSON to stderr in this field order: `errorCode`, `errorMessage`, `requestId`, `statusCode`, `kind`, `hint`.
 

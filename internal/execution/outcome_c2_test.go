@@ -277,10 +277,15 @@ func TestPaginationOutcomeUsesCurrentAttempt(t *testing.T) {
 				result, err := NewExecutor(transport, nil).Execute(context.Background(), Invocation{
 					Operation: paginatedOperation(spec), Options: Options{PageAll: true},
 				})
-				if err == nil || result.RemoteOutcome != tc.outcome || result.RequestID != "req-current" ||
+				var incomplete *IncompleteError
+				if !errors.As(err, &incomplete) || ErrorOutcome(incomplete.Cause, OutcomeUnknown) != tc.outcome ||
+					result.RemoteOutcome != OutcomePartial || result.RequestID != "req-current" ||
 					result.StatusCode != tc.status || result.Pagination == nil || result.Pagination.PageCount != 1 ||
-					result.Pagination.Merged || len(transport.requests) != 2 {
+					!result.Pagination.Merged || result.Pagination.ItemCount != 1 || len(transport.requests) != 2 {
 					t.Fatalf("result=%#v err=%v requests=%d", result, err, len(transport.requests))
+				}
+				if rows := result.Data.(map[string]any)["Items"]; !reflect.DeepEqual(rows, []any{json.Number("1")}) {
+					t.Fatalf("partial rows = %#v", rows)
 				}
 			})
 		}
@@ -294,7 +299,7 @@ func TestPaginationOutcomeUsesCurrentAttempt(t *testing.T) {
 			}),
 			Options: Options{PageAll: true},
 		})
-		if err == nil || result.RemoteOutcome != OutcomeSuccess || result.RequestID != "req-current" ||
+		if err == nil || result.RemoteOutcome != OutcomePartial || result.RequestID != "req-current" ||
 			result.StatusCode != http.StatusOK || result.Pagination == nil || result.Pagination.PageCount != 1 {
 			t.Fatalf("result=%#v err=%v", result, err)
 		}

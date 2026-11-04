@@ -137,7 +137,7 @@ func TestLogSearchTableOutput(t *testing.T) {
 		if r.URL.Path != "/SearchLogs" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		_, _ = w.Write([]byte(`{"Logs":[{"level":"info","message":"started","service":"demo"}],"Count":1}`))
+		_, _ = w.Write([]byte(`{"Logs":[{"level":"info","message":"started","service":"demo"}],"Count":1,"ListOver":true}`))
 	})
 	ln, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {

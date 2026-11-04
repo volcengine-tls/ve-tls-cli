@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 )
 
 // classifyTypedOperationError prioritizes the outermost nonempty kind while
@@ -15,6 +18,14 @@ func classifyTypedOperationError(err error, requestID string, statusCode int, gr
 	typed, kind := firstTypedOperationError(err)
 	if typed == nil {
 		return errPayload{}, 0, false
+	}
+	if kind == "validation" && execution.ErrorOutcome(err, "") == execution.OutcomeNotSent {
+		if errors.Is(err, context.Canceled) {
+			return errPayload{RequestID: requestID, StatusCode: statusCode, Kind: "cancelled", ErrorCode: "RequestCancelled", Hint: "the request was cancelled before sending"}, 2, true
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return errPayload{RequestID: requestID, StatusCode: statusCode, Kind: "deadline", ErrorCode: "RequestDeadlineExceeded", Hint: "the deadline expired before sending"}, 2, true
+		}
 	}
 	payload := errPayload{RequestID: requestID, StatusCode: statusCode, Kind: kind}
 	if coded, ok := typed.(interface{ ErrorCode() string }); ok {
@@ -41,6 +52,8 @@ func classifyTypedOperationError(err error, requestID string, statusCode int, gr
 		payload.Hint = "verify the remote result first; do not automatically replay the write"
 	case "partial_failure":
 		payload.Hint = "inspect confirmed progress and verify the current batch before taking further action"
+	case "incomplete_result":
+		payload.Hint = "inspect summary.completeness; when resumable, reuse the runtime selectors and call next.operationId with next.input and page-all disabled"
 	case "output_failed":
 		code = 3
 		if delivery, ok := typed.(interface{ DeliveryExitCode() int }); ok {

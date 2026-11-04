@@ -58,7 +58,7 @@ Discover -> Describe -> Exec -> Read Result
    - `summary.remoteOutcome` and `summary.deliveryOutcome`, where present
    - `summary.deliveryMode`
    - the flat `error` object (when `status` is `"failed"`)
-   - business fields under `data` (when `status` is `"success"`)
+   - `summary.completeness`, then business fields under `data` and any `artifacts`; failed results may retain partial data or a partial artifact
 
 ## Reference Escalation
 
@@ -86,6 +86,9 @@ Discover -> Describe -> Exec -> Read Result
 - A dry-run `request_preview` masks known sensitive keys recursively, including sensitive `Contents`/`LogTags` key/value entries; malformed bodies are omitted and `redacted_fields` may list paths. This affects only the preview, not the wire request or body hash. Ordinary body strings are not guaranteed to be recognized as secrets.
 - Malformed JSON-like query values use `[unparseable query omitted]`; displayed endpoints omit user information, query, and fragment.
 - `summary.remoteOutcome` distinguishes `not_sent`, `unknown`, `success`, `failed`, and `partial`; `summary.deliveryOutcome` is independently `success` or `failed`. `accepted` is reserved for a future explicit asynchronous operation contract.
+- `summary.pagination.merged=true` means pages were accumulated, not that they are complete. Preserve service `data.Total`; `summary.itemCount` counts collected rows. Inspect `summary.completeness` (`complete`, `stopReason`, `pageCount`, `itemCount`, `resumable`, and optional `next`). A page-all/export budget or later failure returns nonzero with collected data retained when available.
+- If `next` is present, execute its `operationId` and `input` as a single `tool exec` request with the same runtime selectors and page-all disabled (`next.pageAll=false`); do not invent SQL `OFFSET` for continuation. SQL/analysis is complete only for `ResultStatus=complete`; `ListOver` applies to pure search. `incomplete`/`time_out` are incomplete and `error` is failure. User-authored SQL `LIMIT`/`OFFSET` calls are separate queries without a shared-snapshot guarantee.
+- A retained streamed partial uses a unique partial data file and `.meta.json` sidecar; inspect the artifact's `completeness` and `metadataPath`. The completed target is preserved. If sidecar delivery fails, use the retained data path and error.
 - For batch-ingest failures, inspect `summary.progress` or `data.progress`: `confirmedBatches`, `confirmedLogs`, zero-based exclusive `confirmedLogOffset`, one-based active `currentBatch`, `currentBatchOutcome`, and `lastConfirmedRequestId`. Only confirmed success responses count. HTTP 200 followed by a read or protocol failure is `unknown`; never treat an unknown batch as an automatically safe resume point. Current request ID and status refer to the current attempt, not an earlier confirmed batch.
 - Standard catalog JSON responses require HTTP 200 and valid JSON when the body is non-empty. Empty responses and special codec, `raw`, and protobuf paths retain their existing 2xx/text/empty/PB contracts. The CLI adds no retry here; existing `http.Client`/`Transport` and custom-transport behavior still applies.
 - A stdout write failure returns nonzero and reports a structured error to stderr on a best-effort basis; broken stdout cannot guarantee JSON. Exit codes 1, 2, and 3 keep their existing roles.
@@ -111,7 +114,7 @@ Use this table as the default first response after a failed envelope only after 
 | `error.kind=server` | Read `error.code`, `error.requestId`, and `remoteOutcome`; retry only when the operation contract and reconciled state permit it. |
 | `error.kind=config` | Run `volclog doctor` for host-side configuration checks, then inspect the reported runtime issue. |
 | `error.kind=unknown` | Read `error.hint`, `error.message`, and `error.details`; reconcile before repeating a write. |
-| `ResultStatus=incomplete` | Narrow the time window and rerun before trusting counts or emptiness. |
+| `ResultStatus=incomplete` / `time_out` / `error` | Inspect completeness and the error; do not treat partial rows or an empty result as complete. Narrow the time window when appropriate. |
 
 `volclog doctor` checks host/runtime configuration such as credentials, endpoint, and local setup. It does not replace `describe`, and it does not validate business query semantics.
 

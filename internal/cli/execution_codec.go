@@ -22,6 +22,9 @@ func newToolExecutionCodecRegistry(ctx *Context) (*execution.CodecRegistry, erro
 	if err != nil {
 		return nil, err
 	}
+	if err := registry.Register(contract.CodecJSON, searchAwareJSONCodec{context: ctx, fallback: fallback}); err != nil {
+		return nil, err
+	}
 	for id, profile := range map[contract.CodecID]specialIOProfile{
 		contract.CodecPutLogs:     specialIOProfilePutLogs,
 		contract.CodecWebTracks:   specialIOProfileWebTracks,

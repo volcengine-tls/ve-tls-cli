@@ -25,6 +25,7 @@ func TestLogExportAnalysis_DefaultOutputIsJSONLRows(t *testing.T) {
     "Data": [{"k":"a","v":1},{"k":"b","v":2}],
     "Type": {}
   },
+  "ResultStatus": "complete",
   "ListOver": true,
   "Context": ""
 }`))
@@ -92,6 +93,7 @@ func TestLogExportAnalysis_RespectsExplicitOutputJSON(t *testing.T) {
     "Data": [{"k":"a"}],
     "Type": {}
   },
+  "ResultStatus": "complete",
   "ListOver": true,
   "Context": ""
 }`))
@@ -144,6 +146,7 @@ func TestLogExportAnalysis_RejectsArrayRows(t *testing.T) {
     "Data": [["a", 1]],
     "Type": {}
   },
+  "ResultStatus": "complete",
   "ListOver": true,
   "Context": ""
 }`))

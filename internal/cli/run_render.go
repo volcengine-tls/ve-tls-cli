@@ -42,11 +42,18 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 			_, _ = stdout.Write([]byte(ue.Text))
 			return ue.ExitCode
 		}
-		if emitsStructuredEnvelope(group, rest) {
+		if emitsStructuredEnvelope(group, rest) || ctx.Completeness != nil {
 			if strings.TrimSpace(ctx.TraceDir) != "" {
 				_ = ctx.initTrace()
 			}
 			env := buildAPIErrorEnvelope(ctx, group, err, outputMode)
+			if prepared, deliveryErr := prepareIncompleteDelivery(ctx, group, env); deliveryErr != nil {
+				failed := buildAPIErrorEnvelope(ctx, group, outputFailure(ctx, deliveryErr, "artifact", 2), outputMode)
+				failed["data"] = env["data"]
+				return writeStructuredError(stdout, stderr, outputFailure(ctx, deliveryErr, "artifact", 2), ctx.RequestID, ctx.StatusCode, group, failed)
+			} else {
+				env = prepared
+			}
 			if ctx.Filter != "" && filterTargetsEnvelope(group, rest) && outputMode != "file" {
 				filtered, err2 := applyEnvelopeFilterResult(env, ctx.Filter)
 				if err2 != nil {

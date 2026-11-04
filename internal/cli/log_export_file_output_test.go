@@ -29,6 +29,7 @@ func TestLogExportAnalysis_OutputModeFileWritesRowsToJSONL(t *testing.T) {
     "Data": [{"k":"a","v":1},{"k":"b","v":2}],
     "Type": {}
   },
+  "ResultStatus": "complete",
   "ListOver": true,
   "Context": ""
 }`))
@@ -108,6 +109,7 @@ func TestLogExportAnalysis_FileModeAvoidsReturningInMemoryRows(t *testing.T) {
     "Data": [{"k":"a"},{"k":"b"}],
     "Type": {}
   },
+  "ResultStatus": "complete",
   "ListOver": true,
   "Context": ""
 }`))

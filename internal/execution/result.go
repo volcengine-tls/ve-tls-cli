@@ -56,10 +56,10 @@ type Result struct {
 }
 
 type PaginationResult struct {
-	Mode      string `json:"mode"`
-	PageCount int    `json:"pageCount"`
-	PageSize  int    `json:"pageSize,omitempty"`
-	Merged    bool   `json:"merged"`
+	Completeness
+	Mode     string `json:"mode"`
+	PageSize int    `json:"pageSize,omitempty"`
+	Merged   bool   `json:"merged"`
 }
 
 type DryRunPaginationPlan struct {

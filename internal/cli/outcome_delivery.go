@@ -15,6 +15,7 @@ func (c *Context) beginRequest() {
 	c.RequestID = ""
 	c.StatusCode = 0
 	c.RemoteOutcome = execution.OutcomeNotSent
+	c.Completeness = nil
 }
 
 func (c *Context) recordDecodedResult(data any, err error) (any, error) {
@@ -76,6 +77,20 @@ func augmentOutcomeSummary(summary map[string]any, ctx *Context, err error) {
 		if ctx.Progress != nil {
 			summary["progress"] = cloneOutcomeMap(ctx.Progress)
 		}
+		if ctx.Completeness != nil {
+			summary["completeness"] = ctx.Completeness
+			summary["itemCount"] = ctx.Completeness.ItemCount
+		}
+		if ctx.PaginationMeta != nil {
+			summary["pagination"] = ctx.PaginationMeta
+		}
+	}
+	var incomplete interface {
+		CompletionState() *execution.Completeness
+	}
+	if errors.As(err, &incomplete) && incomplete.CompletionState() != nil {
+		summary["completeness"] = incomplete.CompletionState()
+		summary["itemCount"] = incomplete.CompletionState().ItemCount
 	}
 }
 
@@ -145,6 +160,8 @@ func writeBrokenStdout(stderr io.Writer, cause error, env map[string]any) int {
 			ctx.DryRun, _ = summary["dryRun"].(bool)
 			ctx.TargetSnapshot, _ = summary["target"].(map[string]any)
 			ctx.Progress, _ = summary["progress"].(map[string]any)
+			ctx.Completeness = completenessValue(summary["completeness"])
+			ctx.PaginationMeta, _ = summary["pagination"].(map[string]any)
 		}
 		if original, ok := env["error"].(map[string]any); ok {
 			switch status := original["statusCode"].(type) {

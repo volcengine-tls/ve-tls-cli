@@ -123,8 +123,7 @@ func projectList(ctx *Context, args []string) (any, error) {
 			},
 			PageAll: true,
 			LegacyPageAll: &legacyPageAllPolicy{
-				ListField:  "Projects",
-				ForceTotal: true,
+				ListField: "Projects",
 			},
 		})
 	}

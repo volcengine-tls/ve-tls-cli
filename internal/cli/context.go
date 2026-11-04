@@ -45,6 +45,7 @@ type ResponseState struct {
 	RemoteOutcome  string
 	TargetSnapshot map[string]any
 	Progress       map[string]any
+	Completeness   *execution.Completeness
 }
 
 type configState struct {
@@ -285,10 +286,10 @@ func (c *Context) Do(method, path string, query map[string]string, header map[st
 		return nil, err
 	}
 	if out, handled, err := decodeSpecialIOResponse(meta, state, resp); handled {
-		return c.recordDecodedResult(out, err)
+		return c.recordSearchResult(method, path, header, body, out, err)
 	}
 	out, err := decodeResponse(resp)
-	return c.recordDecodedResult(out, err)
+	return c.recordSearchResult(method, path, header, body, out, err)
 }
 
 func (c *Context) buildDryRunPlan(method, path string, query map[string]string, header map[string]string, body []byte, previewBody []byte, previewFormat requestFormat, specialHandled bool) map[string]any {

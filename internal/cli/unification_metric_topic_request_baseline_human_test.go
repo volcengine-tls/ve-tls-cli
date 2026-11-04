@@ -304,7 +304,7 @@ func captureMetricTopicListAllFirstRequestBaseline(t *testing.T, args []string) 
 		t.Fatalf("metric-topic list --all response has type %T, want object", out)
 	}
 	topics, ok := response["Topics"].([]any)
-	if !ok || len(topics) != 0 || response["Total"] != 0 {
+	if !ok || len(topics) != 0 || response["Total"] != json.Number("0") {
 		t.Fatalf("metric-topic list --all response mismatch: %#v", response)
 	}
 	if len(transport.requests) != 1 {

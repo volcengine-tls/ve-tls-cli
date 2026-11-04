@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
@@ -50,48 +51,109 @@ func logExport(ctx *Context, args []string) (any, error) {
 	}
 	delete(req, "__max_pages")
 
+	if ctx.DryRun {
+		body, err := util.MustJSON(req)
+		if err != nil {
+			return nil, err
+		}
+		return ctx.Do("POST", "/SearchLogs", nil, nil, body)
+	}
+
 	streamWriter, err := maybeNewStreamedLogFileWriter(ctx, "log")
 	if err != nil {
-		return nil, err
+		return nil, postExecutionFailure(ctx, err, "artifact")
 	}
 	if streamWriter != nil {
 		defer streamWriter.abort()
 	}
 
-	var all []any
+	result := newLogExportResult(ctx, streamWriter)
+	pageReq := cloneLogExportRequest(req)
+	currentPageContinuation := func() *execution.Continuation {
+		cursor, ok := pageReq["Context"].(string)
+		if result.state.PageCount == 0 || !ok || strings.TrimSpace(cursor) == "" {
+			return nil
+		}
+		return logExportContinuation(pageReq, cursor)
+	}
+	seen := map[string]bool{}
+	if initial, ok := pageReq["Context"].(string); ok && strings.TrimSpace(initial) != "" {
+		seen[initial] = true
+	}
 	for page := 0; page < maxPages; page++ {
-		body, err := util.MustJSON(req)
+		body, err := util.MustJSON(pageReq)
 		if err != nil {
-			return nil, err
+			return result.fail("request_failed", err, "", "", nil)
 		}
-		out, err := ctx.Do("POST", "/SearchLogs", nil, nil, body)
-		if err != nil {
-			return nil, err
-		}
-		m, ok := out.(map[string]any)
-		if !ok {
-			return nil, errors.New("unexpected search response")
-		}
-		if logs, ok := m["Logs"].([]any); ok {
-			if streamWriter != nil {
-				if err := streamWriter.WriteRows(logs); err != nil {
-					return nil, err
-				}
-			} else {
-				all = append(all, logs...)
+		out, callErr := ctx.Do("POST", "/SearchLogs", nil, nil, body)
+		m, statusErr := logExportResponse(out, callErr)
+		if m == nil {
+			if callErr == nil {
+				callErr = invalidLogExportResponse("unexpected search response")
 			}
+			return result.fail("request_failed", callErr, "", "", currentPageContinuation())
 		}
-		listOver, _ := m["ListOver"].(bool)
-		nextCtx, _ := m["Context"].(string)
-		if listOver || strings.TrimSpace(nextCtx) == "" {
-			break
+		status, _ := m["ResultStatus"].(string)
+		status = strings.ToLower(strings.TrimSpace(status))
+		if raw, exists := m["Logs"]; exists && raw != nil {
+			logs, ok := raw.([]any)
+			if !ok {
+				if status != "error" {
+					return result.fail("request_failed", invalidLogExportResponse("invalid Logs"), "", "", currentPageContinuation())
+				}
+				logs = nil
+			}
+			result.state.PageCount++
+			if err := result.writeRows(logs); err != nil {
+				return result.outputFailed(err)
+			}
+		} else {
+			result.state.PageCount++
 		}
-		req["Context"] = nextCtx
+		next, _ := m["Context"].(string)
+		hasNext := strings.TrimSpace(next) != "" && !seen[next]
+		var continuation *execution.Continuation
+		if hasNext {
+			continuation = logExportContinuation(req, next)
+		}
+		switch status {
+		case "incomplete":
+			return result.fail("result_incomplete", callErr, "", "", continuation)
+		case "time_out":
+			return result.fail("result_time_out", callErr, "", "", continuation)
+		case "error":
+			return result.fail("result_error", callErr, "server", "SearchResultError", nil)
+		case "", "complete":
+		default:
+			return result.fail("unknown_completion", callErr, "", "", nil)
+		}
+		if statusErr != nil && statusErr.State != nil && statusErr.State.StopReason != "more_results" && statusErr.State.StopReason != "list_over" {
+			return result.fail(statusErr.State.StopReason, callErr, statusErr.Kind, statusErr.Code, nil)
+		}
+		if callErr != nil && statusErr == nil {
+			return result.fail("request_failed", callErr, "", "", nil)
+		}
+		listOver, hasListOver := m["ListOver"].(bool)
+		if listOver {
+			return result.complete("list_over")
+		}
+		if strings.TrimSpace(next) == "" {
+			if hasListOver {
+				return result.fail("missing_cursor", nil, "", "", nil)
+			}
+			return result.fail("unknown_completion", nil, "", "", nil)
+		}
+		if !hasNext {
+			return result.fail("cursor_stalled", nil, "", "", nil)
+		}
+		if page+1 == maxPages {
+			return result.fail("max_pages", nil, "", "", continuation)
+		}
+		seen[next] = true
+		pageReq = cloneLogExportRequest(req)
+		pageReq["Context"] = next
 	}
-	if streamWriter != nil {
-		return streamWriter.Commit()
-	}
-	return all, nil
+	return result.fail("unknown_completion", nil, "", "", nil)
 }
 
 func logExportAnalysis(ctx *Context, args []string) (any, error) {
@@ -106,49 +168,82 @@ func logExportAnalysis(ctx *Context, args []string) (any, error) {
 		return nil, errors.New("log export-analysis requires analysis query (e.g. '*|select ...'); use log export for pure search")
 	}
 
+	if ctx.DryRun {
+		body, err := util.MustJSON(req)
+		if err != nil {
+			return nil, err
+		}
+		return ctx.Do("POST", "/SearchLogs", nil, nil, body)
+	}
+
 	streamWriter, err := maybeNewStreamedLogFileWriter(ctx, "log")
 	if err != nil {
-		return nil, err
+		return nil, postExecutionFailure(ctx, err, "artifact")
 	}
 	if streamWriter != nil {
 		defer streamWriter.abort()
 	}
 
+	result := newLogExportResult(ctx, streamWriter)
 	body, err := util.MustJSON(req)
 	if err != nil {
-		return nil, err
+		return result.fail("request_failed", err, "", "", nil)
 	}
-	out, err := ctx.Do("POST", "/SearchLogs", nil, nil, body)
-	if err != nil {
-		return nil, err
+	out, callErr := ctx.Do("POST", "/SearchLogs", nil, nil, body)
+	m, statusErr := logExportResponse(out, callErr)
+	if m == nil {
+		if callErr == nil {
+			callErr = invalidLogExportResponse("unexpected search response")
+		}
+		return result.fail("request_failed", callErr, "", "", nil)
 	}
-	m, ok := out.(map[string]any)
-	if !ok {
-		return nil, errors.New("unexpected search response")
-	}
+	status, _ := m["ResultStatus"].(string)
+	status = strings.ToLower(strings.TrimSpace(status))
 	ar, ok := m["AnalysisResult"].(map[string]any)
-	if !ok {
-		return nil, errors.New("missing AnalysisResult (use log export for Logs)")
+	if !ok && status == "complete" {
+		return result.fail("request_failed", invalidLogExportResponse("missing AnalysisResult (use log export for Logs)"), "", "", nil)
 	}
-	data, _ := ar["Data"].([]any)
-	var rows []map[string]any
-	for _, r := range data {
-		row, ok := r.(map[string]any)
+	var data []any
+	if raw, exists := ar["Data"]; exists && raw != nil {
+		data, ok = raw.([]any)
 		if !ok {
-			return nil, errors.New("invalid AnalysisResult.Data row")
-		}
-		if streamWriter != nil {
-			if err := streamWriter.WriteObjectRows([]map[string]any{row}); err != nil {
-				return nil, err
+			if status != "error" {
+				return result.fail("request_failed", invalidLogExportResponse("invalid AnalysisResult.Data"), "", "", nil)
 			}
-		} else {
-			rows = append(rows, row)
+			data = nil
 		}
 	}
-	if streamWriter != nil {
-		return streamWriter.Commit()
+	result.state.PageCount++
+	for _, rawRow := range data {
+		row, ok := rawRow.(map[string]any)
+		if !ok {
+			if status == "error" {
+				continue
+			}
+			return result.fail("request_failed", invalidLogExportResponse("invalid AnalysisResult.Data row"), "", "", nil)
+		}
+		if err := result.writeRows([]any{row}); err != nil {
+			return result.outputFailed(err)
+		}
 	}
-	return rows, nil
+	switch status {
+	case "complete":
+		if callErr == nil {
+			return result.complete("result_complete")
+		}
+	case "incomplete":
+		return result.fail("result_incomplete", callErr, "", "", nil)
+	case "time_out":
+		return result.fail("result_time_out", callErr, "", "", nil)
+	case "error":
+		return result.fail("result_error", callErr, "server", "SearchResultError", nil)
+	default:
+		return result.fail("unknown_completion", callErr, "", "", nil)
+	}
+	if statusErr != nil && statusErr.State != nil {
+		return result.fail(statusErr.State.StopReason, callErr, statusErr.Kind, statusErr.Code, nil)
+	}
+	return result.fail("request_failed", callErr, "", "", nil)
 }
 
 func parseSearchLogsArgs(args []string) (map[string]any, error) {
@@ -270,6 +365,9 @@ func parseSearchLogsArgsWithDefaultLimit(args []string, defaultLimit int) (map[s
 			v, err := strconv.Atoi(args[1])
 			if err != nil {
 				return nil, err
+			}
+			if v <= 0 {
+				return nil, errors.New("--max-pages must be positive")
 			}
 			maxPages = v
 			args = args[2:]

@@ -166,24 +166,28 @@ func TestToolDryRunRuntimeViewDoesNotRetrieveDynamicCredentials(t *testing.T) {
 	}
 }
 
-func TestApplyToolExecutionResultOnlyPublishesSuccessfulMergedPagination(t *testing.T) {
+func TestApplyToolExecutionResultPreservesIncompletePagination(t *testing.T) {
 	ctx := &Context{}
 	ctx.PaginationMeta = map[string]any{"stale": true}
 	applyToolExecutionResult(ctx, execution.Result{
 		RequestID:  "req-ok",
 		StatusCode: 200,
 		Pagination: &execution.PaginationResult{
-			Mode:      "page_all",
-			PageCount: 2,
-			PageSize:  50,
-			Merged:    true,
+			Mode:         "page_all",
+			Completeness: execution.Completeness{PageCount: 2, ItemCount: 75, Complete: true, StopReason: "total_reached"},
+			PageSize:     50,
+			Merged:       true,
 		},
 	})
 	want := map[string]any{
-		"mode":      "page_all",
-		"pageCount": 2,
-		"pageSize":  50,
-		"merged":    true,
+		"mode":       "page_all",
+		"pageCount":  2,
+		"pageSize":   50,
+		"merged":     true,
+		"complete":   true,
+		"stopReason": "total_reached",
+		"itemCount":  75,
+		"resumable":  false,
 	}
 	if !mapsEqualJSON(ctx.PaginationMeta, want) {
 		t.Fatalf("pagination=%#v, want %#v", ctx.PaginationMeta, want)
@@ -191,13 +195,13 @@ func TestApplyToolExecutionResultOnlyPublishesSuccessfulMergedPagination(t *test
 
 	applyToolExecutionResult(ctx, execution.Result{
 		Pagination: &execution.PaginationResult{
-			Mode:      "page_all",
-			PageCount: 1,
-			Merged:    false,
+			Mode:         "page_all",
+			Completeness: execution.Completeness{PageCount: 1, ItemCount: 50, StopReason: "missing_cursor"},
+			Merged:       false,
 		},
 	})
-	if ctx.PaginationMeta != nil {
-		t.Fatalf("failed pagination metadata=%#v, want nil", ctx.PaginationMeta)
+	if ctx.PaginationMeta == nil || ctx.PaginationMeta["complete"] != false || ctx.PaginationMeta["itemCount"] != 50 || ctx.Completeness == nil || ctx.Completeness.Complete {
+		t.Fatalf("failed pagination metadata lost: %#v", ctx.PaginationMeta)
 	}
 	applyToolExecutionResult(ctx, execution.Result{Plan: &execution.DryRunPlan{Type: "plan"}})
 	if ctx.PaginationMeta != nil {

@@ -130,8 +130,7 @@ func collectorList(ctx *Context, args []string) (any, error) {
 			},
 			PageAll: true,
 			LegacyPageAll: &legacyPageAllPolicy{
-				ListField:  "Rules",
-				ForceTotal: true,
+				ListField: "Rules",
 			},
 		})
 	}

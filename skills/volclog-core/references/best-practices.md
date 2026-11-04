@@ -79,12 +79,13 @@ Use this section to interpret result semantics after the surface has already bee
 - Use `log.search` for interactive analysis, small previews, and quick iteration.
 - `log.describe-histogram-v1` is for time-distribution preview and total-hit estimation only for pure search queries.
 - `log.export-analysis` uses the same SearchLogs SQL/analysis `Query` syntax as `log.search`; it does not add a new server-side analysis API or another pagination model.
-- Choose `log.export-analysis` when the user needs the full analysis row set written as an export file for offline reading, downstream processing, or token-safe handoff.
+- Choose `log.export-analysis` to write analysis rows to an export file for offline reading, downstream processing, or token-safe handoff; inspect completeness rather than assuming all rows were returned.
 - Stay on `log.search` when the user is still validating SQL, iterating on the query, or only needs a small interactive preview.
 - `raw --input` is only a compatibility alias for `--body`; it does not do `tool exec` style smart mapping for GET requests.
 - `HitCount` is only the count returned in the current `SearchLogs` response window.
 - `Histogram.TotalCount` is the better whole-window total only for pure search when histogram is the correct surface.
-- `ResultStatus=incomplete` means the service returned only a partial scan. This can happen for SearchLogs in both search and analysis mode, so narrow the time range and rerun before trusting counts, rows, empty results, or bucket distribution.
+- For SearchLogs, `ResultStatus=incomplete` or `time_out` means incomplete data and `error` means failure. SQL/analysis is complete only with `ResultStatus=complete`; `ListOver` applies to pure search. Inspect `summary.completeness` before trusting counts, rows, empty results, or bucket distribution.
+- Explicit SQL `LIMIT`/`OFFSET` calls are independent queries without a shared-snapshot guarantee; do not invent an offset to resume an incomplete response.
 - For search+analysis or pure analysis queries, do not use histogram as the analysis row count. Use SQL such as `select count(*)` when the user asks for analysis totals.
 
 ## Error Object
@@ -174,7 +175,7 @@ When the command already failed, follow the smallest next action:
 | `IndexNotExists` | Inspect or create the index, then wait for readiness before retrying search. |
 | `TopicAlreadyExist` | Re-list topics in the target project, then switch to get or modify instead of repeating create. |
 | `ProjectAlreadyExist` | Re-list projects, then switch to get or modify instead of repeating create. |
-| `ResultStatus=incomplete` | Narrow the time range and rerun before trusting counts, rows, or empty results. |
+| `ResultStatus=incomplete` / `time_out` / `error` | Inspect completeness and the error; do not present partial rows as complete. |
 | `search returned empty after write` | Confirm selector, topic, time range, and index readiness before widening the query. |
 | `huge stdout payload` | Rerun with `--output-mode file --output-dir <writable-dir>`, or reduce stdout with `--jmes-filter` or `execution.projection`. |
 | `unsupported_feature` | Remove the unsupported capability such as `page.all`, or switch to a surface whose contract explicitly supports it. |
@@ -182,13 +183,13 @@ When the command already failed, follow the smallest next action:
 
 ## Known Traps
 
-- `page-all-is-not-compression`: `page.all` increases completeness and payload size; combine it with file delivery instead of expecting smaller stdout.
+- `page-all-is-not-compression`: `page.all` accumulates pages and can increase payload size; `merged` does not prove completeness. Check `summary.completeness` and retained data, including on nonzero exit.
 - `jmes-filter-and-projection-have-different-scope`: use `summary.*` or `data.*` under `--jmes-filter`, and raw keys only under `execution.projection`.
 - `jmes-filter-null-is-still-success`: literal `null` means the selected field exists and is null; that is not the same as `filter matched no value`.
 - `jmes-filter-file-contains-selected-json`: selected values are JSON documents; use the stdout notice to locate the file and do not assume `summary` remains in its content.
 - `deliverymode-belongs-to-runtime`: choose `tool / workflow / raw` first; when the envelope is retained, read `summary.deliveryMode` from the actual result.
 - `hitcount-is-not-whole-window-total`: `HitCount` is only the current response window, not the whole-window total.
-- `incomplete-means-partial-scan`: treat `ResultStatus=incomplete` as partial evidence and rerun on a narrower time range.
+- `incomplete-means-partial-scan`: treat `ResultStatus=incomplete` or `time_out` as partial evidence and `error` as failure.
 - `workflow-ids-are-not-tool-ids`: `log.ingest`, `log.export`, and `log.export-analysis` belong to `workflow`, not `tool`.
 - `ingest-is-not-tool-put`: use `workflow log.ingest` for local file or stdin import, and `tool log.put` only for the public PutLogs contract.
 - `shortcuts-are-human-first`: human shortcut groups are for humans; agent flows should stay on `tool / workflow / raw`.

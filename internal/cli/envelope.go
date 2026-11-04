@@ -42,7 +42,7 @@ func buildAPIEnvelope(ctx *Context, group string, out any, outputMode string, ou
 			return env, nil
 		}
 		if fileOut, ok := out.(fileArtifactOutput); ok {
-			env["artifacts"] = []map[string]any{buildOutputArtifact(fileOut.Path, fileOut.Format)}
+			env["artifacts"] = []map[string]any{fileArtifactDescriptor(fileOut)}
 			if err := updateEnvelopeTotalBytes(env); err != nil {
 				return nil, err
 			}
@@ -233,7 +233,7 @@ func buildAPIErrorEnvelope(ctx *Context, group string, err error, outputMode str
 	if errors.As(err, &staged) && staged.FailureStage() != "" {
 		errObj["stage"] = staged.FailureStage()
 	}
-	if kind == "result_unknown" || kind == "partial_failure" || kind == "output_failed" || kind == "protocol" {
+	if kind == "result_unknown" || kind == "partial_failure" || kind == "output_failed" || kind == "protocol" || kind == "incomplete_result" {
 		errObj["safeToReplay"] = false
 	}
 	if kind == "throttled" {
@@ -244,6 +244,15 @@ func buildAPIErrorEnvelope(ctx *Context, group string, err error, outputMode str
 		errObj["safeToReplay"] = false
 	}
 	var data any
+	artifacts := []map[string]any{}
+	var partialArtifact interface {
+		FailureArtifact() (fileArtifactOutput, bool)
+	}
+	if errors.As(err, &partialArtifact) {
+		if file, ok := partialArtifact.FailureArtifact(); ok {
+			artifacts = append(artifacts, fileArtifactDescriptor(file))
+		}
+	}
 	var progressData interface{ FailureData() any }
 	if errors.As(err, &progressData) {
 		data = progressData.FailureData()
@@ -258,7 +267,7 @@ func buildAPIErrorEnvelope(ctx *Context, group string, err error, outputMode str
 		"action":    normalizeAPIAction(ctx.Action, group),
 		"requestId": requestID,
 		"summary":   summary,
-		"artifacts": []map[string]any{},
+		"artifacts": artifacts,
 		"data":      data,
 		"error":     errObj,
 	}

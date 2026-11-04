@@ -39,13 +39,25 @@ func applyToolExecutionResult(ctx *Context, result execution.Result) {
 		ctx.RemoteOutcome = execution.OutcomeNotSent
 	}
 	ctx.PaginationMeta = nil
-	if result.Pagination == nil || !result.Pagination.Merged || result.Pagination.PageCount <= 0 {
+	if result.Pagination == nil {
+		if result.Plan != nil {
+			ctx.Completeness = nil
+		}
 		return
 	}
+	state := result.Pagination.Completeness
+	ctx.Completeness = &state
 	meta := map[string]any{
-		"mode":      result.Pagination.Mode,
-		"pageCount": result.Pagination.PageCount,
-		"merged":    true,
+		"mode":       result.Pagination.Mode,
+		"pageCount":  result.Pagination.PageCount,
+		"merged":     result.Pagination.Merged,
+		"complete":   state.Complete,
+		"stopReason": state.StopReason,
+		"itemCount":  state.ItemCount,
+		"resumable":  state.Resumable,
+	}
+	if state.Next != nil {
+		meta["next"] = state.Next
 	}
 	if result.Pagination.PageSize > 0 {
 		meta["pageSize"] = result.Pagination.PageSize

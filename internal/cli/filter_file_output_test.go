@@ -399,7 +399,7 @@ func TestFilteredFileOutputWorkflowExports(t *testing.T) {
 			name:      "log_export_analysis",
 			workflow:  "log.export-analysis",
 			input:     `{"TopicId":"tid","Query":"*|select 1","StartTime":1710374400000,"EndTime":1710378000000}`,
-			responses: []string{`{"Analysis":true,"AnalysisResult":{"Schema":["k","v"],"Data":[{"k":"a","v":1},{"k":"b","v":2}],"Type":{}},"ListOver":true,"Context":""}`},
+			responses: []string{`{"Analysis":true,"AnalysisResult":{"Schema":["k","v"],"Data":[{"k":"a","v":1},{"k":"b","v":2}],"Type":{}},"ResultStatus":"complete","ListOver":true,"Context":""}`},
 			want:      `[{"k":"b","v":2}]`,
 		},
 	}

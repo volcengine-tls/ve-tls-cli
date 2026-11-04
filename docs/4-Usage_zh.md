@@ -138,6 +138,8 @@ volclog --profile default tool exec project.create \
 
 `--page-all` 是 `tool exec` 的直接标志，用于请求分页结果的所有页。
 
+即使已经合并页面，也要检查 `summary.completeness`：`summary.pagination.merged=true` 只表示已累积页面，不代表结果完整。服务端的 `data.Total` 保持原值，`summary.itemCount` 表示已收集条数。完整性包含 `complete`、`stopReason`、`pageCount`、`itemCount`、`resumable`，以及可用时的 `next`。触及页数预算或后续请求失败时命令返回非零，并保留已收集数据。存在 `next` 时，复用相同运行时选择器，以其 `operationId` 和 `input` 发起普通 `tool exec` 单页调用，不传 `--page-all`，也不在上下文中启用 page-all；`next.pageAll` 为 `false`。
+
 ## 4. `workflow exec`
 
 `workflow exec` 按 `<group.command>` 标识运行 CLI 提供的高层工作流。工作流用编排逻辑封装一个或多个工具；公共 API 工具面仍可通过 `tool exec` 使用。
@@ -168,6 +170,8 @@ volclog --profile default workflow exec log.export \
 ```
 
 在运行工作流之前，请使用 `workflow list` 或 `workflow describe` 确认该工作流 ID 在当前安装中可用。
+
+SearchLogs 的 `ListOver` 只适用于纯检索的结束判断；SQL/分析结果只有 `ResultStatus=complete` 才完整。`incomplete` 和 `time_out` 会报告为不完整，`error` 会报告为失败。不要为了续取不完整响应而凭空构造 SQL `OFFSET`；用户显式编写 SQL `LIMIT`/`OFFSET` 的每次调用都是独立查询，不保证同一快照。
 
 ### 4.3 App 资源解析工作流
 
@@ -266,7 +270,9 @@ volclog --profile default raw --method POST --path /CreateProject \
 
 自动化必须遵循其所调用命令面的输出契约；固定的中文通知规则专门适用于 `raw`、`tool exec` 和 `workflow exec`。人类日志导出不使用固定通知。
 
-例外：不设置 `--jmes-filter` 时，默认的 `workflow exec log.export` 和 `log.export-analysis` 将导出的行直接流式写入数据工件（对于 `--output json` 为 JSON 数组，对于 `--output jsonl` 为 JSONL 行），而不是写入信封。数据工件不是信封，也不包含信封元数据。标准输出仍然只包含带有数据工件路径的固定文件通知。设置 `--jmes-filter` 后，这些导出会在内存中累积结果，再过滤并写入文件。大导出应优先使用无过滤的流式导出，或在支持时使用服务端字段选择；客户端过滤不会减少服务端扫描或网络流量。详见 [高级](6-Advanced_zh.md) 第 2 节。
+例外：不设置 `--jmes-filter` 时，默认的 `workflow exec log.export` 和 `log.export-analysis` 将导出的行直接流式写入数据工件（对于 `--output json` 为 JSON 数组，对于 `--output jsonl` 为 JSONL 行），而不是写入信封。数据工件不是信封，也不包含信封元数据。成功时标准输出只包含带有数据工件路径的固定文件通知。设置 `--jmes-filter` 后，这些导出会在内存中累积结果，再过滤并写入文件。大导出应优先使用无过滤的流式导出，或在支持时使用服务端字段选择；客户端过滤不会减少服务端扫描或网络流量。详见 [高级](6-Advanced_zh.md) 第 2 节。
+
+流式导出触及页数预算或后续失败时返回非零；有效写入的行可保留时，会存入唯一的部分文件，不会替换完整目标文件。错误信封中的工件描述包含 `completeness` 和 `metadataPath`，后者指向部分文件的 `.meta.json` 元数据；若元数据交付本身失败，则报告保留的数据路径和交付错误。
 
 `--output-file` 对 `tool`、`workflow` 和 `raw` 是被拒绝的；对这些组使用 `--output-dir`。其他组可以使用 `--output-file` 或 `--output-dir`。
 
@@ -331,9 +337,9 @@ volclog --profile default --output-dir ./out --jmes-filter 'data' \
 
 ### 8.5 信封字段与错误输出
 
-成功信封：`status`、`action`、`requestId`、`summary`（`outputMode`、`deliveryMode`、`remoteOutcome`、`deliveryOutcome`、`dryRun`、`itemCount`、`totalBytes`、可选的 `pagination`/`tracePath`）、`artifacts`、`data`、`error`（`null`）。
+成功信封：`status`、`action`、`requestId`、`summary`（`outputMode`、`deliveryMode`、`remoteOutcome`、`deliveryOutcome`、`dryRun`、`itemCount`、`totalBytes`、可选的 `pagination`/`completeness`/`tracePath`）、`artifacts`、`data`、`error`（`null`）。
 
-错误信封：`status`（`failed`）、`action`、`requestId`、`summary`、`artifacts`（空）、`data`（通常为 `null`，批量写入失败时包含进度）、`error`（`source`、`code`、`message`、`requestId`、`statusCode`、`kind`、`hint`、可选的 `details`）。
+错误信封：`status`（`failed`）、`action`、`requestId`、`summary`、`artifacts`、`data`、`error`（`source`、`code`、`message`、`requestId`、`statusCode`、`kind`、`hint`、可选的 `details`）。`data` 通常为 `null`，也可能包含保留的部分结果或批量写入进度；`artifacts` 可能描述保留的部分文件。
 
 结构化错误信封由 `raw`、所有 `tool` 命令（包括 `list`/`describe`）、所有 `workflow` 命令（包括 `list`/`describe`）以及人类快捷方式信封组（`project`、`topic`、`metric-topic`、`index`、`log`）使用。其他非信封组以扁平 JSON 写入标准错误，字段顺序如下：`errorCode`、`errorMessage`、`requestId`、`statusCode`、`kind`、`hint`。
 

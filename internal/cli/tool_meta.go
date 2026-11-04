@@ -409,7 +409,10 @@ func buildToolDescribeCommon(operation contract.Operation) (toolDescribeCommon, 
 	verb := semanticToolVerb(operation)
 	usageNotes := []any{}
 	if supportsAll {
-		usageNotes = append(usageNotes, "execution.page.all increases completeness and may increase payload size; pair it with execution.artifact or execution.projection for large results.")
+		usageNotes = append(usageNotes,
+			"page.all merges page payloads, not necessarily a complete result. Check summary.completeness and summary.itemCount; service Total is preserved.",
+			"If incomplete, exit is nonzero with collected data. Use next.operationId and next.input in a single-page tool exec with the same runtime selectors; disable page-all.",
+		)
 	}
 	usageNotes = append(usageNotes, toolSpecificUsageNotes(operation)...)
 	return toolDescribeCommon{
@@ -476,8 +479,8 @@ func toolSpecificUsageNotes(operation contract.Operation) []any {
 			"SearchLogs Query supports both plain search syntax and SQL/analysis syntax such as '* | select ...'.",
 			"HitCount is only the count returned in the current response window of SearchLogs; do not treat it as the whole-window total hit count.",
 			"Use log.describe-histogram-v1 only for pure search queries when you need time-distribution preview or a better whole-window hit estimate before narrowing or widening a search window; Histogram.TotalCount is the better whole-window hit count in that pure-search case.",
-			"For SQL/analysis queries, body fields such as Context, Sort, Limit, and Offset do not page analysis rows; use SQL limit/offset inside Query instead.",
-			"If SearchLogs returns ResultStatus=incomplete, the service returned only a partial scan; this can happen for both search and analysis queries, so narrow the time range and rerun before trusting counts, rows, or absence of hits.",
+			"For SQL/analysis queries, body fields such as Context, Sort, Limit, and Offset do not page analysis rows. User-authored SQL LIMIT/OFFSET calls are independent queries without a shared-snapshot guarantee; do not invent an OFFSET to resume an incomplete response.",
+			"SQL/analysis is complete only when ResultStatus=complete; ListOver applies to pure search only. ResultStatus=incomplete or time_out reports incomplete data, and error reports failure; inspect summary.completeness before trusting counts, rows, or absence of hits.",
 			"Prefer log.search for interactive analysis, quick previews, and smaller result sets; switch to workflow log.export-analysis when analysis rows may exceed stdout or token budget.",
 		}
 	case "log.describe-histogram-v1":

@@ -19,7 +19,6 @@ type shortcutExecutionRequest struct {
 
 type legacyPageAllPolicy struct {
 	ListField          string
-	ForceTotal         bool
 	PaginationOverride *contract.PaginationSpec
 }
 
@@ -68,13 +67,6 @@ func executeShortcutOperation(ctx *Context, request shortcutExecutionRequest) (a
 			return nil, errors.New("unexpected list field: " + request.LegacyPageAll.ListField)
 		}
 		return shortcutExecutionPlanValue(result.Plan)
-	}
-	if request.PageAll && request.LegacyPageAll != nil && request.LegacyPageAll.ForceTotal {
-		if data, ok := result.Data.(map[string]any); ok {
-			if items, ok := toAnySlice(data[request.LegacyPageAll.ListField]); ok {
-				data["Total"] = len(items)
-			}
-		}
 	}
 	return result.Data, nil
 }
@@ -136,19 +128,4 @@ func shortcutJSONBodyInput(value map[string]any) execution.Payload {
 
 func shortcutEmptyJSONBodyInput() execution.Payload {
 	return shortcutJSONBodyInput(map[string]any{})
-}
-
-func toAnySlice(value any) ([]any, bool) {
-	switch items := value.(type) {
-	case []any:
-		return items, true
-	case []map[string]any:
-		out := make([]any, 0, len(items))
-		for _, item := range items {
-			out = append(out, item)
-		}
-		return out, true
-	default:
-		return nil, false
-	}
 }

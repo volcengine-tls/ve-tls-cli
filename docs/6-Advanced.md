@@ -45,17 +45,19 @@ Automatic spill (`file_auto`) applies to `tool exec` and `workflow exec` when al
 
 The following default streamed-export behavior applies without `--jmes-filter`. With a filter, the streamed writer is disabled and results are accumulated in memory before filtering and file delivery. For large exports, prefer unfiltered streaming or server-side field selection where available; client-side filtering does not reduce server scanning or network traffic.
 
-Default `workflow exec log.export` and `log.export-analysis` stream exported rows directly into the data artifact (JSON array for `--output json`, JSONL rows for `--output jsonl`) rather than writing an envelope. The data artifact is not an envelope and does not contain `status`, `summary.deliveryMode`, `requestId`, or `ResultStatus`. stdout still contains only the fixed file notice with the data-artifact path. `log.export` auto-paginates pure-search results; it defaults to at most 100 pages when `MaxPages` is omitted and can stop at the selected/default page limit without exposing a "more pages remained" signal. The exported data artifact contains rows only and does not preserve `ResultStatus` or the final `ListOver` state. Command success and file existence therefore prove only that those rows were exported, not that the evidence set is complete. For evidence-grade export, inspect a bounded preview first, do not proceed as complete when preview `ResultStatus=incomplete`, narrow or split the time window or query, and explicitly choose `MaxPages` based on expected volume. `log.export-analysis` performs analysis export and does not auto-paginate analysis rows (SQL `limit`/`offset` semantics apply).
+Default `workflow exec log.export` and `log.export-analysis` stream exported rows directly into a data artifact (JSON array or JSONL), not an envelope. On success stdout contains the fixed file notice; the row file itself does not contain `status`, `summary`, `requestId`, `ResultStatus`, or `ListOver`. Pure-search `log.export` defaults to at most 100 pages when `MaxPages` is omitted. Reaching the budget before the observed end or a later failure returns nonzero with `summary.completeness` and retained rows. A streamed partial uses a unique data path and `.meta.json` sidecar, reported in its artifact descriptor as `completeness` and `metadataPath`; a previous complete target remains intact. `log.export-analysis` does not auto-paginate analysis rows and requires `ResultStatus=complete` for a complete result.
 
 ## 3. Pagination
 
 `tool exec --page-all` requests all pages of a paginated result, but only where the tool contract supports it. Inspect `tool describe <group.action>` and check `execution.supports_all` (or `supports_all` in the describe output). If `supports_all` is `false`, `--page-all` is not supported for that action and you must paginate manually.
 
+`summary.pagination.merged=true` means pages were accumulated, not that they are complete. The service's `data.Total` is preserved; `summary.itemCount` counts collected rows. Inspect `summary.completeness` for `complete`, `stopReason`, `pageCount`, `itemCount`, `resumable`, and optional `next`. When `next` exists, run its `operationId` and `input` as an ordinary `tool exec` request with the same runtime selectors and page-all disabled (`next.pageAll=false`).
+
 `workflow exec` does not consume `execution.page.all` / `execution.page_all` context controls. Pagination semantics are workflow-specific; follow the guidance in `workflow describe` for the workflow you are using.
 
 ## 4. Incomplete results
 
-Some search and analysis responses include a `ResultStatus` field. When `ResultStatus` is `incomplete`, the service returned only a partial scan. Do not present partial results as complete. Narrow the time range or query and rerun before trusting counts, rows, or absence of hits. For analysis queries, `ResultStatus=incomplete` can also affect bucket counts and totals.
+For SearchLogs, `ResultStatus=incomplete` and `time_out` report incomplete data, while `error` reports failure. SQL/analysis is complete only with `ResultStatus=complete`; `ListOver` is a completion signal only for pure search. Do not present partial results as complete. Inspect completeness and narrow the time range or query when appropriate before trusting counts, rows, or absence of hits.
 
 ## 5. Trace and diagnostic artifacts
 
@@ -79,9 +81,9 @@ The CLI validates local contract shape (input schema, required fields) and trans
 
 ## 8. Stable search, histogram, and analysis rules
 
-`log.search` supports both plain search syntax and SQL/analysis syntax (`* | select ...`). `HitCount` is only the count returned in the current response window, not the whole-window total. For pure search queries, `log.describe-histogram-v1` can provide a time-distribution preview and a better whole-window hit estimate via the top-level `TotalCount` field (in the CLI envelope, `data.TotalCount`). For analysis queries, body fields such as `Context`, `Sort`, `Limit`, and `Offset` do not page analysis rows; use SQL `limit`/`offset` inside the query instead.
+`log.search` supports both plain search syntax and SQL/analysis syntax (`* | select ...`). `HitCount` is only the count returned in the current response window, not the whole-window total. For pure search queries, `log.describe-histogram-v1` can provide a time-distribution preview and a better whole-window hit estimate via the top-level `TotalCount` field (in the CLI envelope, `data.TotalCount`). For analysis queries, body fields such as `Context`, `Sort`, `Limit`, and `Offset` do not page analysis rows. User-authored SQL `LIMIT`/`OFFSET` calls are independent queries without a shared-snapshot guarantee; do not invent an offset to resume an incomplete response.
 
-If `ResultStatus=incomplete`, narrow the time range and rerun before trusting counts or rows.
+If `ResultStatus=incomplete` or `time_out`, inspect completeness and narrow the time range when appropriate before trusting counts or rows; `error` is a failure.
 
 ## 9. Agent Skills and automation
 

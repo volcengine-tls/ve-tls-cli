@@ -104,7 +104,7 @@ volclog --profile '<profile>' tool exec log.search \
 - `project.create` 和 `topic.create` 返回 `status: success` 以及非空的 `ProjectId` / `TopicId`。
 - `log.ingest` 返回 `status: success`。
 - `log.search` 返回 `status: success`，且 `data` 中包含示例日志条目。
-- 如果 `ResultStatus` 为 `incomplete`，服务只返回了部分扫描结果；请缩小时间范围后重新运行，再信任结果。
+- 检查 `summary.completeness`；`ResultStatus=incomplete` 或 `time_out` 表示结果不完整，`error` 表示失败。适当缩小时间范围后再信任结果。
 
 ### 恢复检查点
 
@@ -137,7 +137,7 @@ volclog --profile '<profile>' tool exec log.search \
   --input '{"TopicId":"<topic-id>","Query":"<query>","StartTime":<from-ms>,"EndTime":<to-ms>,"Limit":20}'
 ```
 
-如果 `ResultStatus` 为 `incomplete`，请在导出前缩小时间范围或查询；导出工作流不会在其输出中暴露 `ResultStatus`。
+导出前检查 `summary.completeness` 和服务端 `ResultStatus`。`incomplete` 和 `time_out` 表示不完整，`error` 表示失败；必要时缩小时间范围或查询。只包含行的导出文件不包含 `ResultStatus`。
 
 ### 发现导出契约
 
@@ -147,7 +147,7 @@ volclog --profile '<profile>' tool exec log.search \
 volclog --profile '<profile>' workflow describe log.export
 ```
 
-`log.export` 会自动翻页导出纯检索结果。当省略 `MaxPages` 时，它默认最多翻 100 页，且可能在所选/默认页数限制处停止而不暴露"仍有更多页"的信号。导出的数据工件只包含行，不会保留 `ResultStatus` 或最终的 `ListOver` 状态。因此，命令成功和文件存在只能证明那些行已被导出，不能证明证据集是完整的。对于证据级导出，请先用有界预览检查，当预览 `ResultStatus=incomplete` 时不要视为完整，缩小或拆分时间窗口或查询，并根据预期数据量显式选择 `MaxPages`。`MaxPages` 的选择由你负责。对于分析（SQL）查询，请改用 `log.export-analysis`；它不会自动翻页分析行，因此适用 SQL `limit`/`offset` 语义。
+`log.export` 自动翻页导出纯检索结果，省略 `MaxPages` 时默认最多 100 页。尚未观察到结束信号就触及预算，或后续请求失败时，命令返回非零，并报告 `summary.completeness` 和可保留的行。只包含行的工件不包含 `ResultStatus` 或 `ListOver`；应检查报告的完整性，以及可用时的 `next` 单页请求。SQL/分析查询使用 `log.export-analysis`：它不会自动翻页分析行，只有 `ResultStatus=complete` 才标记完整。显式 SQL `LIMIT`/`OFFSET` 调用是独立查询，不保证同一快照；不要为续取不完整响应凭空构造 offset。
 
 ### 导出到文件
 
@@ -164,10 +164,11 @@ volclog --profile '<profile>' --output jsonl --output-mode file --output-dir ./e
 - 标准输出打印 `结果已写入文件。\n文件: <path>\n`（固定的文件通知）。
 - `<path>` 处的文件包含导出的日志行（JSONL），而不是信封。
 - 导出工件不包含 `status`、`summary.deliveryMode`、`requestId` 或 `ResultStatus`。
-- 成功只能证明导出的行已被写入；不能证明证据集是完整的。
+- 导出成功表示已观察到适用的完成信号；行文件本身不包含该元数据，也不保证多次独立查询属于同一快照。
 
 ### 恢复检查点
 
+- 导出不完整时，检查非零结果中的 `summary.completeness` 及保留的数据或工件。流式部分文件使用唯一路径和 `.meta.json` 元数据，工件的 `metadataPath` 指向元数据；既有完整目标文件会保留。存在 `next` 时，复用原运行时选择器并关闭 page-all，以其 `operationId` 和 `input` 发起单次 `tool exec`。
 - 如果命令报错 `result too large for stdout`，说明输出未被强制为文件；请用 `--output-mode file --output-dir '<writable-dir>'` 重新运行。
 - 如果 `workflow exec` 报告缺少必填字段，请重新运行 `workflow describe log.export` 并对齐请求体。
 - 如果需要多页导出的传输请求 ID，请启用受限的追踪目录（`--trace-dir '<dir>'`）并在运行后检查追踪。追踪文件是敏感的：结构化字段保留头/查询键和体哈希，但传输 `error_message` 字段可能包含 URL 和查询值。永远不要将凭证放在查询参数中。

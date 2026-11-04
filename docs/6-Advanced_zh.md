@@ -45,17 +45,19 @@ volclog --profile default --output jsonl --output-mode file --output-dir ./out \
 
 下面的默认流式导出行为适用于未设置 `--jmes-filter` 的情况。设置过滤器后，流式写入器会被禁用，结果在内存中累积后再过滤并写入文件。大导出应优先使用无过滤的流式导出，或在支持时使用服务端字段选择；客户端过滤不会减少服务端扫描或网络流量。
 
-默认的 `workflow exec log.export` 和 `log.export-analysis` 将导出的行直接流式写入数据工件（对于 `--output json` 为 JSON 数组，对于 `--output jsonl` 为 JSONL 行），而不是写入信封。数据工件不是信封，也不包含 `status`、`summary.deliveryMode`、`requestId` 或 `ResultStatus`。标准输出仍然只包含带有数据工件路径的固定文件通知。`log.export` 会自动翻页导出纯检索结果；当省略 `MaxPages` 时，它默认最多翻 100 页，且可能在所选/默认页数限制处停止而不暴露"仍有更多页"的信号。导出的数据工件只包含行，不会保留 `ResultStatus` 或最终的 `ListOver` 状态。因此，命令成功和文件存在只能证明那些行已被导出，不能证明证据集是完整的。对于证据级导出，请先用有界预览检查，当预览 `ResultStatus=incomplete` 时不要视为完整，缩小或拆分时间窗口或查询，并根据预期数据量显式选择 `MaxPages`。`log.export-analysis` 执行分析导出，且不会自动翻页分析行（适用 SQL `limit`/`offset` 语义）。
+默认的 `workflow exec log.export` 和 `log.export-analysis` 将导出的行直接流式写入数据工件（JSON 数组或 JSONL），而不是写入信封。成功时标准输出包含固定文件通知；行文件本身不包含 `status`、`summary`、`requestId`、`ResultStatus` 或 `ListOver`。纯检索 `log.export` 省略 `MaxPages` 时默认最多 100 页。尚未观察到结束信号就触及预算，或后续失败时，命令返回非零，并报告 `summary.completeness` 和保留的行。流式部分结果使用唯一数据路径及 `.meta.json` 元数据，工件描述通过 `completeness` 和 `metadataPath` 报告；既有完整目标文件保持不变。`log.export-analysis` 不自动翻页分析行，只有 `ResultStatus=complete` 才标记完整。
 
 ## 3. 分页
 
 `tool exec --page-all` 请求分页结果的所有页，但仅在工具契约支持时可用。用 `tool describe <group.action>` 检查 `execution.supports_all`（或 describe 输出中的 `supports_all`）。如果 `supports_all` 为 `false`，该动作不支持 `--page-all`，必须手动翻页。
 
+`summary.pagination.merged=true` 只表示已累积页面，不代表完整。服务端 `data.Total` 保持原值，`summary.itemCount` 表示已收集条数。检查 `summary.completeness` 中的 `complete`、`stopReason`、`pageCount`、`itemCount`、`resumable` 和可选的 `next`。存在 `next` 时，复用相同运行时选择器，以其 `operationId` 和 `input` 发起普通 `tool exec` 单页请求并关闭 page-all（`next.pageAll=false`）。
+
 `workflow exec` 不消费 `execution.page.all` / `execution.page_all` 上下文控制。分页语义是工作流专属的；请遵循 `workflow describe` 中针对你所使用工作流的指导。
 
 ## 4. 不完整结果
 
-某些检索和分析响应包含 `ResultStatus` 字段。当 `ResultStatus` 为 `incomplete` 时，服务只返回了部分扫描结果。不要将部分结果呈现为完整结果。请缩小时间范围或查询后重新运行，再信任计数、行或未命中的判断。对于分析查询，`ResultStatus=incomplete` 也会影响分桶计数和总计。
+SearchLogs 的 `ResultStatus=incomplete` 和 `time_out` 表示数据不完整，`error` 表示失败。SQL/分析结果只有 `ResultStatus=complete` 才完整；`ListOver` 仅用于纯检索的结束判断。不要将部分结果呈现为完整结果；检查完整性，并在合适时缩小时间范围或查询后再信任计数、行或未命中的判断。
 
 ## 5. 追踪与诊断工件
 
@@ -79,9 +81,9 @@ CLI 校验本地契约形状（输入模式、必填字段）并将请求传输�
 
 ## 8. 稳定的检索、直方图和分析规则
 
-`log.search` 同时支持普通检索语法和 SQL/分析语法（`* | select ...`）。`HitCount` 只是当前响应窗口中返回的计数，不是整个窗口的总数。对于纯检索查询，`log.describe-histogram-v1` 可通过顶层 `TotalCount` 字段（在 CLI 信封中为 `data.TotalCount`）提供时间分布预览和更好的整个窗口命中估计。对于分析查询，`Context`、`Sort`、`Limit`、`Offset` 等体字段不会对分析行分页；请改用查询内的 SQL `limit`/`offset`。
+`log.search` 同时支持普通检索语法和 SQL/分析语法（`* | select ...`）。`HitCount` 只是当前响应窗口中返回的计数，不是整个窗口的总数。对于纯检索查询，`log.describe-histogram-v1` 可通过顶层 `TotalCount` 字段（在 CLI 信封中为 `data.TotalCount`）提供时间分布预览和更好的整个窗口命中估计。对于分析查询，`Context`、`Sort`、`Limit`、`Offset` 等体字段不会对分析行分页。用户显式编写 SQL `LIMIT`/`OFFSET` 的每次调用都是独立查询，不保证同一快照；不要为续取不完整响应凭空构造 offset。
 
-如果 `ResultStatus=incomplete`，请缩小时间范围后重新运行，再信任计数或行。
+如果 `ResultStatus=incomplete` 或 `time_out`，检查完整性，并在合适时缩小时间范围后再信任计数或行；`error` 表示失败。
 
 ## 9. Agent 技能与自动化
 
