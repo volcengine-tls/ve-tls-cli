@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
-	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 func runLog(ctx *Context, args []string) (any, error) {
@@ -39,7 +38,7 @@ func runLog(ctx *Context, args []string) (any, error) {
 }
 
 func logSearch(ctx *Context, args []string) (any, error) {
-	req, err := parseSearchLogsArgs(args)
+	req, err := parseSearchLogsArgs(args, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +55,7 @@ func executeSearchLogsShortcut(ctx *Context, req map[string]any) (any, error) {
 }
 
 func logHistogram(ctx *Context, args []string) (any, error) {
-	req, err := parseHistogramArgs(args)
+	req, err := parseHistogramArgs(args, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +68,7 @@ func logHistogram(ctx *Context, args []string) (any, error) {
 }
 
 func logContext(ctx *Context, args []string) (any, error) {
-	req, err := parseLogContextArgs(args)
+	req, err := parseLogContextArgs(args, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +135,7 @@ func logPut(ctx *Context, args []string) (any, error) {
 	if topicID == "" {
 		return nil, errors.New("missing --topic-id")
 	}
-	body, err := util.ReadMaybeFile(requestArg)
+	body, err := ctx.readMaybeFile(requestArg)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +158,7 @@ func logPut(ctx *Context, args []string) (any, error) {
 	return doPutLogs(ctx, topicID, requestFmt, header, body)
 }
 
-func parseHistogramArgs(args []string) (map[string]any, error) {
+func parseHistogramArgs(args []string, invocation ...*Context) (map[string]any, error) {
 	var (
 		topicID    string
 		query      string
@@ -214,7 +213,7 @@ func parseHistogramArgs(args []string) (map[string]any, error) {
 			return nil, errors.New("unknown flag: " + args[0])
 		}
 	}
-	req, err := readJSONObjectRequestArg(requestArg)
+	req, err := readJSONObjectRequestArg(requestArg, invocation...)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +251,7 @@ func parseHistogramArgs(args []string) (map[string]any, error) {
 	return req, nil
 }
 
-func parseLogContextArgs(args []string) (map[string]any, error) {
+func parseLogContextArgs(args []string, invocation ...*Context) (map[string]any, error) {
 	var (
 		topicID       string
 		contextFlow   string
@@ -324,7 +323,7 @@ func parseLogContextArgs(args []string) (map[string]any, error) {
 			return nil, errors.New("unknown flag: " + args[0])
 		}
 	}
-	req, err := readJSONObjectRequestArg(requestArg)
+	req, err := readJSONObjectRequestArg(requestArg, invocation...)
 	if err != nil {
 		return nil, err
 	}

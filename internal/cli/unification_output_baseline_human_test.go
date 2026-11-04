@@ -315,14 +315,18 @@ func captureUnificationOutputPagination(t *testing.T) map[string]any {
 			t.Fatalf("project list --all Projects[%d]=%#v, want ProjectId=%q", i, projects[i], wantID)
 		}
 	}
-	if response["Total"] != 3 {
-		t.Fatalf("project list --all Total=%#v, want 3", response["Total"])
+	if response["Total"] != json.Number("3") {
+		t.Fatalf("project list --all Total=%#v, want server number 3", response["Total"])
 	}
 	wantPagination := map[string]any{
-		"mode":      "page_all",
-		"pageCount": 2,
-		"pageSize":  2,
-		"merged":    true,
+		"mode":       "page_all",
+		"pageCount":  2,
+		"pageSize":   2,
+		"merged":     true,
+		"complete":   true,
+		"stopReason": "total_reached",
+		"itemCount":  3,
+		"resumable":  false,
 	}
 	if !reflect.DeepEqual(ctx.PaginationMeta, wantPagination) {
 		t.Fatalf("project list --all pagination=%#v, want %#v", ctx.PaginationMeta, wantPagination)

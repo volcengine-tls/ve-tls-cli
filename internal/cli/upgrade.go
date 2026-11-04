@@ -27,7 +27,7 @@ func runUpgrade(ctx *Context, args []string) (any, error) {
 		return nil, err
 	}
 	manager := upgrade.NewManager(version.Version, string(currentEdition()), installation)
-	runContext, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	runContext, cancel := context.WithTimeout(ctx.ExecutionContext(), 5*time.Minute)
 	defer cancel()
 	return manager.Run(runContext, options.version, options.yes)
 }

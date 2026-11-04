@@ -26,7 +26,10 @@ func NewTransport(source ClientSource) *Transport {
 func (t *Transport) Do(ctx context.Context, request execution.Request) (execution.Response, error) {
 	path, err := execution.AppendMultiQuery(request.Path, request.QueryMulti)
 	if err != nil {
-		return execution.Response{}, err
+		return execution.Response{}, &execution.Failure{
+			Kind: "validation", Code: "InvalidRequest", Stage: "build_request", Outcome: execution.OutcomeNotSent,
+			Message: "request construction failed", Cause: err,
+		}
 	}
 	response, err := t.DoRaw(
 		ctx,
@@ -51,16 +54,20 @@ func (t *Transport) DoRaw(
 	body []byte,
 ) (tlsapi.Response, error) {
 	if t == nil || t.source == nil {
-		return tlsapi.Response{}, errors.New("nil client source")
+		return tlsapi.Response{}, clientResolutionFailure("nil client source", errors.New("nil client source"))
 	}
 	client, err := t.source()
 	if err != nil {
-		return tlsapi.Response{}, err
+		return tlsapi.Response{}, clientResolutionFailure("TLS client resolution failed", err)
 	}
 	if client == nil {
-		return tlsapi.Response{}, errors.New("nil TLS client")
+		return tlsapi.Response{}, clientResolutionFailure("nil TLS client", errors.New("nil TLS client"))
 	}
 	return client.Do(ctx, method, path, query, header, body)
+}
+
+func clientResolutionFailure(message string, cause error) error {
+	return &execution.Failure{Stage: "resolve_client", Outcome: execution.OutcomeNotSent, Message: message, Cause: cause}
 }
 
 func cloneStringMap(source map[string]string) map[string]string {

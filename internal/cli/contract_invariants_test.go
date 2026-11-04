@@ -171,8 +171,8 @@ func TestContractInvariant_FilterSemantics(t *testing.T) {
 			"--input", `{}`,
 		}, 3)
 		errObj := out["error"].(map[string]any)
-		if got := asStringOrEmpty(errObj["kind"]); got != "decode" {
-			t.Fatalf("expected decode kind, got %#v", errObj["kind"])
+		if got := asStringOrEmpty(errObj["kind"]); got != "output_failed" {
+			t.Fatalf("expected output_failed kind, got %#v", errObj["kind"])
 		}
 	})
 

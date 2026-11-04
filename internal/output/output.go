@@ -34,6 +34,7 @@ func ParseFormat(s string) (Format, error) {
 }
 
 func Write(w io.Writer, v any, format Format) error {
+	w = checkedWriter{Writer: w}
 	switch format {
 	case FormatJSON:
 		b, err := marshalIndentNoEscape(v)
@@ -81,6 +82,38 @@ func Write(w io.Writer, v any, format Format) error {
 	}
 }
 
+// checkedWriter reports a short write even when an underlying writer violates
+// io.Writer's contract by returning a nil error. It never retries a write.
+type checkedWriter struct{ io.Writer }
+
+func (w checkedWriter) Write(p []byte) (int, error) {
+	n, err := w.Writer.Write(p)
+	if err == nil && n < len(p) {
+		err = io.ErrShortWrite
+	}
+	return n, err
+}
+
+func (w checkedWriter) WriteString(s string) (int, error) {
+	n, err := io.WriteString(w.Writer, s)
+	if err == nil && n < len(s) {
+		err = io.ErrShortWrite
+	}
+	return n, err
+}
+
+// FilterError identifies a filter failure while retaining the original cause.
+type FilterError struct {
+	Code    string
+	Message string
+	Cause   error
+}
+
+func (e *FilterError) Error() string     { return e.Message }
+func (e *FilterError) ErrorCode() string { return e.Code }
+func (e *FilterError) ErrorKind() string { return "decode" }
+func (e *FilterError) Unwrap() error     { return e.Cause }
+
 // CompiledFilter is a validated JMESPath expression that can be applied to
 // multiple values without reparsing it for every value.
 type CompiledFilter struct {
@@ -98,7 +131,7 @@ func Compile(expr string) (*CompiledFilter, error) {
 	}
 	compiled, err := jmespath.Compile(expression)
 	if err != nil {
-		return nil, errors.New("invalid jmes-filter expression: " + err.Error())
+		return nil, &FilterError{Code: "InvalidFilter", Message: "invalid jmes-filter expression: " + err.Error(), Cause: err}
 	}
 	filter.compiled = compiled
 	return filter, nil
@@ -115,19 +148,19 @@ func Validate(expr string) error {
 func (f *CompiledFilter) Apply(v any) (any, error) {
 	if f == nil || f.compiled == nil {
 		if f == nil {
-			return nil, errors.New("nil compiled jmes-filter")
+			return nil, &FilterError{Code: "FilterEvaluationFailed", Message: "nil compiled jmes-filter"}
 		}
 		return v, nil
 	}
 	out, err := f.compiled.Search(v)
 	if err != nil {
-		return nil, errors.New("invalid jmes-filter expression: " + err.Error())
+		return nil, &FilterError{Code: "FilterEvaluationFailed", Message: "invalid jmes-filter expression: " + err.Error(), Cause: err}
 	}
 	if out == nil {
 		if resolvedNilValue(v, f.expression) {
 			return nil, nil
 		}
-		return nil, errors.New(buildNilFilterMessage(v, f.expression))
+		return nil, &FilterError{Code: "FilterNoValue", Message: buildNilFilterMessage(v, f.expression)}
 	}
 	return out, nil
 }

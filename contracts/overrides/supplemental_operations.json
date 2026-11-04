@@ -4023,7 +4023,7 @@
       "docs": {
         "summary": "ManualMergeShard",
         "source": "log-service shard API",
-        "usage_constraints": "Before execution, call shard.describe with all pages and verify that the selected shard is readwrite, is not the final key-range shard, and has a next contiguous readwrite shard. ManualMergeShard merges exactly that pair, and merge/split operations for the same topic are serialized. This operation mutates shard topology. Tool exec currently validates required-field presence locally; TopicId UUID syntax, ShardId range, and shard mergeability remain service-side validation. On success, read the resulting list from data.Shards. Do not retry automatically after an ambiguous failure; call shard.describe to reconcile the shard list and statuses."
+        "usage_constraints": "Before execution, call shard.describe with all pages and verify that the selected shard is readwrite, is not the final key-range shard, and has a next contiguous readwrite shard. ManualMergeShard merges exactly that pair, and merge/split operations for the same topic are serialized. This operation mutates shard topology. Tool exec validates the declared schema, including non-negative integer ShardId; TopicId UUID syntax and shard mergeability remain service-side validation. On success, read the resulting list from data.Shards. Do not retry automatically after an ambiguous failure; call shard.describe to reconcile the shard list and statuses."
       },
       "risk": {
         "level": "high",
@@ -4295,7 +4295,7 @@
       "docs": {
         "summary": "CreateIndex",
         "source": "索引管理",
-        "usage_constraints": "FullText.CaseSensitive defaults to false. If IncludeChinese is omitted or false, Delimiter is required and must be non-empty; if IncludeChinese is true, Delimiter may be omitted or empty. Delimiter remains limited to 256 bytes. Tool exec checks required-field presence locally; conditional and range validation is finalized by the service."
+        "usage_constraints": "FullText.CaseSensitive defaults to false. If IncludeChinese is omitted or false, Delimiter is required and must be non-empty; if IncludeChinese is true, Delimiter may be omitted or empty. Delimiter remains limited to 256 bytes. Tool exec validates the declared FullText conditions and bounds; byte-length and remaining service-only rules are finalized by the service."
       },
       "risk": {
         "level": "high",
@@ -4567,7 +4567,7 @@
       "docs": {
         "summary": "ModifyIndex",
         "source": "索引管理",
-        "usage_constraints": "FullText.CaseSensitive defaults to false. If IncludeChinese is omitted or false, Delimiter is required and must be non-empty; if IncludeChinese is true, Delimiter may be omitted or empty. Delimiter remains limited to 256 bytes. Tool exec checks required-field presence locally; conditional and range validation is finalized by the service."
+        "usage_constraints": "FullText.CaseSensitive defaults to false. If IncludeChinese is omitted or false, Delimiter is required and must be non-empty; if IncludeChinese is true, Delimiter may be omitted or empty. Delimiter remains limited to 256 bytes. Tool exec validates the declared FullText conditions and bounds; byte-length and remaining service-only rules are finalized by the service."
       },
       "risk": {
         "level": "high",
@@ -4765,7 +4765,7 @@
       "docs": {
         "summary": "CreateDownloadTask",
         "source": "日志管理",
-        "usage_constraints": "TaskType=0 (Search) or 1 (Analyze) requires Limit > 0 and an explicit Sort of asc or desc. TaskType=2 (LogContext) requires non-empty LogContextInfos.ContextFlow and LogContextInfos.Source. MustComplete=true still requires AllowIncomplete=false. Tool exec checks only required-field presence locally; conditional and range validation is finalized by the service."
+        "usage_constraints": "TaskType=0 (Search) or 1 (Analyze) requires Limit > 0 and an explicit Sort of asc or desc. TaskType=2 (LogContext) requires non-empty LogContextInfos.ContextFlow and LogContextInfos.Source. MustComplete=true still requires AllowIncomplete=false. Tool exec validates the declared TaskType conditions and bounds; MustComplete/AllowIncomplete compatibility and remaining service-only rules are finalized by the service."
       },
       "risk": {
         "level": "high",
@@ -4839,7 +4839,7 @@
       "docs": {
         "summary": "WebTracks",
         "source": "日志管理",
-        "usage_constraints": "Logs is required and each item is a string-valued map; Source is optional. Tool exec checks required-field presence and the codec parses string-valued maps; service-side validation finalizes item count and size."
+        "usage_constraints": "Logs is required and each item is a string-valued map; Source is optional. Tool exec validates the declared schema and the codec parses string-valued maps; service-side validation finalizes item count and size."
       },
       "risk": {
         "level": "high",

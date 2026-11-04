@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
@@ -11,7 +12,7 @@ func isAPIEnvelopeCandidate(group string, out any) bool {
 	if !isEnvelopeGroup(g) {
 		return false
 	}
-	if g == "raw" {
+	if g == "raw" && currentEdition() != cliEditionVolclog {
 		_, isString := out.(string)
 		return !isString
 	}
@@ -34,8 +35,14 @@ func buildAPIEnvelope(ctx *Context, group string, out any, outputMode string, ou
 	}
 	env := newAPISuccessEnvelope(ctx, group, out, outputMode, deliveryMode, nil)
 	if outputMode == "file" {
+		if ctx != nil && strings.TrimSpace(ctx.Filter) != "" && (group == "raw" || group == "tool" || group == "workflow") {
+			if err := prepareFilteredEnvelopeFile(ctx, group, out, env, outputFile); err != nil {
+				return nil, err
+			}
+			return env, nil
+		}
 		if fileOut, ok := out.(fileArtifactOutput); ok {
-			env["artifacts"] = []map[string]any{buildOutputArtifact(fileOut.Path, fileOut.Format)}
+			env["artifacts"] = []map[string]any{fileArtifactDescriptor(fileOut)}
 			if err := updateEnvelopeTotalBytes(env); err != nil {
 				return nil, err
 			}
@@ -70,6 +77,7 @@ func newAPISuccessEnvelope(ctx *Context, group string, data any, outputMode stri
 		"itemCount":    envelopeItemCount(data),
 		"totalBytes":   0,
 	}
+	augmentOutcomeSummary(summary, ctx, nil)
 	if ctx.PaginationMeta != nil {
 		summary["pagination"] = ctx.PaginationMeta
 	}
@@ -142,6 +150,9 @@ func envelopeSliceLen(v any) (int, bool) {
 }
 
 func buildAPIErrorEnvelope(ctx *Context, group string, err error, outputMode string) map[string]any {
+	if ctx == nil {
+		ctx = &Context{}
+	}
 	requestID := strings.TrimSpace(ctx.RequestID)
 	statusCode := ctx.StatusCode
 	kind := "unknown"
@@ -159,6 +170,9 @@ func buildAPIErrorEnvelope(ctx *Context, group string, err error, outputMode str
 		if strings.TrimSpace(p.Kind) != "" {
 			kind = strings.TrimSpace(p.Kind)
 		}
+		if strings.TrimSpace(p.ErrorCode) != "" {
+			code = strings.TrimSpace(p.ErrorCode)
+		}
 		if strings.TrimSpace(p.Hint) != "" {
 			hint = strings.TrimSpace(p.Hint)
 		}
@@ -170,24 +184,32 @@ func buildAPIErrorEnvelope(ctx *Context, group string, err error, outputMode str
 		"itemCount":    0,
 		"totalBytes":   0,
 	}
+	augmentOutcomeSummary(summary, ctx, err)
 	if strings.TrimSpace(ctx.TracePath) != "" {
 		summary["tracePath"] = ctx.TracePath
 	}
 	message := ""
 	var details map[string]any
+	var ingestErr *ingestFailure
+	isIngestFailure := errors.As(err, &ingestErr)
+	upstreamCode := ""
 	if err != nil {
 		message = err.Error()
 		if he, ok := isHTTPError(err); ok {
+			requestID, statusCode = strings.TrimSpace(he.requestID), he.statusCode
 			source = "upstream"
-			code = "HTTPError"
-			upstreamCode, upstreamMessage, upstreamDetails := parseHTTPErrorPayload(he)
-			if upstreamCode != "" {
-				code = upstreamCode
+			parsedCode, upstreamMessage, upstreamDetails := parseHTTPErrorPayload(he)
+			upstreamCode = parsedCode
+			if code == "CLIError" {
+				code = "HTTPError"
+				if upstreamCode != "" {
+					code = upstreamCode
+				}
 			}
-			if upstreamMessage != "" {
+			if upstreamMessage != "" && !isIngestFailure {
 				message = upstreamMessage
 			}
-			if upstreamDetails != nil {
+			if upstreamDetails != nil && !isIngestFailure {
 				details = upstreamDetails
 			}
 		}
@@ -204,13 +226,49 @@ func buildAPIErrorEnvelope(ctx *Context, group string, err error, outputMode str
 	if details != nil {
 		errObj["details"] = details
 	}
+	if upstreamCode != "" && upstreamCode != code {
+		errObj["upstreamCode"] = upstreamCode
+	}
+	var staged interface{ FailureStage() string }
+	if errors.As(err, &staged) && staged.FailureStage() != "" {
+		errObj["stage"] = staged.FailureStage()
+	}
+	if kind == "result_unknown" || kind == "partial_failure" || kind == "output_failed" || kind == "protocol" || kind == "incomplete_result" {
+		errObj["safeToReplay"] = false
+	}
+	if kind == "throttled" {
+		errObj["transient"] = true
+		errObj["safeToReplay"] = false
+	}
+	if kind == "server" {
+		errObj["safeToReplay"] = false
+	}
+	var data any
+	artifacts := []map[string]any{}
+	var partialArtifact interface {
+		FailureArtifact() (fileArtifactOutput, bool)
+	}
+	if errors.As(err, &partialArtifact) {
+		if file, ok := partialArtifact.FailureArtifact(); ok {
+			artifacts = append(artifacts, fileArtifactDescriptor(file))
+		}
+	}
+	var progressData interface{ FailureData() any }
+	if errors.As(err, &progressData) {
+		data = progressData.FailureData()
+		if safe, ok := data.(map[string]any); ok {
+			if progress, ok := safe["progress"]; ok {
+				summary["progress"] = progress
+			}
+		}
+	}
 	return map[string]any{
 		"status":    "failed",
 		"action":    normalizeAPIAction(ctx.Action, group),
 		"requestId": requestID,
 		"summary":   summary,
-		"artifacts": []map[string]any{},
-		"data":      nil,
+		"artifacts": artifacts,
+		"data":      data,
 		"error":     errObj,
 	}
 }

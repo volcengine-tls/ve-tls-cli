@@ -316,17 +316,17 @@ volclog tool exec project.describe-projects
 
 - Confirm the user account has the target TLS resource permissions;
 - Know the TLS region and endpoint;
-- Console Login defaults to a local loopback callback with PKCE. For a remote terminal or when loopback is unavailable, explicitly use `--device-code`; `--no-browser` (or the compatibility alias `--remote`) automatically selects Device Code.
+- On an interactive terminal, Console Login defaults to a local loopback callback with PKCE. A non-TTY or `--non-interactive` run selects Device Code without opening a browser before the flow starts. For an interactive remote terminal or unavailable loopback, use `--device-code`; `--no-browser` (or `--remote`) also selects Device Code.
 
 `login --region --endpoint` writes both TLS runtime values into the target profile. Every copyable login example below supplies both values explicitly so the Console login endpoint cannot be mistaken for the TLS business endpoint. Supply both when initializing a new profile; omit a value only when an existing profile already stores it and should preserve it. `--login-endpoint` selects the Console OAuth service and is independent of the TLS business endpoint.
 
 | Mode | Mode flags | Runtime requirements | Advantage | Recommended scenario |
 | --- | --- | --- | --- | --- |
-| Local browser callback + PKCE (default) | None | The CLI can listen on a random loopback port and the browser can call back to the same machine | No user-code entry and the fewest steps | A local desktop terminal |
+| Local browser callback + PKCE (interactive default) | None | The CLI can listen on a random loopback port and the browser can call back to the same machine | No user-code entry and the fewest steps | A local desktop terminal |
 | Device Code + browser auto-open | `--device-code` | The CLI has outbound HTTPS access and the machine can open a browser | No callback listener while retaining browser auto-open | A firewall or sandbox blocks local callbacks |
-| Device Code + no browser | `--device-code --no-browser` | The CLI has outbound HTTPS access and the user can open a browser on any device | Terminal and browser are decoupled; no GUI or inbound callback dependency | SSH, Trae, or a human-assisted Agent session |
+| Device Code + no browser | `--device-code --no-browser`, non-TTY, or `--non-interactive` | The CLI has outbound HTTPS access and the user can open a browser on any device | Terminal and browser are decoupled; no GUI or inbound callback dependency | SSH, Trae, or a human-assisted Agent session |
 
-### 5.3 Local browser callback login (default)
+### 5.3 Local browser callback login (interactive default)
 
 ```bash
 volclog login \
@@ -335,9 +335,9 @@ volclog login \
   --endpoint https://tls-cn-beijing.volces.com
 ```
 
-This command binds a random loopback callback port and opens the browser with PKCE. After the user confirms authorization, the browser returns the result directly to the CLI; no device code or terminal code paste is required. After a successful login, the profile switches to `mode=console-login`, stores the login session binding, and patches only explicitly supplied TLS runtime values. Existing identity and runtime fields that were not supplied remain unchanged. A new profile does not receive an implicit default region.
+On an interactive terminal, this command binds a random loopback callback port and opens the browser with PKCE. A non-interactive run instead selects Device Code without opening a browser. After the user confirms PKCE authorization, the browser returns the result directly to the CLI; no device code or terminal code paste is required. After a successful login, the profile switches to `mode=console-login`, stores the login session binding, and patches only explicitly supplied TLS runtime values. Existing identity and runtime fields that were not supplied remain unchanged. A new profile does not receive an implicit default region.
 
-The default mode has the fewest interaction steps and is best when the browser and CLI run on the same machine. It is unsuitable when the browser is local but the CLI runs on a remote SSH host: the browser's `127.0.0.1` is the local machine, not the remote host. Some IDE or Agent sandboxes also block random-port listeners or browser launching. Explicitly use Device Code under those conditions; the CLI never switches flows automatically.
+The interactive default has the fewest interaction steps and is best when the browser and CLI run on the same machine. It is unsuitable when the browser is local but the CLI runs on a remote SSH host: the browser's `127.0.0.1` is the local machine, not the remote host. Some IDE or Agent sandboxes also block random-port listeners or browser launching. On an interactive terminal, explicitly select Device Code under those conditions; a failed PKCE attempt does not trigger an automatic fallback. Non-TTY selection happens before the flow starts.
 
 The Console authorization service defaults to `https://signin.volcengine.com`. Use `--login-endpoint` to select another compatible Console OAuth root. The login endpoint must be a clean HTTPS root URL without user information, query, fragment, or a non-root path. It is normalized and stored with the login cache so automatic refresh continues to use the same authorization service. Existing caches without this field continue to use the default address. The `--endpoint` flag always means the TLS business endpoint.
 
@@ -353,7 +353,7 @@ volclog login \
   --device-code
 ```
 
-The CLI prints the verification URL and user code, makes a best-effort attempt to open the browser, and polls for authorization. The user enters the short-lived `user code`; the OAuth `device_code` remains internal to the CLI and authorization service and is never printed. Add `--no-browser` when the development machine cannot display a browser page directly:
+The CLI prints the verification URL and user code and polls for authorization. In interactive mode it makes a best-effort attempt to open the browser; non-interactive mode does not. The user enters the short-lived `user code`; the OAuth `device_code` remains internal to the CLI and authorization service and is never printed. Add `--no-browser` when the development machine cannot display a browser page directly:
 
 ```bash
 volclog login \
@@ -371,7 +371,9 @@ Follow the terminal prompts:
 3. Enter the printed user code on the official authorization page and confirm authorization; enter the Console password only on that browser page;
 4. Leave the original terminal running while `volclog` polls over outbound HTTPS; no code is pasted back into the terminal.
 
-`--no-browser` and the compatibility alias `--remote` both imply `--device-code`. Neither the default PKCE flow nor Device Code automatically falls back to the other; retry explicitly with `--device-code` when a loopback failure requires it.
+`--no-browser` and the compatibility alias `--remote` both imply `--device-code`. Neither PKCE nor Device Code falls back to the other after a failure; retry explicitly with `--device-code` when an interactive loopback attempt fails. Automatic non-TTY Device Code selection occurs before starting either flow.
+
+Non-interactive session replacement that requires confirmation returns `interaction_required`; use another `--profile` or an interactive terminal. There is no `--force` override. Darwin and Linux interactive prompts use cancellable polling; a Windows console without read-deadline support returns `interaction_required`, so provide explicit selectors to avoid prompting. Runtime verification of this change has been performed on Darwin only.
 
 Device Code fits SSH, Trae, and human-assisted Agent sessions because it starts no local callback listener, does not require the CLI to control a browser, and allows the browser and terminal to run on different machines. The CLI needs only outbound HTTPS access to Console. A user must still approve the request on the official page, so this is not an unattended-CI authentication method. Prefer OIDC, ECS Role, or another automatically rotated non-interactive identity for CI and workloads.
 
@@ -516,6 +518,8 @@ volclog configure sso \
 ```
 
 The command prints an authorization URL and a device code prompt. Complete the authorization in a browser that can access the page.
+
+In non-interactive mode, a single SSO account or role is selected automatically. If multiple candidates require an unspecified account or role, the command fails immediately; supply the selectors explicitly. The transactional token is rolled back and configuration changes are not committed on failure, although a registration cache may already have been written.
 
 `configure sso` does not switch the current profile automatically. Switch explicitly after completion:
 

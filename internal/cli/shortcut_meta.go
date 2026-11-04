@@ -143,6 +143,15 @@ func describeShortcutOutput(spec shortcutCommandSpec) (string, error) {
 		fallbackAPIDescribe = "volclog tool describe " + strings.TrimSpace(spec.Action)
 		shortcutFirst = nil
 	}
+	needsWritePermission := !target.HasOperation || !operationIsReviewedRead(target.Operation)
+	if target.IsWorkflow {
+		switch target.Workflow.ID {
+		case "app.resolve-resources", "app.resolve-topic-ids", "log.export", "log.export-analysis":
+			needsWritePermission = false
+		default:
+			needsWritePermission = true
+		}
+	}
 	var flagDoc []apiCapDocParam
 	var bodyFields []describeFieldParam
 	if target.HasOperation {
@@ -196,6 +205,10 @@ func describeShortcutOutput(spec shortcutCommandSpec) (string, error) {
 		out.Guidance.Execute = "volclog --output-mode file " + spec.Group + " " + spec.Command
 	} else if describeCmd == "volclog "+spec.Group+" "+spec.Command+" --describe" {
 		out.Guidance.Execute = "volclog " + spec.Group + " " + spec.Command
+	}
+	if needsWritePermission {
+		out.Guidance.Execute = strings.Replace(out.Guidance.Execute, "volclog ", "volclog --allow-write ", 1)
+		out.Guidance.Filter = strings.Replace(out.Guidance.Filter, "volclog ", "volclog --allow-write ", 1)
 	}
 
 	if shouldDescribeShortcutRequestBody(params) {

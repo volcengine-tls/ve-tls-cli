@@ -16,6 +16,7 @@ import (
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth/sso"
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth/sts"
 	"github.com/volcengine-tls/ve-tls-cli/internal/config"
+	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
 )
 
 type fakeProvider struct {
@@ -156,7 +157,8 @@ func TestBuildClientInjectsResolvedRuntimeIntoClonedConfig(t *testing.T) {
 }
 
 func TestBuildClientProviderErrorFailsClosed(t *testing.T) {
-	providerErr := errors.New("refresh failed")
+	const canary = "provider-sensitive-canary"
+	providerErr := errors.New("refresh failed: " + canary)
 	provider := &fakeProvider{err: providerErr}
 	factory := &fakeProviderFactory{provider: provider}
 	client, err := BuildClient(BuildClientRequest{
@@ -170,7 +172,7 @@ func TestBuildClientProviderErrorFailsClosed(t *testing.T) {
 	}
 	rt := &countingRoundTripper{}
 	client.HTTP = &http.Client{Transport: rt}
-	_, err = client.Do(context.Background(), http.MethodGet, "/x", nil, nil, nil)
+	response, err := client.Do(context.Background(), http.MethodGet, "/x", nil, nil, nil)
 	if !errors.Is(err, providerErr) {
 		t.Fatalf("Do error=%v, want wrapped provider error", err)
 	}
@@ -178,11 +180,19 @@ func TestBuildClientProviderErrorFailsClosed(t *testing.T) {
 	if !errors.As(err, &dynamicErr) || dynamicErr.AuthMode() != config.AuthModeConsoleLogin {
 		t.Fatalf("Do error=%T %v, want DynamicAuthError", err, err)
 	}
-	if err.Error() != providerErr.Error() {
-		t.Fatalf("public error=%q, want %q", err.Error(), providerErr.Error())
+	var requestErr *tlsapi.RequestError
+	var evidence interface {
+		FailureStage() string
+		RemoteOutcome() string
 	}
-	if rt.calls != 0 {
-		t.Fatalf("HTTP calls=%d, want 0", rt.calls)
+	if !errors.As(err, &requestErr) || !errors.As(err, &evidence) || evidence.FailureStage() != "sign" || evidence.RemoteOutcome() != "not_sent" {
+		t.Fatalf("request failure evidence=%v", err)
+	}
+	if strings.Contains(err.Error(), canary) || strings.Contains(err.Error(), providerErr.Error()) {
+		t.Fatalf("public error exposes provider cause: %q", err.Error())
+	}
+	if rt.calls != 0 || response.StatusCode != 0 {
+		t.Fatalf("HTTP calls=%d status=%d, want 0/0", rt.calls, response.StatusCode)
 	}
 }
 

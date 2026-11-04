@@ -301,7 +301,7 @@ func TestExecutorRejectsPageAllWithoutPaginationMetadata(t *testing.T) {
 	}
 }
 
-func TestExecutorDryRunMarksInvalidJSONBodyWithoutTransport(t *testing.T) {
+func TestExecutorDryRunRejectsInvalidJSONBodyWithoutTransport(t *testing.T) {
 	transport := &fakeTransport{}
 	op := requestTestOperation()
 	result, err := NewExecutor(transport, NewCodecRegistry()).Execute(context.Background(), Invocation{
@@ -316,11 +316,12 @@ func TestExecutorDryRunMarksInvalidJSONBodyWithoutTransport(t *testing.T) {
 			Region:   "cn-beijing",
 		},
 	})
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
+	var failure *Failure
+	if !errors.As(err, &failure) || failure.Kind != "validation" || failure.Code != "InvalidInput" || failure.Outcome != OutcomeNotSent {
+		t.Fatalf("Execute error = %#v", err)
 	}
-	if result.Plan == nil || result.Plan.Valid || !hasCheck(result.Plan.Checks, "body_json", false) {
-		t.Fatalf("plan = %#v", result.Plan)
+	if result.Plan != nil || result.RemoteOutcome != OutcomeNotSent {
+		t.Fatalf("result = %#v", result)
 	}
 	if len(transport.requests) != 0 {
 		t.Fatalf("transport calls = %d", len(transport.requests))

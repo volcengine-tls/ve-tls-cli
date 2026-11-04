@@ -316,17 +316,17 @@ volclog tool exec project.describe-projects
 
 - 确认用户账号具备目标 TLS 资源权限；
 - 明确 TLS Region 和 Endpoint；
-- 默认 Console Login 使用本机 loopback 回调与 PKCE。远程终端或本机回调不可用时，显式使用 `--device-code`；`--no-browser`（兼容别名为 `--remote`）会自动选择 Device Code。
+- 交互式终端中的 Console Login 默认使用本机 loopback 回调与 PKCE。非 TTY 或 `--non-interactive` 在流程开始前选择 Device Code 且不打开浏览器。交互式远程终端或本机回调不可用时可用 `--device-code`；`--no-browser`（兼容别名为 `--remote`）也会选择 Device Code。
 
 `login --region --endpoint` 会把两个 TLS 运行值写入目标 profile。下文所有可复制的登录示例都显式提供二者，避免把 Console 登录地址误认为 TLS 业务地址。初始化新 profile 时必须同时提供二者；只有已有 profile 已保存对应值时，才应省略参数以保留原值。`--login-endpoint` 用于选择 Console OAuth 服务，与 TLS 业务 Endpoint 相互独立。
 
 | 模式 | 模式选项 | 运行条件 | 优势 | 推荐场景 |
 | --- | --- | --- | --- | --- |
-| 本机浏览器回调 + PKCE（默认） | 无 | CLI 可以监听 loopback 随机端口，浏览器可以回调当前机器 | 无需输入 user code，步骤最少 | 本机桌面终端 |
+| 本机浏览器回调 + PKCE（交互式默认） | 无 | CLI 可以监听 loopback 随机端口，浏览器可以回调当前机器 | 无需输入 user code，步骤最少 | 本机桌面终端 |
 | Device Code + 自动打开浏览器 | `--device-code` | CLI 可以向外访问 HTTPS，机器可以打开浏览器 | 不监听回调端口，同时保留自动打开浏览器 | 本机回调被防火墙或沙箱限制 |
-| Device Code + 无浏览器 | `--device-code --no-browser` | CLI 可以向外访问 HTTPS，用户能在任意设备打开浏览器 | 终端与浏览器解耦，不依赖 GUI 或入站回调 | SSH、Trae、人工参与的 Agent 会话 |
+| Device Code + 无浏览器 | `--device-code --no-browser`、非 TTY 或 `--non-interactive` | CLI 可以向外访问 HTTPS，用户能在任意设备打开浏览器 | 终端与浏览器解耦，不依赖 GUI 或入站回调 | SSH、Trae、人工参与的 Agent 会话 |
 
-### 5.3 本机浏览器回调登录（默认）
+### 5.3 本机浏览器回调登录（交互式默认）
 
 ```bash
 volclog login \
@@ -335,9 +335,9 @@ volclog login \
   --endpoint https://tls-cn-beijing.volces.com
 ```
 
-该命令默认先在 loopback 随机端口启动本地回调，再使用 PKCE 打开浏览器。用户在页面中确认授权后，浏览器把授权结果回调给 CLI，不需要输入设备码或向终端粘贴 code。登录成功后，profile 会切换为 `mode=console-login`，保存登录会话绑定，并且只修补显式提供的 TLS 运行字段。未提供的已有身份和运行字段保持不变，新 profile 不会自动写入默认 Region。
+在交互式终端，该命令先在 loopback 随机端口启动本地回调，再使用 PKCE 打开浏览器。非交互模式则选择 Device Code 且不打开浏览器。用户在页面中确认 PKCE 授权后，浏览器把授权结果回调给 CLI，不需要输入设备码或向终端粘贴 code。登录成功后，profile 会切换为 `mode=console-login`，保存登录会话绑定，并且只修补显式提供的 TLS 运行字段。未提供的已有身份和运行字段保持不变，新 profile 不会自动写入默认 Region。
 
-默认方式的优势是交互步骤最少，适合浏览器和 CLI 位于同一台机器的日常使用。它不适合浏览器位于本地、CLI 位于远程 SSH 主机的场景：浏览器访问的 `127.0.0.1` 是本地机器，不是远程主机；某些 IDE 或 Agent 沙箱也会禁止监听随机端口或启动浏览器。遇到这些条件时应显式使用 Device Code，CLI 不会自动切换流程。
+交互式默认方式步骤最少，适合浏览器和 CLI 位于同一台机器的日常使用。它不适合浏览器位于本地、CLI 位于远程 SSH 主机的场景：浏览器访问的 `127.0.0.1` 是本地机器，不是远程主机；某些 IDE 或 Agent 沙箱也会禁止监听随机端口或启动浏览器。交互式终端遇到这些条件时应显式使用 Device Code；PKCE 失败后不会自动回退。非 TTY 的流程选择在启动前完成。
 
 Console 授权服务默认使用 `https://signin.volcengine.com`。如需选择其他兼容的 Console OAuth 根地址，可使用 `--login-endpoint`。登录地址必须是干净的 HTTPS 根地址，不能包含用户信息、查询参数、片段或非根路径。地址会在规范化后随登录缓存保存，后续自动刷新会继续使用同一个授权服务；不含该字段的旧缓存仍使用默认地址。`--endpoint` 始终表示 TLS 业务 Endpoint。
 
@@ -353,7 +353,7 @@ volclog login \
   --device-code
 ```
 
-CLI 会打印验证 URL 和 user code、尽力打开默认浏览器并轮询授权结果。这里供用户输入的是短期 `user code`；OAuth 内部的 `device_code` 只在 CLI 与授权服务之间使用，不会打印给用户。开发机无法直接显示浏览器页面时再加 `--no-browser`：
+CLI 会打印验证 URL 和 user code 并轮询授权结果。交互模式下会尽力打开默认浏览器，非交互模式不会打开。这里供用户输入的是短期 `user code`；OAuth 内部的 `device_code` 只在 CLI 与授权服务之间使用，不会打印给用户。开发机无法直接显示浏览器页面时可加 `--no-browser`：
 
 ```bash
 volclog login \
@@ -371,7 +371,9 @@ volclog login \
 3. 在官方授权页面输入终端打印的 user code，并完成登录和确认；Console 密码也只在该浏览器页面输入；
 4. 保持原终端运行，`volclog` 会通过出站 HTTPS 轮询等待完成；不需要把任何 code 粘贴回终端。
 
-`--no-browser` 和兼容别名 `--remote` 都隐含 `--device-code`。默认 PKCE 或 Device Code 任一流程失败时，CLI 都不会自动切换到另一流程；本机回调失败时应根据错误显式重试 `--device-code`。
+`--no-browser` 和兼容别名 `--remote` 都隐含 `--device-code`。PKCE 或 Device Code 任一流程失败后不会自动回退到另一流程；交互式本机回调失败时应根据错误显式重试 `--device-code`。非 TTY 的 Device Code 自动选择发生在流程启动前。
+
+非交互模式下若替换会话需要确认，立即返回 `interaction_required`；请使用其他 `--profile` 或交互式终端，没有 `--force` 覆盖。Darwin 和 Linux 的交互提示使用可取消轮询；不支持读取 deadline 的 Windows 控制台会返回 `interaction_required`，可显式提供选择器以避免提示。本次运行验证仅在 Darwin 完成。
 
 Device Code 适合 SSH、Trae 和人工参与的 Agent 会话，是因为它不启动本地回调监听、不要求 CLI 操作浏览器，也不要求浏览器和终端位于同一台机器；CLI 只需要能够向 Console 发起出站 HTTPS 请求。它仍然要求用户在官方页面确认授权，因此不适合无人值守 CI。CI 或工作负载应优先使用 OIDC、ECS Role 或其他可自动轮换的非交互身份。
 
@@ -516,6 +518,8 @@ volclog configure sso \
 ```
 
 命令会输出授权 URL 和设备码提示。请在可以访问页面的浏览器中完成授权。
+
+非交互模式下，SSO 账号或角色只有一个候选时自动选择；多个候选且未指定所需账号或角色时立即失败，请显式提供选择器。失败时事务性 token 回滚、配置更改不提交；注册缓存可能已经写入。
 
 `configure sso` 不会自动切换 current profile。完成后显式切换：
 

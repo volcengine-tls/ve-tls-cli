@@ -271,6 +271,7 @@ func TestLogIngest_JSONArrayDefaultsMissingTimeToInvocationTime(t *testing.T) {
 func newTestLogContext(t *testing.T, rt http.RoundTripper) *Context {
 	t.Helper()
 	ctx := newContext(&bytes.Buffer{}, &bytes.Buffer{}, output.FormatJSON, "", "")
+	ctx.AllowWrite = true // Authorize the mocked PutLogs requests in this fixture.
 	cl, err := tlsapi.New("https://example.com", "cn-beijing", "", "ak", "sk", "", time.Second)
 	if err != nil {
 		t.Fatalf("new tls client: %v", err)

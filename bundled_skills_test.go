@@ -62,7 +62,8 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"Treat `--dry-run` as contract or plan validation, not proof that the business query is correct.",
 		"`status` (`\"success\"` or `\"failed\"`)",
 		"the flat `error` object (when `status` is `\"failed\"`)",
-		"business fields under `data` (when `status` is `\"success\"`)",
+		"business fields under `data` and any `artifacts`; failed results may retain partial data or a partial artifact",
+		"`summary.completeness`",
 		"`error.kind=decode`",
 		"`error.kind=server`",
 		"`error.kind=unknown`",
@@ -137,15 +138,19 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"only for pure search queries",
 		"`log.export-analysis` uses the same SearchLogs SQL/analysis `Query` syntax as `log.search`",
 		"does not add a new server-side analysis API or another pagination model",
-		"full analysis row set written as an export file",
+		"inspect completeness rather than assuming all rows were returned",
 		"Stay on `log.search` when the user is still validating SQL",
 		"let CLI `deliveryMode` decide stdout vs `file_auto`",
 		"`deliveryMode`",
 		"`outputMode`",
-		"`--jmes-filter` runs on the complete CLI envelope",
-		"`--jmes-filter` is stdout-only; do not combine it with file delivery",
+		"`--jmes-filter` runs on the complete CLI envelope and can be combined with `--output-mode file`",
+		"`tool exec` and `workflow exec` also support context `execution.artifact` for file delivery; `raw` does not accept `--context`",
+		"with `--jmes-filter` they write the selected value as a single JSON document, even when `--output jsonl` is set. Default stdout is a JSON delivery envelope with `data=null` and the file path in `artifacts[].path`; human stdout retains the Chinese notice",
+		"In file mode the selected success value, which can be an array, scalar, or `null`, is the JSON file content",
+		"Without a filter, ordinary file delivery retains the complete envelope",
 		"`execution.projection` is different: it runs on the raw result before envelope wrapping",
-		"stdout returns literal `null` and the command still succeeds",
+		"the command succeeds and emits or writes literal `null`",
+		"in file mode the result file is not created or overwritten",
 		"Failed envelopes use one flat `error` object",
 		"`error.source`",
 		"`error.kind`",
@@ -153,7 +158,7 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"`error.details`",
 		"`HitCount`",
 		"`Histogram.TotalCount`",
-		"`ResultStatus=incomplete` means the service returned only a partial scan",
+		"`ResultStatus=incomplete` or `time_out` means incomplete data and `error` means failure",
 		"`--secrets-file`",
 		"`context.secrets_file`",
 		"VOLCENGINE_ACCESS_KEY_ID",
@@ -170,7 +175,7 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"`page-all-is-not-compression`",
 		"`jmes-filter-and-projection-have-different-scope`",
 		"`jmes-filter-null-is-still-success`",
-		"`jmes-filter-does-not-mix-with-file-delivery`",
+		"`jmes-filter-file-contains-selected-json`",
 		"`deliverymode-belongs-to-runtime`",
 		"`workflow-ids-are-not-tool-ids`",
 		"`ingest-is-not-tool-put`",
@@ -411,6 +416,7 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 	if len(traps.Traps) == 0 {
 		t.Fatal("traps template missing traps")
 	}
+	foundFilteredFileTrap := false
 	for _, entry := range traps.Traps {
 		if _, ok := entry["symptom"]; !ok {
 			t.Fatalf("trap missing symptom: %+v", entry)
@@ -418,6 +424,26 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 		if _, ok := entry["fix"]; !ok {
 			t.Fatalf("trap missing fix: %+v", entry)
 		}
+		if trap, _ := entry["trap"].(string); trap == "jmes-filter-file-contains-selected-json" {
+			foundFilteredFileTrap = true
+			for _, requirement := range []struct{ field, fragment string }{
+				{"symptom", "complete envelope"},
+				{"why", "complete success envelope"},
+				{"why", "one JSON document"},
+				{"why", "default stdout is a JSON delivery envelope"},
+				{"why", "human stdout retains the Chinese notice"},
+				{"fix", "artifacts[].path"},
+				{"fix", "unfiltered artifact is an envelope"},
+			} {
+				value, _ := entry[requirement.field].(string)
+				if !strings.Contains(value, requirement.fragment) {
+					t.Fatalf("filtered file trap %s missing %q: %+v", requirement.field, requirement.fragment, entry)
+				}
+			}
+		}
+	}
+	if !foundFilteredFileTrap {
+		t.Fatalf("traps template missing jmes-filter-file-contains-selected-json: %+v", traps)
 	}
 	foundEnvOverrideTrap := false
 	for _, entry := range traps.Traps {

@@ -93,17 +93,41 @@ func (jsonCodec) Encode(_ context.Context, _ contract.Operation, request Request
 	return request, nil, nil
 }
 
-func (jsonCodec) Decode(_ context.Context, _ contract.Operation, response Response, _ any) (any, error) {
+func (jsonCodec) Decode(_ context.Context, operation contract.Operation, response Response, _ any) (any, error) {
+	// Special codecs can delegate their unhandled responses to this codec.
+	// Their existing response contract is distinct from catalog JSON operations.
+	if operation.Wire.Codec != contract.CodecJSON {
+		return decodeJSONFallbackResponse(response)
+	}
 	return decodeJSONResponse(response)
 }
 
 func decodeJSONResponse(response Response) (any, error) {
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, &HTTPError{
-			StatusCode: response.StatusCode,
-			Body:       append([]byte(nil), response.Body...),
-			RequestID:  response.Header.Get("x-tls-requestid"),
+		return nil, httpErrorForResponse(response)
+	}
+	if response.StatusCode != 200 {
+		return nil, &Failure{
+			Kind: "protocol", Code: "UnexpectedHTTPStatus", Stage: "decode", Outcome: OutcomeUnknown,
+			Cause: fmt.Errorf("unexpected HTTP status %d: expected 200", response.StatusCode),
 		}
+	}
+	if len(response.Body) == 0 {
+		return map[string]any{}, nil
+	}
+	var value any
+	if err := jsonx.Unmarshal(response.Body, &value); err != nil {
+		return nil, &Failure{
+			Kind: "protocol", Code: "InvalidJSONResponse", Stage: "decode", Outcome: OutcomeUnknown,
+			Cause: fmt.Errorf("invalid JSON response: %w", err),
+		}
+	}
+	return value, nil
+}
+
+func decodeJSONFallbackResponse(response Response) (any, error) {
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return nil, httpErrorForResponse(response)
 	}
 	if len(response.Body) == 0 {
 		return map[string]any{}, nil
@@ -119,4 +143,12 @@ func decodeJSONResponse(response Response) (any, error) {
 		return map[string]any{"data": text}, nil
 	}
 	return map[string]any{"data": string(response.Body)}, nil
+}
+
+func httpErrorForResponse(response Response) *HTTPError {
+	return &HTTPError{
+		StatusCode: response.StatusCode,
+		Body:       append([]byte(nil), response.Body...),
+		RequestID:  response.Header.Get("x-tls-requestid"),
+	}
 }

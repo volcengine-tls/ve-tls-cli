@@ -3,9 +3,117 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"strings"
 	"testing"
 )
+
+type shortOutputWriter struct {
+	limit        int
+	cause        error
+	calls        int
+	stringWrites int
+	bytes.Buffer
+}
+
+func (w *shortOutputWriter) Write(p []byte) (int, error) {
+	w.calls++
+	n := min(w.limit, len(p))
+	_, _ = w.Buffer.Write(p[:n])
+	return n, w.cause
+}
+
+func (w *shortOutputWriter) WriteString(s string) (int, error) {
+	w.stringWrites++
+	return w.Write([]byte(s))
+}
+
+func TestWriteReportsShortWritesAndPreservesWriterErrors(t *testing.T) {
+	underlying := errors.New("underlying write failure")
+	formats := []struct {
+		name   string
+		format Format
+		value  any
+	}{
+		{name: "json", format: FormatJSON, value: map[string]any{"name": "a"}},
+		{name: "jsonl array", format: FormatJSONL, value: []any{map[string]any{"name": "a"}, map[string]any{"name": "b"}}},
+		{name: "jsonl object array", format: FormatJSONL, value: []map[string]any{{"name": "a"}, {"name": "b"}}},
+		{name: "jsonl single", format: FormatJSONL, value: map[string]any{"name": "a"}},
+		{name: "table", format: FormatTable, value: map[string]any{"name": "a"}},
+		{name: "table empty", format: FormatTable, value: []any{}},
+	}
+	behaviors := []struct {
+		name  string
+		limit int
+		cause error
+		want  error
+	}{
+		{name: "zero bytes", limit: 0, want: io.ErrShortWrite},
+		{name: "partial bytes", limit: 1, want: io.ErrShortWrite},
+		{name: "underlying error", limit: 1, cause: underlying, want: underlying},
+	}
+	for _, format := range formats {
+		for _, behavior := range behaviors {
+			t.Run(format.name+"/"+behavior.name, func(t *testing.T) {
+				writer := &shortOutputWriter{limit: behavior.limit, cause: behavior.cause}
+				err := Write(writer, format.value, format.format)
+				if !errors.Is(err, behavior.want) || writer.calls != 1 || writer.Len() != behavior.limit {
+					t.Fatalf("error=%v calls=%d written=%d", err, writer.calls, writer.Len())
+				}
+				if format.name == "table empty" && writer.stringWrites != 1 {
+					t.Fatalf("empty table string writes=%d", writer.stringWrites)
+				}
+			})
+		}
+	}
+}
+
+type laterShortOutputWriter struct {
+	calls int
+	bytes.Buffer
+}
+
+func (w *laterShortOutputWriter) Write(p []byte) (int, error) {
+	w.calls++
+	if w.calls == 2 {
+		_, _ = w.Buffer.Write(p[:1])
+		return 1, nil
+	}
+	return w.Buffer.Write(p)
+}
+
+func TestWriteJSONLStopsAfterLaterShortWrite(t *testing.T) {
+	w := &laterShortOutputWriter{}
+	err := Write(w, []any{map[string]any{"name": "a"}, map[string]any{"name": "b"}, map[string]any{"name": "c"}}, FormatJSONL)
+	if !errors.Is(err, io.ErrShortWrite) || w.calls != 2 || w.String() != "{\"name\":\"a\"}\n{" {
+		t.Fatalf("error=%v calls=%d output=%q", err, w.calls, w.String())
+	}
+}
+
+func TestWriteSuccessfulBytesRemainUnchanged(t *testing.T) {
+	tests := []struct {
+		name   string
+		format Format
+		value  any
+		want   string
+	}{
+		{name: "json", format: FormatJSON, value: map[string]any{"name": "a"}, want: "{\n  \"name\": \"a\"\n}\n"},
+		{name: "jsonl array", format: FormatJSONL, value: []any{map[string]any{"name": "a"}, map[string]any{"name": "b"}}, want: "{\"name\":\"a\"}\n{\"name\":\"b\"}\n"},
+		{name: "jsonl object array", format: FormatJSONL, value: []map[string]any{{"name": "a"}, {"name": "b"}}, want: "{\"name\":\"a\"}\n{\"name\":\"b\"}\n"},
+		{name: "jsonl single", format: FormatJSONL, value: map[string]any{"name": "a"}, want: "{\"name\":\"a\"}\n"},
+		{name: "table", format: FormatTable, value: map[string]any{"name": "a"}, want: "name\n----\na   \n"},
+		{name: "table empty", format: FormatTable, value: []any{}, want: "(no rows)\n"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			if err := Write(&out, tc.value, tc.format); err != nil || out.String() != tc.want {
+				t.Fatalf("output=%q error=%v, want %q", out.String(), err, tc.want)
+			}
+		})
+	}
+}
 
 func TestCompiledFilterPreservesNumbersAndSupportsNumericOperations(t *testing.T) {
 	in := map[string]any{
@@ -137,6 +245,42 @@ func TestApplyFilterInvalidJMESPath(t *testing.T) {
 	}
 	if !strings.HasPrefix(err.Error(), "invalid jmes-filter expression:") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestFilterErrorsExposeCodesAndCauses(t *testing.T) {
+	_, err := Compile("Projects[].")
+	var syntax *FilterError
+	if !errors.As(err, &syntax) || syntax.ErrorCode() != "InvalidFilter" || syntax.ErrorKind() != "decode" ||
+		syntax.Cause == nil || !errors.Is(err, syntax.Cause) ||
+		!strings.HasPrefix(err.Error(), "invalid jmes-filter expression:") {
+		t.Fatalf("syntax error=%v, typed=%+v", err, syntax)
+	}
+
+	filter, err := Compile("length(@)")
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	_, err = filter.Apply(true)
+	var evaluation *FilterError
+	if !errors.As(err, &evaluation) || evaluation.ErrorCode() != "FilterEvaluationFailed" || evaluation.ErrorKind() != "decode" ||
+		evaluation.Cause == nil || !errors.Is(err, evaluation.Cause) ||
+		!strings.HasPrefix(err.Error(), "invalid jmes-filter expression:") {
+		t.Fatalf("evaluation error=%v, typed=%+v", err, evaluation)
+	}
+}
+
+func TestFilterNoValueKeepsDiagnosticAndNullSucceeds(t *testing.T) {
+	input := map[string]any{"Projects": map[string]any{"Total": 2, "Nullable": nil}}
+	_, err := ApplyFilter(input, "Projects.missing.field")
+	var missing *FilterError
+	if !errors.As(err, &missing) || missing.ErrorCode() != "FilterNoValue" || missing.ErrorKind() != "decode" ||
+		!strings.Contains(err.Error(), "matched prefix: Projects") || !strings.Contains(err.Error(), "available keys: [Nullable, Total]") {
+		t.Fatalf("missing-value error=%v, typed=%+v", err, missing)
+	}
+	value, err := ApplyFilter(input, "Projects.Nullable")
+	if err != nil || value != nil {
+		t.Fatalf("explicit null value=%v, error=%v", value, err)
 	}
 }
 

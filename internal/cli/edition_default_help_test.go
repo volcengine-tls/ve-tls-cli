@@ -4,7 +4,7 @@ package cli
 
 import (
 	"bytes"
-	"strings"
+	"encoding/json"
 	"testing"
 )
 
@@ -17,9 +17,9 @@ func TestDefaultUsageTextOmitsShortcutGuidance(t *testing.T) {
 		"当前 volclog 只暴露 configure/doctor/skill/upgrade/version/tool/workflow/raw/login/logout/sso",
 		"[--output json|jsonl]",
 		"--output-dir <path>",
-		"--trace-redact <enabled>",
+		"--trace-redact <on>",
 		"输出格式（tool/workflow/raw 默认用 json；需要面向机器的逐行结果时可用 jsonl）",
-		"filter matched no value / invalid --jmes-filter 属于 decode，返回 exit 3",
+		"invalid --jmes-filter 属于 decode；执行成功后 filter matched no value 属于 output_failed，均返回 exit 3",
 	} {
 		if !contains(text, want) {
 			t.Fatalf("agent usage missing %q: %q", want, text)
@@ -53,10 +53,15 @@ func TestDefaultTableErrorDoesNotLeakHumanShortcutMatrix(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	if strings.TrimSpace(stdout.String()) != "" {
-		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	var env map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil || stderr.Len() != 0 || env["status"] != "failed" {
+		t.Fatalf("expected failed JSON envelope: err=%v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
 	}
-	errText := stderr.String()
+	failure, ok := env["error"].(map[string]any)
+	if !ok || failure["kind"] != "usage" {
+		t.Fatalf("expected usage error: %#v", env)
+	}
+	errText := stdout.String()
 	if !contains(errText, "default volclog agent path") {
 		t.Fatalf("expected default-volclog hint, got %q", errText)
 	}

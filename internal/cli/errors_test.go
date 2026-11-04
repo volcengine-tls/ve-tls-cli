@@ -2,13 +2,13 @@ package cli
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth"
 	"github.com/volcengine-tls/ve-tls-cli/internal/config"
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 )
 
 func TestClassifyError_UsageMissingFlag(t *testing.T) {
@@ -109,11 +109,11 @@ func TestRunMisplacedGlobalFlagHintIncludesFlagAndExample(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("unexpected code: %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	var p map[string]any
-	if err := json.Unmarshal(stderr.Bytes(), &p); err != nil {
-		t.Fatalf("invalid stderr json: %v stderr=%q", err, stderr.String())
+	p := c4InvocationFailure(t, stdout.String(), stderr.String(), false)
+	if p.Kind != "usage" {
+		t.Fatalf("unexpected kind: %q", p.Kind)
 	}
-	hint, _ := p["hint"].(string)
+	hint := p.Hint
 	if !strings.Contains(hint, "--output-file") {
 		t.Fatalf("hint should mention flag name: %q", hint)
 	}
@@ -409,6 +409,107 @@ func TestAuthErrorsAreKindAuth(t *testing.T) {
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+type typedClassificationTestError struct {
+	kind  string
+	code  string
+	exit  int
+	cause error
+}
+
+func (e *typedClassificationTestError) Error() string         { return "synthetic typed error" }
+func (e *typedClassificationTestError) ErrorKind() string     { return e.kind }
+func (e *typedClassificationTestError) ErrorCode() string     { return e.code }
+func (e *typedClassificationTestError) DeliveryExitCode() int { return e.exit }
+func (e *typedClassificationTestError) Unwrap() error         { return e.cause }
+
+func TestClassifyTypedOperationErrorUsesKindCodeAndDeliveryExitFromSameLayer(t *testing.T) {
+	for _, tc := range []struct {
+		kind     string
+		code     string
+		delivery int
+		wantExit int
+		hint     string
+	}{
+		{kind: "validation", code: "InvalidRequest", wantExit: 1},
+		{kind: "protocol", code: "InvalidJSONResponse", wantExit: 3},
+		{kind: "result_unknown", code: "RequestResultUnknown", wantExit: 2, hint: "do not automatically replay"},
+		{kind: "partial_failure", code: "IngestPartialFailure", wantExit: 2, hint: "current batch"},
+		{kind: "output_failed", code: "OutputFailed", delivery: 2, wantExit: 2, hint: "do not rerun"},
+		{kind: "output_failed", code: "OutputFailed", delivery: 3, wantExit: 3, hint: "do not rerun"},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			err := &typedClassificationTestError{
+				kind: tc.kind, code: tc.code, exit: tc.delivery,
+				cause: &typedClassificationTestError{kind: "validation", code: "InnerCode", exit: 3},
+			}
+			payload, exit := classifyError(err, "req-current", 201, "tool")
+			if exit != tc.wantExit || payload.Kind != tc.kind || payload.ErrorCode != tc.code ||
+				payload.RequestID != "req-current" || payload.StatusCode != 201 ||
+				(tc.hint != "" && !strings.Contains(payload.Hint, tc.hint)) {
+				t.Fatalf("payload=%#v exit=%d, want kind=%q code=%q exit=%d", payload, exit, tc.kind, tc.code, tc.wantExit)
+			}
+		})
+	}
+}
+
+func TestClassifyTypedOperationErrorUnwrapsEmptyKindAndJoin(t *testing.T) {
+	inner := &typedClassificationTestError{kind: "protocol", code: "InvalidJSONResponse"}
+	outer := &typedClassificationTestError{code: "IgnoredOuterCode", exit: 2, cause: inner}
+	for _, err := range []error{outer, errors.Join(errors.New("untyped branch"), outer)} {
+		payload, exit := classifyError(err, "req", 200, "tool")
+		if exit != 3 || payload.Kind != "protocol" || payload.ErrorCode != "InvalidJSONResponse" {
+			t.Fatalf("payload=%#v exit=%d", payload, exit)
+		}
+	}
+
+	// An empty outer kind must also leave legacy authentication classification intact.
+	authCause := &auth.Error{Kind: auth.ReauthRequired}
+	err := &execution.Failure{Code: "IgnoredOuterCode", Cause: authCause}
+	payload, exit := classifyError(err, "", 0, "tool")
+	if exit != 2 || payload.Kind != "auth" || payload.ErrorCode != "" {
+		t.Fatalf("auth payload=%#v exit=%d", payload, exit)
+	}
+}
+
+func TestClassifyTypedOperationErrorPreservesFrozenAuthContracts(t *testing.T) {
+	typed := &typedClassificationTestError{kind: "result_unknown", code: "RequestResultUnknown"}
+	for _, group := range []string{"login", "logout", "sso", "configure"} {
+		payload, exit := classifyError(typed, "", 0, group)
+		if exit != 2 || payload.Kind != "unknown" || payload.ErrorCode != "" {
+			t.Fatalf("group=%q payload=%#v exit=%d", group, payload, exit)
+		}
+	}
+	joined := errors.Join(ErrSSOLogoutPartialFailure, typed)
+	payload, exit := classifyError(joined, "", 0, "tool")
+	if exit != 2 || payload.Kind != "partial_failure" || !strings.Contains(payload.Hint, "sso local token") {
+		t.Fatalf("sentinel payload=%#v exit=%d", payload, exit)
+	}
+	he := &httpError{statusCode: 409, body: []byte(`{"ErrorCode":"AlreadyExists"}`)}
+	payload, exit = classifyError(he, "", 0, "login")
+	if exit != 2 || payload.Kind != "server" {
+		t.Fatalf("frozen auth HTTP payload=%#v exit=%d", payload, exit)
+	}
+}
+
+func TestClassifyContextValidationUsesStableCode(t *testing.T) {
+	payload, exit := classifyError(&toolContextValidationError{Path: "$.execution", Reason: "invalid"}, "", 0, "tool")
+	if exit != 1 || payload.Kind != "validation" || payload.ErrorCode != "InvalidContext" {
+		t.Fatalf("payload=%#v exit=%d", payload, exit)
+	}
+}
+
+func TestClassifyKnownThrottleCodes(t *testing.T) {
+	for _, serviceCode := range []string{"Throttling", "ThrottlingException", "LimitExceeded", "RequestLimitExceeded", "TooManyRequests"} {
+		t.Run(serviceCode, func(t *testing.T) {
+			err := &httpError{statusCode: 400, body: []byte(`{"ErrorCode":"` + serviceCode + `"}`), requestID: "req"}
+			payload, exit := classifyError(err, "", 0, "tool")
+			if exit != 2 || payload.Kind != "throttled" || payload.RequestID != "req" || payload.StatusCode != 400 {
+				t.Fatalf("payload=%#v exit=%d", payload, exit)
+			}
+		})
+	}
+}
 
 // TestSentinelErrorsTakePriorityOverAuthCause proves that the stable
 // transaction/partial-failure sentinels are classified before the generic

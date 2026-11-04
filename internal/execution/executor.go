@@ -26,7 +26,7 @@ func NewExecutor(transport Transport, codecs *CodecRegistry) *Executor {
 }
 
 func (e *Executor) Execute(ctx context.Context, invocation Invocation) (Result, error) {
-	result := Result{OperationID: invocation.Operation.ID}
+	result := Result{OperationID: invocation.Operation.ID, RemoteOutcome: OutcomeNotSent}
 	if e == nil {
 		return result, errors.New("nil executor")
 	}
@@ -36,7 +36,7 @@ func (e *Executor) Execute(ctx context.Context, invocation Invocation) (Result, 
 	switch invocation.Options.ValidationPolicy {
 	case ValidationRequired:
 		if err := ValidateInput(invocation.Operation, invocation.Input); err != nil {
-			return result, err
+			return result, &Failure{Kind: "validation", Code: "InvalidInput", Stage: "validate", Outcome: OutcomeNotSent, Cause: err}
 		}
 	case ValidationCallerLegacy:
 		// The caller preserves its established validation contract.
@@ -45,7 +45,7 @@ func (e *Executor) Execute(ctx context.Context, invocation Invocation) (Result, 
 	}
 	request, err := BuildRequest(invocation.Operation, invocation.Input)
 	if err != nil {
-		return result, err
+		return result, &Failure{Kind: "validation", Code: "InvalidRequest", Stage: "build_request", Outcome: OutcomeNotSent, Cause: err}
 	}
 	codecs := e.codecs
 	if codecs == nil {
@@ -78,7 +78,11 @@ func (e *Executor) Execute(ctx context.Context, invocation Invocation) (Result, 
 		return result, errors.New("nil transport")
 	}
 	if invocation.Options.PageAll {
-		return e.executeAll(ctx, invocation, request, codec)
+		result, err := e.executeAll(ctx, invocation, request, codec)
+		if result.RemoteOutcome == "" {
+			result.RemoteOutcome = OutcomeNotSent
+		}
+		return result, err
 	}
 	return e.executeOne(ctx, invocation.Operation, request, codec)
 }
@@ -97,32 +101,43 @@ func isNilTransport(transport Transport) bool {
 }
 
 func (e *Executor) executeOne(ctx context.Context, operation contract.Operation, request Request, codec Codec) (Result, error) {
-	result := Result{OperationID: operation.ID}
+	result := Result{OperationID: operation.ID, RemoteOutcome: OutcomeNotSent}
 	encoded, state, err := codec.Encode(ctx, operation, cloneRequest(request))
 	if err != nil {
-		return result, err
+		return result, &Failure{Kind: "validation", Code: "InvalidRequest", Stage: "encode", Outcome: OutcomeNotSent, Cause: err}
 	}
 	response, transportErr := e.transport.Do(ctx, encoded)
 	result = resultForResponse(operation.ID, response)
 	if transportErr != nil {
+		result.RemoteOutcome = ErrorOutcome(transportErr, OutcomeUnknown)
 		return result, transportErr
 	}
 	data, decodeErr := codec.Decode(ctx, operation, response, state)
 	result.Data = data
+	if decodeErr != nil {
+		result.RemoteOutcome = ErrorOutcome(decodeErr, OutcomeUnknown)
+	} else {
+		result.RemoteOutcome = OutcomeSuccess
+	}
 	return result, decodeErr
 }
 
 func buildDryRunPlan(invocation Invocation, preview, encoded Request) *DryRunPlan {
 	checks := make([]PreflightCheck, 0, len(invocation.Runtime.Checks)+3)
+	var redactedFields []string
 	checks = append(checks, invocation.Runtime.Checks...)
 	if !failedCheck(checks, "profile") {
 		endpoint := strings.TrimSpace(invocation.Runtime.Endpoint)
 		region := strings.TrimSpace(invocation.Runtime.Region)
+		endpointPreview, changed := RedactPreviewURL(endpoint)
+		if changed {
+			redactedFields = append(redactedFields, "checks.endpoint.detail")
+		}
 		checks = append(checks,
 			PreflightCheck{
 				Name:   "endpoint",
 				OK:     endpoint != "",
-				Detail: &endpoint,
+				Detail: &endpointPreview,
 			},
 			PreflightCheck{
 				Name:   "region",
@@ -145,10 +160,12 @@ func buildDryRunPlan(invocation Invocation, preview, encoded Request) *DryRunPla
 		}
 	}
 	sum := sha256.Sum256(encoded.Body)
+	pathPreview, pathFields := RedactPreviewPath(strings.TrimSpace(encoded.Path))
+	redactedFields = append(redactedFields, pathFields...)
 	plan := &DryRunPlan{
 		Type:            "plan",
 		Method:          strings.ToUpper(strings.TrimSpace(encoded.Method)),
-		Path:            strings.TrimSpace(encoded.Path),
+		Path:            pathPreview,
 		QueryKeys:       sortedQueryKeys(encoded.Query, encoded.QueryMulti),
 		HeadersRedacted: redactedHeaderKeys(encoded.Header),
 		BodySHA256:      hex.EncodeToString(sum[:]),
@@ -164,6 +181,9 @@ func buildDryRunPlan(invocation Invocation, preview, encoded Request) *DryRunPla
 	if invocation.Operation.Wire.Codec != contract.CodecJSON {
 		plan.RequestPreview["body_source"] = "input_before_special_io"
 	}
+	plan.RequestPreview, plan.RedactedFields = RedactRequestPreview(plan.RequestPreview)
+	plan.RedactedFields = append(plan.RedactedFields, redactedFields...)
+	sort.Strings(plan.RedactedFields)
 	if invocation.Options.PageAll {
 		plan.PageAll = &DryRunPaginationPlan{
 			Requested: true,
@@ -227,7 +247,7 @@ func previewBody(request Request) (any, bool) {
 			}
 			var row any
 			if jsonx.Unmarshal([]byte(line), &row) != nil {
-				return trimmed, true
+				return UnparseableBodyPreview, true
 			}
 			rows = append(rows, row)
 		}
@@ -237,7 +257,7 @@ func previewBody(request Request) (any, bool) {
 		if jsonx.Unmarshal(request.Body, &value) == nil {
 			return value, true
 		}
-		return trimmed, true
+		return UnparseableBodyPreview, true
 	}
 }
 

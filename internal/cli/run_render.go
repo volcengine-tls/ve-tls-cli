@@ -15,6 +15,23 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 	flags := invocation.flags
 	format := invocation.format
 	outputMode := invocation.outputMode
+	var deliveredEnvelope map[string]any
+	if (group == "tool" || group == "workflow") && len(rest) > 0 && rest[0] == "exec" {
+		deliveredEnvelope, _ = structuredEnvelopeOutput(out)
+	}
+	failDelivery := func(err error, stage string, code int) int {
+		return writeDeliveryFailure(ctx, stdout, stderr, group, err, stage, code, deliveredEnvelope)
+	}
+	failStdout := func(err error) int { return writeDeliveryFailureToStderr(ctx, stderr, group, err, deliveredEnvelope) }
+	writeNotice := func(text string) int {
+		if err := writeOutputNotice(stdout, text); err != nil {
+			return failStdout(err)
+		}
+		return exitCode
+	}
+	if strings.TrimSpace(ctx.Filter) != "" && filterTargetsEnvelope(group, rest) && ctx.OutputMode == "file" {
+		outputMode = ctx.OutputMode
+	}
 
 	if ctx.FormatOverride != "" {
 		format = ctx.FormatOverride
@@ -22,15 +39,32 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 	}
 	if err != nil {
 		if ue, ok := asUsageError(err); ok {
-			_, _ = stdout.Write([]byte(ue.Text))
+			if ue.ExitCode != 0 && defaultAgentErrorProtocol(group, rest) {
+				hint := scopedHelpHint(err)
+				if hint == "" {
+					hint = "run 'volclog " + group + " --help' to inspect command usage"
+				}
+				return writeInvocationFailure(stdout, stderr, group, rest, errors.New("missing command or required arguments"), "usage", hint, ue.ExitCode)
+			}
+			if writeErr := writeOutputNotice(stdout, ue.Text); writeErr != nil {
+				return failStdout(writeErr)
+			}
 			return ue.ExitCode
 		}
-		if emitsStructuredEnvelope(group, rest) {
-			if strings.TrimSpace(ctx.TraceDir) != "" {
+		if emitsStructuredEnvelope(group, rest) || defaultAgentErrorProtocol(group, rest) || ctx.Completeness != nil {
+			classification, _ := classifyError(err, ctx.RequestID, ctx.StatusCode, group)
+			if strings.TrimSpace(ctx.TraceDir) != "" && classification.Kind != "validation" {
 				_ = ctx.initTrace()
 			}
 			env := buildAPIErrorEnvelope(ctx, group, err, outputMode)
-			if ctx.Filter != "" && filterTargetsEnvelope(group, rest) {
+			if prepared, deliveryErr := prepareIncompleteDelivery(ctx, group, env); deliveryErr != nil {
+				failed := buildAPIErrorEnvelope(ctx, group, outputFailure(ctx, deliveryErr, "artifact", 2), outputMode)
+				failed["data"] = env["data"]
+				return writeStructuredError(stdout, stderr, outputFailure(ctx, deliveryErr, "artifact", 2), ctx.RequestID, ctx.StatusCode, group, failed)
+			} else {
+				env = prepared
+			}
+			if ctx.Filter != "" && filterTargetsEnvelope(group, rest) && outputMode != "file" {
 				filtered, err2 := applyEnvelopeFilterResult(env, ctx.Filter)
 				if err2 != nil {
 					appendEnvelopeWarning(env, map[string]any{
@@ -41,8 +75,7 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 					return writeStructuredError(stdout, stderr, err, ctx.RequestID, ctx.StatusCode, group, env)
 				}
 				if err2 := output.Write(stdout, filtered, output.FormatJSON); err2 != nil {
-					writeCLIError(stderr, err2, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
-					return 3
+					return failStdout(err2)
 				}
 				_, code := classifyError(err, ctx.RequestID, ctx.StatusCode, group)
 				return code
@@ -52,6 +85,19 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 		return writeStructuredError(stdout, stderr, err, ctx.RequestID, ctx.StatusCode, group, nil)
 	}
 	applyEnvelopeFilter := filterTargetsEnvelope(group, rest)
+	if strings.TrimSpace(ctx.Filter) != "" && applyEnvelopeFilter && outputMode == "file" {
+		env, ok := structuredEnvelopeOutput(out)
+		// Raw service data must always be wrapped locally; do not trust a
+		// response that happens to resemble a CLI envelope or artifact path.
+		if group == "raw" || !ok {
+			var err error
+			env, err = buildAPIEnvelope(ctx, group, out, outputMode, ctx.OutputFile, format)
+			if err != nil {
+				return failDelivery(err, "artifact", 2)
+			}
+		}
+		return renderFilteredEnvelopeFile(ctx, stdout, stderr, group, rest, env, exitCode)
+	}
 	if ctx.Filter != "" && !applyEnvelopeFilter {
 		filterTarget := out
 		out, err = output.ApplyFilter(out, ctx.Filter)
@@ -65,36 +111,38 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 			if currentEdition() == cliEditionVolclog {
 				hint = "table is not supported on the default volclog agent path; use --output json|jsonl"
 			}
+			if currentRemoteOutcome(ctx, nil) != "not_sent" {
+				return failDelivery(errors.New("unsupported output: table"), "format", 3)
+			}
+			if defaultAgentErrorProtocol(group, rest) {
+				return writeRunError(ctx, stdout, stderr, group, rest, errors.New("unsupported output: table"), "usage", hint, outputMode, 1)
+			}
 			writeCLIError(stderr, errors.New("unsupported output: table"), ctx.RequestID, ctx.StatusCode, "usage", hint)
 			return 1
 		}
 		if outputMode == "file" {
 			p, err := writeOutputFileToDir(flags.OutputFile, ctx.OutputDir, group, out, format)
 			if err != nil {
-				writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "filesystem", "provide a writable --output-dir or check the local file path and permissions")
-				return 2
+				return failDelivery(err, "artifact", 2)
 			}
-			_, _ = stdout.Write([]byte(p + "\n"))
-			return exitCode
+			deliveredEnvelope = map[string]any{"artifacts": []map[string]any{buildOutputArtifact(p, format)}}
+			return writeNotice(p + "\n")
 		}
 		if err := output.Write(stdout, out, format); err != nil {
-			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
-			return 3
+			return failStdout(err)
 		}
 		return exitCode
 	}
-	if s, ok := out.(string); ok {
+	if s, ok := out.(string); ok && !(group == "raw" && currentEdition() == cliEditionVolclog) {
 		if outputMode == "file" {
 			p, err := writeTextFileToDir(flags.OutputFile, ctx.OutputDir, group, s)
 			if err != nil {
-				writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "filesystem", "provide a writable --output-dir or check the local file path and permissions")
-				return 2
+				return failDelivery(err, "artifact", 2)
 			}
-			_, _ = stdout.Write([]byte(p + "\n"))
-			return exitCode
+			deliveredEnvelope = map[string]any{"artifacts": []map[string]any{buildOutputArtifact(p, format)}}
+			return writeNotice(p + "\n")
 		}
-		_, _ = stdout.Write([]byte(s))
-		return exitCode
+		return writeNotice(s)
 	}
 	if strings.TrimSpace(ctx.TraceDir) != "" {
 		_ = ctx.initTrace()
@@ -105,35 +153,28 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 	if isAPIEnvelopeCandidate(group, out) {
 		env, err := buildAPIEnvelope(ctx, group, out, outputMode, flags.OutputFile, format)
 		if err != nil {
-			kind := "decode"
-			hint := "output write failed"
 			code := 3
 			if outputMode == "file" {
-				kind = "filesystem"
-				hint = "provide a writable --output-dir or check the local file path and permissions"
 				code = 2
 			}
-			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, kind, hint)
-			return code
+			return failDelivery(err, "artifact", code)
 		}
+		deliveredEnvelope = env
 		if ctx.Filter != "" && applyEnvelopeFilter {
 			filtered, err := applyEnvelopeFilterResult(env, ctx.Filter)
 			if err != nil {
 				return writeFilterApplicationError(ctx, stdout, stderr, group, rest, env, outputMode, err)
 			}
 			if err := output.Write(stdout, filtered, output.FormatJSON); err != nil {
-				writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
-				return 3
+				return failStdout(err)
 			}
 			return exitCode
 		}
-		if notice, ok := fileDeliveryNoticeForOutput(env, group, rest); ok {
-			_, _ = stdout.Write([]byte(notice))
-			return exitCode
+		if _, ok := fileDeliveryNoticeForOutput(env, group, rest); ok {
+			return renderFileDelivery(ctx, stdout, stderr, group, rest, env, exitCode)
 		}
 		if err := output.Write(stdout, env, output.FormatJSON); err != nil {
-			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
-			return 3
+			return failStdout(err)
 		}
 		return exitCode
 	}
@@ -144,22 +185,20 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 			return writeFilterApplicationError(ctx, stdout, stderr, group, rest, filterTarget, outputMode, err)
 		}
 	}
-	if notice, ok := fileDeliveryNoticeForOutput(out, group, rest); ok {
-		_, _ = stdout.Write([]byte(notice))
-		return exitCode
+	if _, ok := fileDeliveryNoticeForOutput(out, group, rest); ok {
+		env, _ := structuredEnvelopeOutput(out)
+		return renderFileDelivery(ctx, stdout, stderr, group, rest, env, exitCode)
 	}
 	if outputMode == "file" {
 		p, err := writeOutputFileToDir(flags.OutputFile, ctx.OutputDir, group, out, format)
 		if err != nil {
-			writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "filesystem", "provide a writable --output-dir or check the local file path and permissions")
-			return 2
+			return failDelivery(err, "artifact", 2)
 		}
-		_, _ = stdout.Write([]byte(p + "\n"))
-		return exitCode
+		deliveredEnvelope = map[string]any{"artifacts": []map[string]any{buildOutputArtifact(p, format)}}
+		return writeNotice(p + "\n")
 	}
 	if err := output.Write(stdout, out, format); err != nil {
-		writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
-		return 3
+		return failStdout(err)
 	}
 	return exitCode
 }

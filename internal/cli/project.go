@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
-	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 func runProject(ctx *Context, args []string) (any, error) {
@@ -90,7 +89,7 @@ func projectList(ctx *Context, args []string) (any, error) {
 			if len(args) < 2 {
 				return nil, errors.New("missing --tags value")
 			}
-			s, err := util.ReadStringMaybeFile(args[1])
+			s, err := ctx.readStringMaybeFile(args[1])
 			if err != nil {
 				return nil, err
 			}
@@ -123,8 +122,7 @@ func projectList(ctx *Context, args []string) (any, error) {
 			},
 			PageAll: true,
 			LegacyPageAll: &legacyPageAllPolicy{
-				ListField:  "Projects",
-				ForceTotal: true,
+				ListField: "Projects",
 			},
 		})
 	}
@@ -237,7 +235,7 @@ func projectCreate(ctx *Context, args []string) (any, error) {
 
 	var req map[string]any
 	if strings.TrimSpace(requestArg) != "" {
-		m, err := util.ReadJSONObjectMaybeFile(requestArg)
+		m, err := ctx.readJSONObjectMaybeFile(requestArg)
 		if err != nil {
 			return nil, err
 		}
@@ -262,7 +260,7 @@ func projectCreate(ctx *Context, args []string) (any, error) {
 		req["Region"] = r
 	}
 	if strings.TrimSpace(tagsArg) != "" {
-		a, err := util.ReadJSONArrayMaybeFile(tagsArg)
+		a, err := ctx.readJSONArrayMaybeFile(tagsArg)
 		if err != nil {
 			return nil, err
 		}
@@ -330,7 +328,7 @@ func projectModify(ctx *Context, args []string) (any, error) {
 	}
 	var req map[string]any
 	if strings.TrimSpace(requestArg) != "" {
-		m, err := util.ReadJSONObjectMaybeFile(requestArg)
+		m, err := ctx.readJSONObjectMaybeFile(requestArg)
 		if err != nil {
 			return nil, err
 		}

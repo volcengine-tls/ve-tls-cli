@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
@@ -224,26 +225,38 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 
 	cfg := toolExecContext{Execution: map[string]any{}}
 	if strings.TrimSpace(contextArg) != "" {
-		cfg, err = loadToolExecContext(contextArg)
+		cfg, err = loadToolExecContext(contextArg, ctx)
 		if err != nil {
 			return nil, err
 		}
 	}
+	if err := ctx.applyExecutionControls(cfg); err != nil {
+		return nil, err
+	}
 	input := map[string]any{}
 	if strings.TrimSpace(inputArg) != "" {
-		input, err = readToolJSONObjectFlag("--input", inputArg)
+		input, err = readToolJSONObjectFlag("--input", inputArg, ctx)
 		if err != nil {
 			return nil, err
 		}
 	}
 	if err := validateWorkflowExecInput(spec, input); err != nil {
-		return nil, err
+		return nil, validationFailure(err, "InvalidWorkflowInput")
+	}
+	options := resolveToolExecutionOptions(cfg)
+	if _, exists := cfg.Execution["page"]; exists {
+		return nil, newUnsupportedFeatureError("workflow does not support execution.page", "remove execution.page; use the workflow's own documented input controls")
+	}
+	if _, exists := cfg.Execution["page_all"]; exists {
+		return nil, newUnsupportedFeatureError("workflow does not support execution.page_all", "remove execution.page_all; use the workflow's own documented input controls")
+	}
+	compiledProjection, err := output.Compile(options.Projection)
+	if err != nil {
+		return nil, &execution.Failure{Kind: "decode", Code: "InvalidProjection", Stage: "validate", Outcome: execution.OutcomeNotSent, Cause: fmt.Errorf("invalid execution.projection: %w", err)}
 	}
 	if err := applyToolExecContext(ctx, cfg); err != nil {
 		return nil, err
 	}
-
-	options := resolveToolExecutionOptions(cfg)
 	if strings.TrimSpace(options.OutputDir) != "" {
 		ctx.OutputDir = strings.TrimSpace(options.OutputDir)
 	}
@@ -251,22 +264,16 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 		ctx.DryRun = true
 	}
 	if options.Artifact {
-		if strings.TrimSpace(ctx.Filter) != "" {
-			return nil, errors.New("--jmes-filter cannot be combined with file delivery for workflow exec")
-		}
 		ctx.OutputMode = "file"
 		if strings.TrimSpace(options.ArtifactPath) != "" {
 			ctx.OutputFile = strings.TrimSpace(options.ArtifactPath)
 		}
+	}
+	if ctx.OutputMode == "file" {
 		if err := preflightOutputFilePath(ctx.OutputFile, ctx.OutputDir, "workflow", output.FormatJSON); err != nil {
 			return nil, err
 		}
 	}
-	compiledProjection, err := output.Compile(options.Projection)
-	if err != nil {
-		return nil, fmt.Errorf("invalid execution.projection: %w", err)
-	}
-
 	workflowArgs, cleanup, err := workflowExecArgs(spec, input)
 	if err != nil {
 		return nil, err
@@ -279,16 +286,16 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 	}
 	filtered, err := applyCompiledToolExecFilter(out, compiledProjection)
 	if err != nil {
-		return nil, err
+		return nil, outputFailure(ctx, err, "projection", 3)
 	}
 	env, err := buildAPIEnvelope(ctx, "workflow", filtered, ctx.OutputMode, ctx.OutputFile, ctx.Format)
 	if err != nil {
-		return nil, err
+		return nil, postExecutionFailure(ctx, err, "artifact")
 	}
 	env["action"] = ctx.Action
 	env, err = finalizeWorkflowExecEnvelope(ctx, filtered, env, options)
 	if err != nil {
-		return nil, err
+		return nil, postExecutionFailure(ctx, err, "artifact")
 	}
 	return env, nil
 }
@@ -447,7 +454,7 @@ func dispatchWorkflowExec(ctx *Context, spec workflowCatalog, input map[string]a
 }
 
 func finalizeWorkflowExecEnvelope(ctx *Context, result any, env map[string]any, options toolExecutionOptions) (map[string]any, error) {
-	if ctx == nil || ctx.OutputMode != "stdout" || ctx.OutputModeExplicit || ctx.Format != output.FormatJSON || options.Artifact || strings.TrimSpace(options.Projection) != "" {
+	if ctx == nil || ctx.OutputMode != "stdout" || ctx.OutputModeExplicit || ctx.Format != output.FormatJSON || options.Artifact || strings.TrimSpace(options.Projection) != "" || strings.TrimSpace(ctx.Filter) != "" {
 		return env, nil
 	}
 	size, err := estimateOutputBytes(env, ctx.Format)
@@ -457,7 +464,7 @@ func finalizeWorkflowExecEnvelope(ctx *Context, result any, env map[string]any, 
 	filePath, err := resolveOutputFilePath("", ctx.OutputDir, "workflow", output.FormatJSON)
 	if err != nil {
 		if errors.Is(err, errMissingWritableOutputDir) {
-			return nil, errors.New("result too large for stdout; specify --output-dir <writable-dir> to allow automatic file delivery")
+			return nil, errMissingWritableOutputDir
 		}
 		return nil, err
 	}

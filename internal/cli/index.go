@@ -98,7 +98,7 @@ func indexUpsert(ctx *Context, operationID contract.OperationID, path string, ar
 	if topicID == "" {
 		return nil, errors.New("missing --topic-id")
 	}
-	raw, err := util.ReadMaybeFile(bodyArg)
+	raw, err := ctx.readMaybeFile(bodyArg)
 	if err != nil {
 		return nil, err
 	}

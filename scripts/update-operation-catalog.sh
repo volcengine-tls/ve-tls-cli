@@ -75,6 +75,7 @@ GO_BIN="${GO:-go}"
   --swagger-tag-mapping "$SWAGGER_TAG_MAPPING" \
   --tool-risk-overrides "$OVERRIDES_ROOT/risk.yaml" \
   --tool-recovery-overrides "$OVERRIDES_ROOT/recovery.yaml" \
+  --tool-documentation-overrides "$OVERRIDES_ROOT/documentation.json" \
   --tool-output-policy-overrides "$OVERRIDES_ROOT/output_policy.yaml" \
   --tool-usage-constraints-overrides "$OVERRIDES_ROOT/usage_constraints.yaml" \
   --internal-operation-overrides "$OVERRIDES_ROOT/internal_operations.json" \

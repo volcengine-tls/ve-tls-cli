@@ -10,6 +10,55 @@ import (
 	"testing"
 )
 
+// c4InvocationFailure checks the edition-specific channel and shape. The
+// frozen argument is explicit at call sites for interactive auth commands.
+func c4InvocationFailure(t *testing.T, stdout, stderr string, frozen bool) errPayload {
+	t.Helper()
+	if currentEdition() == cliEditionVolclog && !frozen {
+		if stderr != "" {
+			t.Fatalf("expected empty stderr, got %q", stderr)
+		}
+		var envelope struct {
+			Status    string            `json:"status"`
+			Action    string            `json:"action"`
+			Artifacts []json.RawMessage `json:"artifacts"`
+			Data      json.RawMessage   `json:"data"`
+			Error     *struct {
+				Source  string `json:"source"`
+				Code    string `json:"code"`
+				Message string `json:"message"`
+				Kind    string `json:"kind"`
+				Hint    string `json:"hint"`
+			} `json:"error"`
+			Summary *struct {
+				RemoteOutcome   string `json:"remoteOutcome"`
+				DeliveryOutcome string `json:"deliveryOutcome"`
+			} `json:"summary"`
+		}
+		if err := json.Unmarshal([]byte(stdout), &envelope); err != nil {
+			t.Fatalf("invalid stdout failure envelope: %v, stdout=%q", err, stdout)
+		}
+		if envelope.Status != "failed" || envelope.Action == "" || envelope.Artifacts == nil || len(envelope.Data) == 0 ||
+			envelope.Error == nil || envelope.Error.Source != "cli" || envelope.Error.Code != "CLIError" ||
+			envelope.Error.Message == "" || envelope.Error.Kind == "" || envelope.Summary == nil ||
+			envelope.Summary.RemoteOutcome != "not_sent" || envelope.Summary.DeliveryOutcome != "success" {
+			t.Fatalf("invalid stdout failure envelope: %q", stdout)
+		}
+		return errPayload{ErrorCode: envelope.Error.Code, ErrorMessage: envelope.Error.Message, Kind: envelope.Error.Kind, Hint: envelope.Error.Hint}
+	}
+	if stdout != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout)
+	}
+	var payload errPayload
+	if err := json.Unmarshal([]byte(stderr), &payload); err != nil {
+		t.Fatalf("invalid stderr error: %v, stderr=%q", err, stderr)
+	}
+	if payload.ErrorCode != "CLIError" || payload.ErrorMessage == "" || payload.Kind == "" {
+		t.Fatalf("invalid stderr error: %q", stderr)
+	}
+	return payload
+}
+
 func TestUsageRawDescribesTransportOnlySurface(t *testing.T) {
 	text := usageRaw()
 	for _, want := range []string{
@@ -92,13 +141,13 @@ func TestLegacyCapabilitiesAndAPIAreRemoved(t *testing.T) {
 			if code != 1 {
 				t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 			}
-			if strings.TrimSpace(stdout.String()) != "" {
-				t.Fatalf("expected empty stdout, got %q", stdout.String())
+			payload := c4InvocationFailure(t, stdout.String(), stderr.String(), false)
+			if payload.Kind != "usage" || !strings.Contains(payload.ErrorMessage, "removed") {
+				t.Fatalf("unexpected removed command error: %#v", payload)
 			}
-			text := stderr.String()
-			for _, want := range append([]string{`"errorCode": "CLIError"`, `"kind": "usage"`, "removed"}, tc.wantHints...) {
-				if !strings.Contains(text, want) {
-					t.Fatalf("missing %q in stderr: %q", want, text)
+			for _, want := range tc.wantHints {
+				if !strings.Contains(payload.Hint, want) {
+					t.Fatalf("missing %q in hint: %q", want, payload.Hint)
 				}
 			}
 		})
