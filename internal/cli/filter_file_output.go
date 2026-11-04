@@ -73,10 +73,10 @@ func renderFilteredEnvelopeFile(ctx *Context, stdout, stderr io.Writer, group st
 	if err := writeFilteredOutputFile(path, data); err != nil {
 		return writeDeliveryFailure(ctx, stdout, stderr, group, err, "artifact", 2)
 	}
-	if err := writeOutputNotice(stdout, "结果已写入文件。\n文件: "+path+"\n"); err != nil {
-		return writeDeliveryFailureToStderr(ctx, stderr, group, err, env)
+	if err := refreshFileDeliveryArtifacts(env); err != nil {
+		return writeDeliveryFailure(ctx, stdout, stderr, group, err, "artifact", 2, env)
 	}
-	return exitCode
+	return renderFileDelivery(ctx, stdout, stderr, group, rest, env, exitCode)
 }
 
 // Use a sibling temporary file so a filter/encoding/write failure cannot

@@ -49,7 +49,7 @@ func preflightRunInvocation(invocation *runInvocation, stdout, stderr io.Writer)
 	}
 	if ctx.GlobalSecretsFile != "" {
 		if err := preflightGlobalSecretsFile(group, ctx.Profile, ctx.GlobalSecretsFile); err != nil {
-			if emitsStructuredEnvelope(group, rest) {
+			if emitsStructuredEnvelope(group, rest) || defaultAgentErrorProtocol(group, rest) {
 				return writeStructuredError(stdout, stderr, err, "", 0, group, buildAPIErrorEnvelope(ctx, group, err, outputMode)), true
 			}
 			hint := "use exactly one runtime selector: --profile or --secrets-file"
@@ -61,7 +61,7 @@ func preflightRunInvocation(invocation *runInvocation, stdout, stderr io.Writer)
 		}
 		if !defersSecretsResolutionToCommand(group, rest) {
 			if err := loadSecretsFile(ctx.GlobalSecretsFile); err != nil {
-				if emitsStructuredEnvelope(group, rest) {
+				if emitsStructuredEnvelope(group, rest) || defaultAgentErrorProtocol(group, rest) {
 					return writeStructuredError(stdout, stderr, err, "", 0, group, buildAPIErrorEnvelope(ctx, group, err, outputMode)), true
 				}
 				writeCLIError(stderr, err, "", 0, "config", "failed to load --secrets-file")

@@ -259,18 +259,20 @@ For provider-specific login, refresh, and logout behavior, see [Authentication](
 
 `--output-mode` accepts `stdout` (default) and `file`. Any other value is rejected.
 
+Without an explicit stdout filter, default `volclog` emits JSON envelopes for `raw`, `tool exec`, and `workflow exec` success and error results. A JSON scalar or string returned by `raw` is wrapped under `data`; `volclog-human` retains its prior display. An explicit stdout `--jmes-filter` may instead return an array, scalar, or `null`.
+
 ### 7.2 stdout vs file delivery
 
 By default, results are written to stdout. With `--output-mode file` (forced file mode), the output contract depends on the command surface:
 
-- For `raw`, `tool exec`, and `workflow exec`, a successful result is written to an artifact file under `--output-dir`: normally the complete envelope, or the selected value when `--jmes-filter` is set. stdout contains only the fixed Chinese file notice (`结果已写入文件。\n文件: <path>\n`). Automation must read the artifact path from the notice and read the file.
+- For `raw`, `tool exec`, and `workflow exec`, a successful result is written to an artifact file under `--output-dir`: normally the complete envelope, or the selected value when `--jmes-filter` is set. Default `volclog` writes a JSON delivery envelope to stdout with `status=success`, `data=null`, and the file path in `artifacts[].path`; `volclog-human` keeps the Chinese file notice.
 - For non-envelope command groups, the raw result is written to the selected file and stdout emits only the bare file path.
 - For generic human-shortcut envelope commands (for example `project list`, `topic create`), the envelope artifact is written to the file and the complete envelope is also emitted to stdout.
 - For human `volclog-human log export` / `log export-analysis` without `--jmes-filter`, exported data rows are streamed into the file artifact (JSON array for `--output json`, JSONL rows for `--output jsonl`) and stdout emits the complete envelope containing artifact metadata. The artifact itself is not an envelope.
 
-Automation must follow the output contract of the command surface it invokes; the fixed Chinese notice rule applies specifically to `raw`, `tool exec`, and `workflow exec`. Human log exports do not use the fixed notice.
+For a successful default file delivery, `summary.deliveryMode` is `file_forced` or `file_auto`, `summary.itemCount` retains the business-result count, `summary.totalBytes` is the stdout delivery envelope's byte length, and `artifacts[].sizeBytes` is the actual file size. This is a compatibility change: scripts that parsed the Chinese notice must instead parse `artifacts[].path`. Human log shortcuts retain their own output contract.
 
-Exception: without `--jmes-filter`, default `workflow exec log.export` and `log.export-analysis` stream exported rows directly into the data artifact (JSON array for `--output json`, JSONL rows for `--output jsonl`) rather than writing an envelope. The data artifact is not an envelope and does not contain envelope metadata. On success, stdout contains only the fixed file notice with the data-artifact path. With `--jmes-filter`, these exports accumulate their results in memory before filtering and file delivery. For large exports, prefer unfiltered streaming or server-side field selection where available; client-side filtering does not reduce server scanning or network traffic. See [Advanced](6-Advanced.md) section 2 for details.
+Exception: without `--jmes-filter`, default `workflow exec log.export` and `log.export-analysis` stream exported rows directly into the data artifact (JSON array for `--output json`, JSONL rows for `--output jsonl`) rather than writing an envelope. The data artifact is not an envelope and does not contain envelope metadata. On success, stdout contains the JSON delivery envelope with the data-artifact path. With `--jmes-filter`, these exports accumulate their results in memory before filtering and file delivery. For large exports, prefer unfiltered streaming or server-side field selection where available; client-side filtering does not reduce server scanning or network traffic. See [Advanced](6-Advanced.md) section 2 for details.
 
 When a streamed export stops at its page budget or a later failure, it returns nonzero. When valid written rows can be retained, they go to a unique partial file without replacing the completed target. The failure envelope's artifact descriptor reports `completeness` and `metadataPath`; the latter points to the partial file's `.meta.json` sidecar. If metadata delivery itself fails, the retained data path is reported with the delivery error.
 
@@ -278,7 +280,7 @@ When a streamed export stops at its page budget or a later failure, it returns n
 
 ### 7.3 Automatic spill (`file_auto`)
 
-For `tool exec` and `workflow exec`, automatic spill requires the output format to be JSON (`--output json`, either as the default or set explicitly); `--output jsonl` does not trigger automatic spill. When the estimated JSON envelope size exceeds 16 KiB and the output mode is `stdout` (not explicitly set), there is no `--jmes-filter`, and no `execution.artifact`/`execution.projection`, the complete envelope is automatically written to a file under `--output-dir`. The envelope stored in the file has `summary.deliveryMode=file_auto`. stdout emits only the fixed file notice (`结果过大，已写入文件。\n文件: <path>\n`); the internal preview is not printed to stdout. Automation must read the artifact path from the notice and read the file. If `--output-dir` is missing or unwritable, the command errors with `result too large for stdout; specify --output-dir <writable-dir> to allow automatic file delivery`.
+For `tool exec` and `workflow exec`, automatic spill requires the output format to be JSON (`--output json`, either as the default or set explicitly); `--output jsonl` does not trigger automatic spill. When the estimated JSON envelope size exceeds 16 KiB and the output mode is `stdout` (not explicitly set), there is no `--jmes-filter`, and no `execution.artifact`/`execution.projection`, the complete envelope is automatically written to a file under `--output-dir`. The envelope stored in the file has `summary.deliveryMode=file_auto`. Default stdout is a delivery envelope with `data=null` and the path in `artifacts[].path`, without a business-result preview; human stdout retains the Chinese notice. If `--output-dir` is missing or unwritable, the command errors with `result too large for stdout; specify --output-dir <writable-dir> to allow automatic file delivery`.
 
 ### 7.4 Deterministic file delivery
 
@@ -305,9 +307,9 @@ The CLI compiles and validates `--jmes-filter` before dispatching any request. A
 
 ### 8.3 Filtering into a file
 
-For `raw`, `tool exec`, and `workflow exec`, combine `--jmes-filter` with `--output-mode file` to write the selected value from the complete success envelope as a single JSON document. `tool exec` and `workflow exec` also support requesting file delivery through context `execution.artifact`. Even with `--output jsonl`, the file is JSON, not JSONL; it can contain an array, scalar, or `null` rather than an envelope. stdout emits only the fixed Chinese file notice, whose path identifies the file. Without a filter, ordinary file output retains the complete envelope; the unfiltered streamed-export exception above is unchanged.
+For `raw`, `tool exec`, and `workflow exec`, combine `--jmes-filter` with `--output-mode file` to write the selected value from the complete success envelope as a single JSON document. `tool exec` and `workflow exec` also support requesting file delivery through context `execution.artifact`. Even with `--output jsonl`, the file is JSON, not JSONL; it can contain an array, scalar, or `null` rather than an envelope. The filter changes the file content only: default stdout remains a JSON delivery envelope, while human stdout retains the Chinese notice. Without a filter, ordinary file output retains the complete envelope; the unfiltered streamed-export exception above is unchanged.
 
-The filter sees `summary.deliveryMode=file_forced`. `summary.totalBytes` measures the envelope before filtering, not the size of the selected file. A global filter disables automatic spill. If the upstream operation fails in file mode, the complete error is emitted with a non-zero exit code; the error is not filtered into a file.
+The filter sees `summary.deliveryMode=file_forced`; in that input, `summary.totalBytes` measures the full envelope before filtering. The default stdout delivery envelope has its own `summary.totalBytes`, while `artifacts[].sizeBytes` measures the selected file. A global filter disables automatic spill. If the upstream operation fails in file mode, the complete error is emitted with a non-zero exit code; the error is not filtered into a file.
 
 For example, select project names from the envelope and write them to `./out`:
 
@@ -325,7 +327,7 @@ volclog --profile default --output-dir ./out --jmes-filter 'data' \
   --context '{"execution":{"projection":"Projects[].ProjectName","artifact":true}}'
 ```
 
-Both examples write the selected project-name array as JSON. Read the path from the stdout notice to open the file.
+The first example writes the project-name array as JSON. The second retains the existing projection wrapper: the array is under `data.items`, alongside server metadata such as `Total` when present; selecting `data` writes that object. Read the path from the default stdout envelope's `artifacts[].path` to open the file.
 
 ### 8.4 CLI envelope filtering vs `execution.projection`
 
@@ -341,7 +343,7 @@ Success envelope: `status`, `action`, `requestId`, `summary` (`outputMode`, `del
 
 Error envelope: `status` (`failed`), `action`, `requestId`, `summary`, `artifacts`, `data`, `error` (`source`, `code`, `message`, `requestId`, `statusCode`, `kind`, `hint`, optional `details`). `data` is normally `null`, but may contain retained partial results or batch-ingest progress; `artifacts` may describe a retained partial file.
 
-Structured error envelopes are used by `raw`, all `tool` commands (including `list`/`describe`), all `workflow` commands (including `list`/`describe`), and the human-shortcut envelope groups (`project`, `topic`, `metric-topic`, `index`, `log`). Other non-envelope groups write flat JSON to stderr in this field order: `errorCode`, `errorMessage`, `requestId`, `statusCode`, `kind`, `hint`.
+Default `volclog` also emits a failed JSON envelope on stdout and exits nonzero for early usage failures, including no arguments, unknown flags or groups, and missing option values. Explicit help and `--version` remain text; use the `version` command for JSON. Text-mode `tool`/`workflow` discovery and the frozen JSON shapes and error contracts of `login`, `logout`, `sso`, and `configure sso` remain unchanged. Human-shortcut envelope groups retain their existing error contract. If stdout is broken, the CLI exits with code 3 and makes a best-effort structured report on stderr.
 
 `summary.remoteOutcome` describes the business operation: `not_sent`, `unknown`, `success`, `failed`, or `partial`. `accepted` is reserved for a future operation with an explicit asynchronous contract. `summary.deliveryOutcome` (`success` or `failed`) separately describes result delivery. For `output_failed`, repair delivery and do not repeat the original write. For `result_unknown`, reconcile the remote state before considering another write. The CLI adds no retry in this change; existing `http.Client`/`Transport` policies still apply, including any behavior of a custom transport.
 

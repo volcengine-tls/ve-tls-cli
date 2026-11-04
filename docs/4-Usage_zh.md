@@ -259,18 +259,20 @@ volclog --profile default raw --method POST --path /CreateProject \
 
 `--output-mode` 接受 `stdout`（默认）和 `file`。任何其他值都会被拒绝。
 
+未显式筛选标准输出时，默认 `volclog` 的 `raw`、`tool exec` 和 `workflow exec` 成功与错误结果均输出 JSON 信封。`raw` 返回的 JSON 标量或字符串放在 `data` 中；`volclog-human` 保留原有展示。显式的标准输出 `--jmes-filter` 可返回数组、标量或 `null`。
+
 ### 7.2 标准输出与文件交付
 
 默认情况下，结果写入标准输出。使用 `--output-mode file`（强制文件模式）时，输出契约取决于所调用的命令面：
 
-- 对于 `raw`、`tool exec` 和 `workflow exec`，成功结果会写入 `--output-dir` 下的工件文件：通常是完整信封；设置 `--jmes-filter` 时则是选中的值。标准输出只包含固定的中文文件通知（`结果已写入文件。\n文件: <path>\n`）。自动化必须从通知中读取工件路径并读取文件。
+- 对于 `raw`、`tool exec` 和 `workflow exec`，成功结果会写入 `--output-dir` 下的工件文件：通常是完整信封；设置 `--jmes-filter` 时则是选中的值。默认 `volclog` 的标准输出为 JSON 交付信封，包含 `status=success`、`data=null`，文件路径位于 `artifacts[].path`；`volclog-human` 保留中文文件通知。
 - 对于非信封命令组，原始结果会写入所选文件，标准输出只输出裸文件路径。
 - 对于通用人类快捷方式信封命令（例如 `project list`、`topic create`），信封工件会写入文件，同时完整的信封也会输出到标准输出。
 - 对于不设置 `--jmes-filter` 的人类 `volclog-human log export` / `log export-analysis`，导出的数据行会流式写入文件工件（对于 `--output json` 为 JSON 数组，对于 `--output jsonl` 为 JSONL 行），标准输出会输出包含工件元数据的完整信封。工件本身不是信封。
 
-自动化必须遵循其所调用命令面的输出契约；固定的中文通知规则专门适用于 `raw`、`tool exec` 和 `workflow exec`。人类日志导出不使用固定通知。
+默认版文件交付成功时，`summary.deliveryMode` 为 `file_forced` 或 `file_auto`，`summary.itemCount` 保留原业务结果数量，`summary.totalBytes` 是标准输出交付信封的字节数，`artifacts[].sizeBytes` 是实际文件字节数。这是兼容性变化：原先解析中文通知的脚本须改为读取 `artifacts[].path`。human 日志快捷方式保留自己的输出契约。
 
-例外：不设置 `--jmes-filter` 时，默认的 `workflow exec log.export` 和 `log.export-analysis` 将导出的行直接流式写入数据工件（对于 `--output json` 为 JSON 数组，对于 `--output jsonl` 为 JSONL 行），而不是写入信封。数据工件不是信封，也不包含信封元数据。成功时标准输出只包含带有数据工件路径的固定文件通知。设置 `--jmes-filter` 后，这些导出会在内存中累积结果，再过滤并写入文件。大导出应优先使用无过滤的流式导出，或在支持时使用服务端字段选择；客户端过滤不会减少服务端扫描或网络流量。详见 [高级](6-Advanced_zh.md) 第 2 节。
+例外：不设置 `--jmes-filter` 时，默认的 `workflow exec log.export` 和 `log.export-analysis` 将导出的行直接流式写入数据工件（对于 `--output json` 为 JSON 数组，对于 `--output jsonl` 为 JSONL 行），而不是写入信封。数据工件不是信封，也不包含信封元数据。成功时标准输出包含带有数据工件路径的 JSON 交付信封。设置 `--jmes-filter` 后，这些导出会在内存中累积结果，再过滤并写入文件。大导出应优先使用无过滤的流式导出，或在支持时使用服务端字段选择；客户端过滤不会减少服务端扫描或网络流量。详见 [高级](6-Advanced_zh.md) 第 2 节。
 
 流式导出触及页数预算或后续失败时返回非零；有效写入的行可保留时，会存入唯一的部分文件，不会替换完整目标文件。错误信封中的工件描述包含 `completeness` 和 `metadataPath`，后者指向部分文件的 `.meta.json` 元数据；若元数据交付本身失败，则报告保留的数据路径和交付错误。
 
@@ -278,7 +280,7 @@ volclog --profile default raw --method POST --path /CreateProject \
 
 ### 7.3 自动溢出（`file_auto`）
 
-对于 `tool exec` 和 `workflow exec`，自动溢出要求输出格式为 JSON（`--output json`，无论是默认值还是显式设置）；`--output jsonl` 不会触发自动溢出。当估计的 JSON 信封大小超过 16 KiB 且输出模式为 `stdout`（未显式设置）、没有 `--jmes-filter`、且没有 `execution.artifact`/`execution.projection` 时，完整的信封会自动写入 `--output-dir` 下的文件。存储在文件中的信封的 `summary.deliveryMode` 为 `file_auto`。标准输出只输出固定的文件通知（`结果过大，已写入文件。\n文件: <path>\n`）；内部预览不会打印到标准输出。自动化必须从通知中读取工件路径并读取文件。如果 `--output-dir` 缺失或不可写，命令会报错 `result too large for stdout; specify --output-dir <writable-dir> to allow automatic file delivery`。
+对于 `tool exec` 和 `workflow exec`，自动溢出要求输出格式为 JSON（`--output json`，无论是默认值还是显式设置）；`--output jsonl` 不会触发自动溢出。当估计的 JSON 信封大小超过 16 KiB 且输出模式为 `stdout`（未显式设置）、没有 `--jmes-filter`、且没有 `execution.artifact`/`execution.projection` 时，完整的信封会自动写入 `--output-dir` 下的文件。存储在文件中的信封的 `summary.deliveryMode` 为 `file_auto`。默认版标准输出为 `data=null` 的交付信封，路径位于 `artifacts[].path`，不包含业务结果预览；human 标准输出保留中文通知。如果 `--output-dir` 缺失或不可写，命令会报错 `result too large for stdout; specify --output-dir <writable-dir> to allow automatic file delivery`。
 
 ### 7.4 确定性文件交付
 
@@ -305,9 +307,9 @@ CLI 会在发送任何请求前编译并校验 `--jmes-filter`。表达式无效
 
 ### 8.3 筛选后写入文件
 
-对于 `raw`、`tool exec` 和 `workflow exec`，可将 `--jmes-filter` 与 `--output-mode file` 组合，把完整成功信封中选中的值写成单个 JSON 文档。`tool exec` 和 `workflow exec` 也支持通过上下文中的 `execution.artifact` 请求文件交付。即使设置 `--output jsonl`，文件仍是 JSON 而不是 JSONL；内容可以是数组、标量或 `null`，不一定是信封。标准输出只输出固定的中文文件通知，路径指向该文件。不设置过滤器时，普通文件输出保留完整信封；上述无过滤流式导出例外保持不变。
+对于 `raw`、`tool exec` 和 `workflow exec`，可将 `--jmes-filter` 与 `--output-mode file` 组合，把完整成功信封中选中的值写成单个 JSON 文档。`tool exec` 和 `workflow exec` 也支持通过上下文中的 `execution.artifact` 请求文件交付。即使设置 `--output jsonl`，文件仍是 JSON 而不是 JSONL；内容可以是数组、标量或 `null`，不一定是信封。过滤只改变文件内容：默认版标准输出仍是 JSON 交付信封，human 标准输出保留中文通知。不设置过滤器时，普通文件输出保留完整信封；上述无过滤流式导出例外保持不变。
 
-过滤器看到的 `summary.deliveryMode` 是 `file_forced`。`summary.totalBytes` 表示过滤前信封的大小，而不是筛选文件的大小。全局过滤器会禁用自动溢出。如果上游操作在文件模式失败，命令输出完整错误并返回非零退出码，不会把错误过滤到文件中。
+过滤器看到的 `summary.deliveryMode` 是 `file_forced`；该输入中的 `summary.totalBytes` 表示过滤前完整信封的大小。默认版标准输出的交付信封有自己的 `summary.totalBytes`，而 `artifacts[].sizeBytes` 表示筛选后文件的大小。全局过滤器会禁用自动溢出。如果上游操作在文件模式失败，命令输出完整错误并返回非零退出码，不会把错误过滤到文件中。
 
 例如，从信封中选择项目名称并写入 `./out`：
 
@@ -325,7 +327,7 @@ volclog --profile default --output-dir ./out --jmes-filter 'data' \
   --context '{"execution":{"projection":"Projects[].ProjectName","artifact":true}}'
 ```
 
-两个示例都将选中的项目名称数组写为 JSON。从标准输出通知中读取路径后即可打开文件。
+第一个示例将项目名称数组写为 JSON。第二个示例保留既有投影封装：数组位于 `data.items`，并带有服务端返回的 `Total` 等元数据；选择 `data` 会将这个对象写入文件。从默认版标准输出信封的 `artifacts[].path` 读取路径后即可打开文件。
 
 ### 8.4 CLI 信封过滤与 `execution.projection`
 
@@ -341,7 +343,7 @@ volclog --profile default --output-dir ./out --jmes-filter 'data' \
 
 错误信封：`status`（`failed`）、`action`、`requestId`、`summary`、`artifacts`、`data`、`error`（`source`、`code`、`message`、`requestId`、`statusCode`、`kind`、`hint`、可选的 `details`）。`data` 通常为 `null`，也可能包含保留的部分结果或批量写入进度；`artifacts` 可能描述保留的部分文件。
 
-结构化错误信封由 `raw`、所有 `tool` 命令（包括 `list`/`describe`）、所有 `workflow` 命令（包括 `list`/`describe`）以及人类快捷方式信封组（`project`、`topic`、`metric-topic`、`index`、`log`）使用。其他非信封组以扁平 JSON 写入标准错误，字段顺序如下：`errorCode`、`errorMessage`、`requestId`、`statusCode`、`kind`、`hint`。
+默认 `volclog` 的早期用法错误也在标准输出给出失败 JSON 信封并返回非零，包括无参数、未知选项或命令组、选项缺值。显式帮助和 `--version` 仍为文本；机器读取版本请使用 `version` 命令。`tool`/`workflow` 的文本发现输出，以及 `login`、`logout`、`sso`、`configure sso` 的冻结 JSON 形状和错误契约保持不变。human 快捷方式信封组保留既有错误契约。标准输出损坏时，CLI 返回退出码 3，并尽力向标准错误输出结构化报告。
 
 `summary.remoteOutcome` 表示业务操作状态：`not_sent`（未发送）、`unknown`（结果未知）、`success`（成功）、`failed`（失败）或 `partial`（部分完成）。`accepted` 为将来有明确异步契约的操作保留。`summary.deliveryOutcome`（`success` 或 `failed`）独立表示结果交付状态。遇到 `output_failed` 应修复交付问题，不要重跑原写操作；遇到 `result_unknown` 应先对账，再决定是否写入。本次 CLI 改动不新增重试；既有 `http.Client`/`Transport` 策略及自定义 transport 的行为仍然适用。
 

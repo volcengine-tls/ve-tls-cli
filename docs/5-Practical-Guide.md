@@ -151,7 +151,7 @@ volclog --profile '<profile>' workflow describe log.export
 
 ### Export to a file
 
-Force JSONL export to a writable directory with an explicit `MaxPages`. `log.export` streams exported rows directly into the data artifact (JSONL rows for `--output jsonl`); the artifact is not an envelope. stdout contains only the fixed file notice with the data-artifact path:
+Force JSONL export to a writable directory with an explicit `MaxPages`. `log.export` streams exported rows directly into the data artifact (JSONL rows for `--output jsonl`); the artifact is not an envelope. Default stdout contains a JSON delivery envelope with the data-artifact path:
 
 ```bash
 volclog --profile '<profile>' --output jsonl --output-mode file --output-dir ./evidence \
@@ -161,7 +161,7 @@ volclog --profile '<profile>' --output jsonl --output-mode file --output-dir ./e
 
 ### Success signals
 
-- stdout prints `结果已写入文件。\n文件: <path>\n` (the fixed file notice).
+- stdout has `status=success`, `data=null`, `summary.deliveryMode=file_forced`, and the file path in `artifacts[].path`.
 - The file at `<path>` contains the exported log rows (JSONL), not an envelope.
 - The export artifact does not contain `status`, `summary.deliveryMode`, `requestId`, or `ResultStatus`.
 - A successful export has observed its applicable completion signal; the row file alone does not contain that metadata or guarantee a snapshot across separate queries.

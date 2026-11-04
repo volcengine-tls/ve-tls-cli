@@ -151,7 +151,7 @@ volclog --profile '<profile>' workflow describe log.export
 
 ### 导出到文件
 
-用显式的 `MaxPages` 强制 JSONL 导出到可写目录。`log.export` 将导出的行直接流式写入数据工件（对于 `--output jsonl` 为 JSONL 行）；该工件不是信封。标准输出只包含带有数据工件路径的固定文件通知：
+用显式的 `MaxPages` 强制 JSONL 导出到可写目录。`log.export` 将导出的行直接流式写入数据工件（对于 `--output jsonl` 为 JSONL 行）；该工件不是信封。默认版标准输出包含带数据工件路径的 JSON 交付信封：
 
 ```bash
 volclog --profile '<profile>' --output jsonl --output-mode file --output-dir ./evidence \
@@ -161,7 +161,7 @@ volclog --profile '<profile>' --output jsonl --output-mode file --output-dir ./e
 
 ### 成功信号
 
-- 标准输出打印 `结果已写入文件。\n文件: <path>\n`（固定的文件通知）。
+- 标准输出包含 `status=success`、`data=null`、`summary.deliveryMode=file_forced` 和 `artifacts[].path` 中的文件路径。
 - `<path>` 处的文件包含导出的日志行（JSONL），而不是信封。
 - 导出工件不包含 `status`、`summary.deliveryMode`、`requestId` 或 `ResultStatus`。
 - 导出成功表示已观察到适用的完成信号；行文件本身不包含该元数据，也不保证多次独立查询属于同一快照。

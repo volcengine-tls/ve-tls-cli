@@ -47,7 +47,7 @@ func TestUsageTextDescribesPrimaryEntryAsAgentNative(t *testing.T) {
 		"--trace-redact <enabled>",
 		`zsh/bash 下建议写成 --jmes-filter "keys(@)"`,
 		"命中存在但值为 null 的字段会输出 null；缺字段或数组越界会报 filter matched no value",
-		"filter matched no value / invalid --jmes-filter 属于 decode，返回 exit 3",
+		"invalid --jmes-filter 属于 decode；执行成功后 filter matched no value 属于 output_failed，均返回 exit 3",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q in usage text: %q", want, text)

@@ -91,7 +91,7 @@ Discover -> Describe -> Exec -> Read Result
 - A retained streamed partial uses a unique partial data file and `.meta.json` sidecar; inspect the artifact's `completeness` and `metadataPath`. The completed target is preserved. If sidecar delivery fails, use the retained data path and error.
 - For batch-ingest failures, inspect `summary.progress` or `data.progress`: `confirmedBatches`, `confirmedLogs`, zero-based exclusive `confirmedLogOffset`, one-based active `currentBatch`, `currentBatchOutcome`, and `lastConfirmedRequestId`. Only confirmed success responses count. HTTP 200 followed by a read or protocol failure is `unknown`; never treat an unknown batch as an automatically safe resume point. Current request ID and status refer to the current attempt, not an earlier confirmed batch.
 - Standard catalog JSON responses require HTTP 200 and valid JSON when the body is non-empty. Empty responses and special codec, `raw`, and protobuf paths retain their existing 2xx/text/empty/PB contracts. The CLI adds no retry here; existing `http.Client`/`Transport` and custom-transport behavior still applies.
-- A stdout write failure returns nonzero and reports a structured error to stderr on a best-effort basis; broken stdout cannot guarantee JSON. Exit codes 1, 2, and 3 keep their existing roles.
+- A stdout write failure returns exit code 3 and reports a structured error to stderr on a best-effort basis; broken stdout cannot guarantee JSON. Exit codes 1, 2, and 3 keep their existing roles.
 - If fields are uniquely named, prefer flat JSON input before manual nesting.
 
 ## Error Recovery Quick Map
@@ -123,6 +123,7 @@ Use this table as the default first response after a failed envelope only after 
 - Keep surface choice and delivery choice separate.
 - When a result may be large, provide a writable `--output-dir`.
 - Let `summary.deliveryMode` tell you what actually happened at runtime.
+- For successful default `raw`/`tool exec`/`workflow exec` file delivery, stdout is a JSON envelope with `data=null` and the file path in `artifacts[].path`; read the business result from the file. Human stdout retains the Chinese notice.
 - Read [references/best-practices.md](references/best-practices.md) for exact `outputMode`, `deliveryMode`, file delivery, and `--jmes-filter` semantics instead of duplicating them here.
 
 ## Quick Map

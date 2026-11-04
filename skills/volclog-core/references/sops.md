@@ -89,7 +89,7 @@ Stop when:
 - the file contains the full output needed by the user
 
 Notes:
-- Read the stdout notice or written envelope and stop once the expected output shape is confirmed.
+- Read the default stdout delivery envelope and, if needed, the file at `artifacts[].path`; human stdout retains the file notice. Stop once the expected output shape is confirmed.
 
 ## Resolve Application Resources
 

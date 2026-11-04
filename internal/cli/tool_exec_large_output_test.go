@@ -53,6 +53,7 @@ func TestToolExecAutoArtifactsLargeDryRunResults(t *testing.T) {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
 	artifactPath := parseNoticePath(t, stdout.String())
+	assertFileDeliveryNotice(t, stdout.String(), artifactPath, "file_auto")
 	raw, err := os.ReadFile(artifactPath)
 	if err != nil {
 		t.Fatalf("read artifact envelope: %v", err)

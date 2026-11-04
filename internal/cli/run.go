@@ -79,6 +79,25 @@ func emitsStructuredEnvelope(group string, rest []string) bool {
 }
 
 func writeRunError(ctx *Context, stdout, stderr io.Writer, group string, rest []string, err error, kind string, hint string, outputMode string, code int) int {
+	if defaultAgentErrorProtocol(group, rest) {
+		env := buildAPIErrorEnvelope(ctx, group, err, outputMode)
+		failure := env["error"].(map[string]any)
+		// Keep established typed/upstream classifications; the caller supplies
+		// the category for early errors that have no recognized classification.
+		if failure["kind"] != "unknown" {
+			return writeStructuredError(stdout, stderr, err, ctx.RequestID, ctx.StatusCode, group, env)
+		}
+		if kind != "" {
+			failure["kind"] = kind
+		}
+		if hint != "" {
+			failure["hint"] = hint
+		}
+		if writeErr := output.Write(stdout, env, output.FormatJSON); writeErr != nil {
+			return writeBrokenStdout(stderr, writeErr, env)
+		}
+		return code
+	}
 	if emitsStructuredEnvelope(group, rest) {
 		return writeStructuredError(stdout, stderr, err, "", 0, group, buildAPIErrorEnvelope(ctx, group, err, outputMode))
 	}
@@ -87,7 +106,7 @@ func writeRunError(ctx *Context, stdout, stderr io.Writer, group string, rest []
 }
 
 func writeFilterApplicationError(ctx *Context, stdout, stderr io.Writer, group string, rest []string, target any, outputMode string, err error) int {
-	if emitsStructuredEnvelope(group, rest) || hasStructuredEnvelopeOutput(target) {
+	if emitsStructuredEnvelope(group, rest) || defaultAgentErrorProtocol(group, rest) || hasStructuredEnvelopeOutput(target) {
 		if strings.TrimSpace(ctx.TraceDir) != "" {
 			_ = ctx.initTrace()
 		}
@@ -281,7 +300,7 @@ func usageText() string {
 		b.WriteString("  用 workflow 执行 CLI 提供的高层编排能力；只有已明确 method/path 时才使用 raw。\n")
 		b.WriteString("  tool/workflow 走 JSON input/context；raw 走 method/path 与 transport flags。\n")
 		b.WriteString("  大结果优先使用 --output-mode file --output-dir <writable-dir>；--jmes-filter 命中 null 仍成功，缺字段或数组越界会报 filter matched no value。\n")
-		b.WriteString("  filter matched no value / invalid --jmes-filter 属于 decode，返回 exit 3。\n\n")
+		b.WriteString("  invalid --jmes-filter 属于 decode；执行成功后 filter matched no value 属于 output_failed，均返回 exit 3。\n\n")
 	} else {
 		b.WriteString("  用 tool 发现能力并查看契约；需要结构化执行时使用 tool exec。\n")
 		b.WriteString("  已明确 method/path 的原始 transport 调用使用 raw。\n")
@@ -289,10 +308,14 @@ func usageText() string {
 		b.WriteString("  大输出优先使用 --output-mode file --output-dir <writable-dir>。\n")
 		b.WriteString("  --jmes-filter 作用于完整 envelope；筛选结果字段时写 data.Total，筛选交付语义时写 summary.deliveryMode。\n")
 		b.WriteString("  命中存在但值为 null 的字段会输出 null；缺字段或数组越界会报 filter matched no value。\n")
-		b.WriteString("  filter matched no value / invalid --jmes-filter 属于 decode，返回 exit 3。\n")
+		b.WriteString("  invalid --jmes-filter 属于 decode；执行成功后 filter matched no value 属于 output_failed，均返回 exit 3。\n")
 		b.WriteString("  zsh/bash 下建议写成 --jmes-filter \"keys(@)\"；fish/PowerShell 下优先用单引号。\n\n")
 	}
-	b.WriteString("  --jmes-filter 可与 --output-mode file 组合；筛选后的值以 JSON 写入文件，stdout 仅输出文件通知。\n\n")
+	if currentEdition() == cliEditionVolclog {
+		b.WriteString("  --jmes-filter 可与 --output-mode file 组合；筛选后的值以 JSON 写入文件，stdout 返回含 artifacts 路径的 JSON 交付信封。\n\n")
+	} else {
+		b.WriteString("  --jmes-filter 可与 --output-mode file 组合；筛选后的值以 JSON 写入文件，stdout 仅输出文件通知。\n\n")
+	}
 	for _, group := range cliGroups() {
 		if !group.Primary {
 			continue

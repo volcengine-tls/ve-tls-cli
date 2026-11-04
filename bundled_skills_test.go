@@ -145,7 +145,7 @@ func TestVolclogCoreBundledSkillCoversAgentEvaluationNeeds(t *testing.T) {
 		"`outputMode`",
 		"`--jmes-filter` runs on the complete CLI envelope and can be combined with `--output-mode file`",
 		"`tool exec` and `workflow exec` also support context `execution.artifact` for file delivery; `raw` does not accept `--context`",
-		"with `--jmes-filter` they write the selected value as a single JSON document, even when `--output jsonl` is set. stdout contains the fixed Chinese file notice with the path",
+		"with `--jmes-filter` they write the selected value as a single JSON document, even when `--output jsonl` is set. Default stdout is a JSON delivery envelope with `data=null` and the file path in `artifacts[].path`; human stdout retains the Chinese notice",
 		"In file mode the selected success value, which can be an array, scalar, or `null`, is the JSON file content",
 		"Without a filter, ordinary file delivery retains the complete envelope",
 		"`execution.projection` is different: it runs on the raw result before envelope wrapping",
@@ -430,8 +430,9 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 				{"symptom", "complete envelope"},
 				{"why", "complete success envelope"},
 				{"why", "one JSON document"},
-				{"why", "fixed Chinese notice"},
-				{"fix", "path in the stdout notice"},
+				{"why", "default stdout is a JSON delivery envelope"},
+				{"why", "human stdout retains the Chinese notice"},
+				{"fix", "artifacts[].path"},
 				{"fix", "unfiltered artifact is an envelope"},
 			} {
 				value, _ := entry[requirement.field].(string)

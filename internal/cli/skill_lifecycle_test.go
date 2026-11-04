@@ -341,7 +341,8 @@ func TestSkillStatusRejectsInstalledSymlink(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("expected symlink rejection, stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
-	if !strings.Contains(strings.ToLower(stderr.String()), "symlink") {
+	payload := c4InvocationFailure(t, stdout.String(), stderr.String(), false)
+	if !strings.Contains(strings.ToLower(payload.ErrorMessage), "symlink") {
 		t.Fatalf("missing symlink error: stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
 }

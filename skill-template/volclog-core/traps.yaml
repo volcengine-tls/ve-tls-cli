@@ -12,9 +12,9 @@ traps:
     why: the envelope field exists and its value is null, so the filter matched successfully
     fix: treat literal null as a valid projection result; only investigate when the CLI returns filter matched no value
   - trap: jmes-filter-file-contains-selected-json
-    symptom: a filtered file is read as a complete envelope or the stdout notice is treated as the result
-    why: --jmes-filter selects from the complete success envelope; file delivery writes the selected value as one JSON document and stdout emits a fixed Chinese notice
-    fix: read the selected JSON from the path in the stdout notice; omit the filter for a full envelope only when the unfiltered artifact is an envelope
+    symptom: a filtered file is read as a complete envelope or the stdout delivery envelope is treated as the business result
+    why: --jmes-filter selects from the complete success envelope; file delivery writes the selected value as one JSON document, default stdout is a JSON delivery envelope, and human stdout retains the Chinese notice
+    fix: read the selected JSON from artifacts[].path in the default stdout envelope or from the human notice; omit the filter for a full envelope only when the unfiltered artifact is an envelope
   - trap: deliverymode-belongs-to-runtime
     symptom: skill logic tries to pre-decide stdout vs file_auto for log.search or export flows
     why: surface choice belongs to the skill, but deliveryMode is a CLI runtime decision

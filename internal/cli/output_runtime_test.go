@@ -54,9 +54,7 @@ func TestOutputRuntimeForcedFileWritesFullEnvelope(t *testing.T) {
 		"--method", "GET",
 		"--path", "/DescribeProjects",
 	})
-	if want := "结果已写入文件。"; !strings.Contains(notice, want) {
-		t.Fatalf("expected forced-file notice %q, got %q", want, notice)
-	}
+	assertFileDeliveryNotice(t, notice, outFile, "file_forced")
 	fileEnv := outputRuntimeReadEnvelopeFile(t, outFile)
 
 	fileSummary := outputRuntimeSummary(t, fileEnv)
@@ -108,9 +106,7 @@ func TestOutputRuntimeAutoFileWritesFullEnvelope(t *testing.T) {
 		"--context", "file://" + ctxFile,
 		"--input", "file://" + reqFile,
 	})
-	if want := "结果过大，已写入文件。"; !strings.Contains(notice, want) {
-		t.Fatalf("expected auto-file notice %q, got %q", want, notice)
-	}
+	assertFileDeliveryNotice(t, notice, artifactPath, "file_auto")
 	fileEnv := outputRuntimeReadEnvelopeFile(t, artifactPath)
 	fileSummary := outputRuntimeSummary(t, fileEnv)
 	if got := fileSummary["deliveryMode"]; got != "file_auto" {
@@ -566,9 +562,7 @@ func TestOutputRuntimeFilterWritesForcedFile(t *testing.T) {
 		"--method", "GET",
 		"--path", "/DescribeProjects",
 	})
-	if want := "结果已写入文件。\n文件: " + outFile + "\n"; notice != want {
-		t.Fatalf("notice=%q, want %q", notice, want)
-	}
+	assertFileDeliveryNotice(t, notice, outFile, "file_forced")
 	raw, err := os.ReadFile(outFile)
 	if err != nil {
 		t.Fatalf("read filtered file: %v", err)
@@ -653,16 +647,12 @@ func TestOutputRuntimeAutoFileStdoutNotice(t *testing.T) {
 		t.Fatalf("write request: %v", err)
 	}
 
-	notice, _ := runOutputRuntimeNotice(t, []string{
+	notice, path := runOutputRuntimeNotice(t, []string{
 		"tool", "exec", "log.search-logs",
 		"--context", "file://" + ctxFile,
 		"--input", "file://" + reqFile,
 	})
-	for _, want := range []string{"结果过大，已写入文件。", "文件: "} {
-		if !strings.Contains(notice, want) {
-			t.Fatalf("missing %q in notice %q", want, notice)
-		}
-	}
+	assertFileDeliveryNotice(t, notice, path, "file_auto")
 }
 
 func TestOutputRuntimeForcedFileStdoutNotice(t *testing.T) {
@@ -672,7 +662,7 @@ func TestOutputRuntimeForcedFileStdoutNotice(t *testing.T) {
 	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 
-	notice, _ := runOutputRuntimeNotice(t, []string{
+	notice, path := runOutputRuntimeNotice(t, []string{
 		"--dry-run",
 		"--output-mode", "file",
 		"--output-dir", t.TempDir(),
@@ -680,11 +670,7 @@ func TestOutputRuntimeForcedFileStdoutNotice(t *testing.T) {
 		"--method", "GET",
 		"--path", "/DescribeProjects",
 	})
-	for _, want := range []string{"结果已写入文件。", "文件: "} {
-		if !strings.Contains(notice, want) {
-			t.Fatalf("missing %q in notice %q", want, notice)
-		}
-	}
+	assertFileDeliveryNotice(t, notice, path, "file_forced")
 }
 
 func TestOutputRuntimeNoPreviewEnvelopeWhenSpilled(t *testing.T) {
@@ -722,13 +708,22 @@ func TestOutputRuntimeNoPreviewEnvelopeWhenSpilled(t *testing.T) {
 		t.Fatalf("write request: %v", err)
 	}
 
-	notice, _ := runOutputRuntimeNotice(t, []string{
+	notice, path := runOutputRuntimeNotice(t, []string{
 		"tool", "exec", "log.search-logs",
 		"--context", "file://" + ctxFile,
 		"--input", "file://" + reqFile,
 	})
-	if strings.Contains(notice, `"status"`) || strings.Contains(notice, `"summary"`) {
-		t.Fatalf("expected fixed text notice instead of preview envelope, got %q", notice)
+	assertFileDeliveryNotice(t, notice, path, "file_auto")
+	if currentEdition() == cliEditionVolclogHuman {
+		if strings.Contains(notice, `"status"`) || strings.Contains(notice, `"summary"`) {
+			t.Fatalf("expected fixed text notice instead of preview envelope, got %q", notice)
+		}
+	} else {
+		for _, payloadField := range []string{`"TopicId"`, `"Query"`, `"StartTime"`, `"EndTime"`} {
+			if strings.Contains(notice, payloadField) {
+				t.Fatalf("file delivery contains request payload field %q: %q", payloadField, notice)
+			}
+		}
 	}
 }
 
@@ -762,15 +757,7 @@ func runOutputRuntimeNotice(t *testing.T, args []string) (string, string) {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
 	notice := stdout.String()
-	const prefix = "文件: "
-	idx := strings.LastIndex(notice, prefix)
-	if idx < 0 {
-		t.Fatalf("missing file notice in stdout: %q", notice)
-	}
-	path := strings.TrimSpace(notice[idx+len(prefix):])
-	if path == "" {
-		t.Fatalf("missing file path in notice: %q", notice)
-	}
+	path := parseNoticePath(t, notice)
 	return notice, path
 }
 

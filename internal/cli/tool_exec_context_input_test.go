@@ -113,6 +113,7 @@ func TestToolExecArtifactOutputModeAliasMatchesArtifactTrue(t *testing.T) {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 	path := parseNoticePath(t, stdout.String())
+	assertFileDeliveryNotice(t, stdout.String(), path, "file_forced")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read artifact envelope: %v", err)

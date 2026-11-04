@@ -39,8 +39,9 @@ Key rules:
   - normal stdout -> `deliveryMode=stdout`
 - For large responses, prefer `--output-mode file --output-dir <writable-dir>`.
 - If auto spill fails because no writable directory was provided, rerun with `--output-dir <writable-dir>` instead of inventing a filename.
-- On successful file delivery, `tool / workflow / raw` normally write the full JSON envelope; with `--jmes-filter` they write the selected value as a single JSON document, even when `--output jsonl` is set. stdout contains the fixed Chinese file notice with the path.
-- Without `--jmes-filter`, `workflow exec log.export` and `log.export-analysis` are the exception: their files contain streamed data rows, and stdout contains the fixed file notice. A filter disables the streamed writer, so the results are accumulated in memory before filtering. For large exports, prefer unfiltered streaming or server-side field selection where available; client-side filtering does not reduce server scanning or network traffic.
+- On successful file delivery, `tool / workflow / raw` normally write the full JSON envelope; with `--jmes-filter` they write the selected value as a single JSON document, even when `--output jsonl` is set. Default stdout is a JSON delivery envelope with `data=null` and the file path in `artifacts[].path`; human stdout retains the Chinese notice. Migrate scripts that parsed the default edition's old notice to the artifact path.
+- The delivery envelope's `summary.itemCount` retains the business-result count, `summary.totalBytes` is the stdout envelope's byte length, and `artifacts[].sizeBytes` is the actual file size.
+- Without `--jmes-filter`, `workflow exec log.export` and `log.export-analysis` are the exception: their files contain streamed data rows, while default stdout contains the JSON delivery envelope. A filter disables the streamed writer, so the results are accumulated in memory before filtering. For large exports, prefer unfiltered streaming or server-side field selection where available; client-side filtering does not reduce server scanning or network traffic.
 
 ## Contract View And Recovery Precedence
 
@@ -61,14 +62,14 @@ Key rules:
 ## Envelope Filtering
 
 - `--jmes-filter` runs on the complete CLI envelope and can be combined with `--output-mode file`. `tool exec` and `workflow exec` also support context `execution.artifact` for file delivery; `raw` does not accept `--context`.
-- In file mode the selected success value, which can be an array, scalar, or `null`, is the JSON file content; read the path from the stdout notice. Without a filter, ordinary file delivery retains the complete envelope.
-- In the file-mode filtering view, `summary.deliveryMode=file_forced`; `summary.totalBytes` measures the envelope before filtering, not the selected file. A global filter disables automatic spill.
+- In file mode the selected success value, which can be an array, scalar, or `null`, is the JSON file content; read the path from the default stdout envelope's `artifacts[].path` or the human notice. Without a filter, ordinary file delivery retains the complete envelope.
+- In the file-mode filtering view, `summary.deliveryMode=file_forced`; `summary.totalBytes` measures the envelope before filtering. The default stdout delivery envelope's own `summary.totalBytes` measures its bytes, and `artifacts[].sizeBytes` measures the selected file. A global filter disables automatic spill.
 - `execution.projection` is different: it runs on the raw result before envelope wrapping. For project names, use `data.Projects[].ProjectName` as `--jmes-filter` and `Projects[].ProjectName` as `execution.projection`; the final filter sees any earlier projection under `data`.
 - Use `--jmes-filter` for envelope fields such as `data`, `summary`, or `error`.
 - Use `execution.projection` only for raw service-result fields.
 - If `--jmes-filter` targets an existing envelope field whose value is `null`, the command succeeds and emits or writes literal `null`.
 - `filter matched no value` means the path was wrong, not that a null field was returned; in file mode the result file is not created or overwritten.
-- `filter matched no value` and `invalid --jmes-filter` are `decode` failures and return exit 3.
+- An invalid `--jmes-filter` is a preflight `decode` failure with exit 3 and `remoteOutcome=not_sent`. A filter miss after business success returns `output_failed`, stage `projection`, exit 3, and `remoteOutcome=success`; repair delivery without repeating the write.
 - If the original envelope already failed, keep the original non-zero exit and `error.kind`. In file mode emit the complete error without filtering it into a file; for stdout filtering, a filter miss only adds a warning instead of replacing the failure.
 
 ## Search, Histogram, And Analysis
@@ -186,7 +187,7 @@ When the command already failed, follow the smallest next action:
 - `page-all-is-not-compression`: `page.all` accumulates pages and can increase payload size; `merged` does not prove completeness. Check `summary.completeness` and retained data, including on nonzero exit.
 - `jmes-filter-and-projection-have-different-scope`: use `summary.*` or `data.*` under `--jmes-filter`, and raw keys only under `execution.projection`.
 - `jmes-filter-null-is-still-success`: literal `null` means the selected field exists and is null; that is not the same as `filter matched no value`.
-- `jmes-filter-file-contains-selected-json`: selected values are JSON documents; use the stdout notice to locate the file and do not assume `summary` remains in its content.
+- `jmes-filter-file-contains-selected-json`: selected values are JSON documents; use the default stdout envelope's `artifacts[].path` (or the human notice) to locate the file and do not assume `summary` remains in its content.
 - `deliverymode-belongs-to-runtime`: choose `tool / workflow / raw` first; when the envelope is retained, read `summary.deliveryMode` from the actual result.
 - `hitcount-is-not-whole-window-total`: `HitCount` is only the current response window, not the whole-window total.
 - `incomplete-means-partial-scan`: treat `ResultStatus=incomplete` or `time_out` as partial evidence and `error` as failure.

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -110,11 +109,11 @@ func TestRunMisplacedGlobalFlagHintIncludesFlagAndExample(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("unexpected code: %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	var p map[string]any
-	if err := json.Unmarshal(stderr.Bytes(), &p); err != nil {
-		t.Fatalf("invalid stderr json: %v stderr=%q", err, stderr.String())
+	p := c4InvocationFailure(t, stdout.String(), stderr.String(), false)
+	if p.Kind != "usage" {
+		t.Fatalf("unexpected kind: %q", p.Kind)
 	}
-	hint, _ := p["hint"].(string)
+	hint := p.Hint
 	if !strings.Contains(hint, "--output-file") {
 		t.Fatalf("hint should mention flag name: %q", hint)
 	}

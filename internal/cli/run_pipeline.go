@@ -22,36 +22,83 @@ type runInvocation struct {
 
 func prepareRunInvocation(args []string, stdout, stderr io.Writer) (*runInvocation, int, bool) {
 	if len(args) == 0 {
+		if defaultAgentErrorProtocol("", nil) {
+			code := writeInvocationFailure(stdout, stderr, "cli.invoke", nil, errors.New("missing command"), "usage", "run 'volclog --help' to inspect commands", 1)
+			return nil, code, true
+		}
 		_, _ = stderr.Write([]byte(usageText()))
 		return nil, 1, true
 	}
 
 	group, rest, flags, ok := parseGlobal(args)
 	if !ok {
+		if defaultAgentErrorProtocol("", nil) {
+			code := writeInvocationFailure(stdout, stderr, "cli.invoke", nil, errors.New("invalid global flags or missing flag value"), "usage", "run 'volclog --help' to inspect global flags", 1)
+			return nil, code, true
+		}
 		_, _ = stderr.Write([]byte(usageText()))
 		return nil, 1, true
 	}
 	if allowsTrailingGlobalsForGroup(group) {
-		rest, flags, ok = extractTrailingGlobals(rest, flags, allowsTrailingDryRun(group, rest))
+		tail, merged, ok := extractTrailingGlobals(rest, flags, allowsTrailingDryRun(group, rest))
 		if !ok {
+			if defaultAgentErrorProtocol(group, rest) {
+				code := writeInvocationFailure(stdout, stderr, group, rest, errors.New("missing global flag value"), "usage", "run 'volclog --help' to inspect global flags", 1)
+				return nil, code, true
+			}
 			_, _ = stderr.Write([]byte(usageText()))
 			return nil, 1, true
 		}
+		rest, flags = tail, merged
 	}
 	if flags.ShowHelp {
-		_, _ = stdout.Write([]byte(usageText()))
+		if currentEdition() == cliEditionVolclog {
+			if err := writeOutputNotice(stdout, usageText()); err != nil {
+				env := buildAPIErrorEnvelope(nil, "cli.invoke", err, "stdout")
+				return nil, writeBrokenStdout(stderr, err, env), true
+			}
+		} else {
+			_, _ = stdout.Write([]byte(usageText()))
+		}
 		return nil, 0, true
 	}
 	if flags.ShowVersion {
-		_, _ = stdout.Write([]byte("volclog " + version.Version + "\n"))
+		text := "volclog " + version.Version + "\n"
+		if defaultAgentErrorProtocol(group, rest) {
+			if err := writeOutputNotice(stdout, text); err != nil {
+				env := buildAPIErrorEnvelope(nil, "version", err, "stdout")
+				return nil, writeBrokenStdout(stderr, err, env), true
+			}
+		} else {
+			_, _ = stdout.Write([]byte(text))
+		}
 		return nil, 0, true
 	}
 	if group == "version" {
 		if len(rest) != 0 {
-			writeCLIError(stderr, errors.New("version does not accept arguments"), "", 0, "usage", "use 'volclog version'")
+			err := errors.New("version does not accept arguments")
+			if defaultAgentErrorProtocol(group, rest) {
+				code := writeInvocationFailure(stdout, stderr, group, rest, err, "usage", "use 'volclog version'", 1)
+				return nil, code, true
+			}
+			writeCLIError(stderr, err, "", 0, "usage", "use 'volclog version'")
 			return nil, 1, true
 		}
-		if err := writeVersionInfo(stdout); err != nil {
+		versionStdout := stdout
+		var observed *invocationStdoutWriter
+		if defaultAgentErrorProtocol(group, rest) {
+			observed = &invocationStdoutWriter{writer: stdout}
+			versionStdout = observed
+		}
+		if err := writeVersionInfo(versionStdout); err != nil {
+			if observed != nil {
+				if observed.err != nil {
+					env := buildAPIErrorEnvelope(nil, group, err, "stdout")
+					return nil, writeBrokenStdout(stderr, observed.err, env), true
+				}
+				code := writeInvocationFailure(stdout, stderr, group, rest, err, "internal", "failed to build version information", 3)
+				return nil, code, true
+			}
 			writeCLIError(stderr, err, "", 0, "internal", "failed to build version information")
 			return nil, 3, true
 		}
@@ -60,11 +107,19 @@ func prepareRunInvocation(args []string, stdout, stderr io.Writer) (*runInvocati
 
 	wd, err := os.Getwd()
 	if err != nil {
+		if defaultAgentErrorProtocol(group, rest) {
+			code := writeInvocationFailure(stdout, stderr, group, rest, err, "config", "failed to get working directory", 2)
+			return nil, code, true
+		}
 		writeCLIError(stderr, err, "", 0, "config", "failed to get working directory")
 		return nil, 2, true
 	}
 	projectCfg, _, err := config.LoadProjectConfig(wd)
 	if err != nil {
+		if defaultAgentErrorProtocol(group, rest) {
+			code := writeInvocationFailure(stdout, stderr, group, rest, err, "config", "failed to load project config", 2)
+			return nil, code, true
+		}
 		writeCLIError(stderr, err, "", 0, "config", "failed to load project config")
 		return nil, 2, true
 	}
@@ -83,16 +138,29 @@ func prepareRunInvocation(args []string, stdout, stderr io.Writer) (*runInvocati
 	}
 
 	if !isRecognizedGroup(group) {
+		if defaultAgentErrorProtocol(group, rest) {
+			code := writeInvocationFailure(stdout, stderr, "cli.invoke", nil, errors.New("unknown command"), "usage", "run 'volclog --help' to inspect commands", 1)
+			return nil, code, true
+		}
 		_, _ = stderr.Write([]byte(usageText()))
 		return nil, 1, true
 	}
 	if !isGroupEnabledInCurrentEdition(group) {
-		writeCLIError(stderr, errors.New("group not available in "+string(currentEdition())+" edition: "+group), "", 0, "usage", editionGroupHint(group))
+		err := errors.New("group not available in " + string(currentEdition()) + " edition: " + group)
+		if defaultAgentErrorProtocol(group, rest) {
+			code := writeInvocationFailure(stdout, stderr, group, rest, err, "usage", editionGroupHint(group), 1)
+			return nil, code, true
+		}
+		writeCLIError(stderr, err, "", 0, "usage", editionGroupHint(group))
 		return nil, 1, true
 	}
 
 	format, err := output.ParseFormat(flags.Output)
 	if err != nil {
+		if defaultAgentErrorProtocol(group, rest) {
+			code := writeInvocationFailure(stdout, stderr, group, rest, errors.New("invalid output format"), "usage", "invalid --output", 1)
+			return nil, code, true
+		}
 		writeCLIError(stderr, err, "", 0, "usage", "invalid --output")
 		return nil, 1, true
 	}
@@ -168,6 +236,10 @@ func dispatchRunInvocation(invocation *runInvocation, stdout, stderr io.Writer, 
 		handled := false
 		out, handled, err = runEditionSpecificGroup(ctx, group, rest)
 		if !handled {
+			if defaultAgentErrorProtocol(group, rest) {
+				code := writeInvocationFailure(stdout, stderr, "cli.invoke", nil, errors.New("unknown command"), "usage", "run 'volclog --help' to inspect commands", 1)
+				return nil, code, nil, true
+			}
 			_, _ = stderr.Write([]byte(usageText()))
 			return nil, 1, nil, true
 		}

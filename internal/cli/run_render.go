@@ -39,10 +39,19 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 	}
 	if err != nil {
 		if ue, ok := asUsageError(err); ok {
-			_, _ = stdout.Write([]byte(ue.Text))
+			if ue.ExitCode != 0 && defaultAgentErrorProtocol(group, rest) {
+				hint := scopedHelpHint(err)
+				if hint == "" {
+					hint = "run 'volclog " + group + " --help' to inspect command usage"
+				}
+				return writeInvocationFailure(stdout, stderr, group, rest, errors.New("missing command or required arguments"), "usage", hint, ue.ExitCode)
+			}
+			if writeErr := writeOutputNotice(stdout, ue.Text); writeErr != nil {
+				return failStdout(writeErr)
+			}
 			return ue.ExitCode
 		}
-		if emitsStructuredEnvelope(group, rest) || ctx.Completeness != nil {
+		if emitsStructuredEnvelope(group, rest) || defaultAgentErrorProtocol(group, rest) || ctx.Completeness != nil {
 			if strings.TrimSpace(ctx.TraceDir) != "" {
 				_ = ctx.initTrace()
 			}
@@ -104,6 +113,9 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 			if currentRemoteOutcome(ctx, nil) != "not_sent" {
 				return failDelivery(errors.New("unsupported output: table"), "format", 3)
 			}
+			if defaultAgentErrorProtocol(group, rest) {
+				return writeRunError(ctx, stdout, stderr, group, rest, errors.New("unsupported output: table"), "usage", hint, outputMode, 1)
+			}
 			writeCLIError(stderr, errors.New("unsupported output: table"), ctx.RequestID, ctx.StatusCode, "usage", hint)
 			return 1
 		}
@@ -120,7 +132,7 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 		}
 		return exitCode
 	}
-	if s, ok := out.(string); ok {
+	if s, ok := out.(string); ok && !(group == "raw" && currentEdition() == cliEditionVolclog) {
 		if outputMode == "file" {
 			p, err := writeTextFileToDir(flags.OutputFile, ctx.OutputDir, group, s)
 			if err != nil {
@@ -157,8 +169,8 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 			}
 			return exitCode
 		}
-		if notice, ok := fileDeliveryNoticeForOutput(env, group, rest); ok {
-			return writeNotice(notice)
+		if _, ok := fileDeliveryNoticeForOutput(env, group, rest); ok {
+			return renderFileDelivery(ctx, stdout, stderr, group, rest, env, exitCode)
 		}
 		if err := output.Write(stdout, env, output.FormatJSON); err != nil {
 			return failStdout(err)
@@ -172,8 +184,9 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 			return writeFilterApplicationError(ctx, stdout, stderr, group, rest, filterTarget, outputMode, err)
 		}
 	}
-	if notice, ok := fileDeliveryNoticeForOutput(out, group, rest); ok {
-		return writeNotice(notice)
+	if _, ok := fileDeliveryNoticeForOutput(out, group, rest); ok {
+		env, _ := structuredEnvelopeOutput(out)
+		return renderFileDelivery(ctx, stdout, stderr, group, rest, env, exitCode)
 	}
 	if outputMode == "file" {
 		p, err := writeOutputFileToDir(flags.OutputFile, ctx.OutputDir, group, out, format)

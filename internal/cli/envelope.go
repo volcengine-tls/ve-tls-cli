@@ -12,7 +12,7 @@ func isAPIEnvelopeCandidate(group string, out any) bool {
 	if !isEnvelopeGroup(g) {
 		return false
 	}
-	if g == "raw" {
+	if g == "raw" && currentEdition() != cliEditionVolclog {
 		_, isString := out.(string)
 		return !isString
 	}

@@ -18,9 +18,9 @@ Behavior:
 - If the filter path does not exist (missing key, out-of-range index), the command fails with `filter matched no value` and exit code `3`; file delivery does not create or overwrite the result file.
 - If the filter expression is invalid, the command fails with `invalid jmes-filter expression` and exit code `3`.
 
-For `raw`, `tool exec`, and `workflow exec`, `--jmes-filter` can be combined with `--output-mode file`; `tool exec` and `workflow exec` can also request file delivery through context `execution.artifact`. The selected value from the complete success envelope is written as one JSON document, including when `--output jsonl` is selected. It may be an array, scalar, or `null`, rather than an envelope. stdout emits the fixed Chinese file notice with the path. Without a filter, ordinary file delivery retains the full envelope; unfiltered streamed exports remain an exception.
+For `raw`, `tool exec`, and `workflow exec`, `--jmes-filter` can be combined with `--output-mode file`; `tool exec` and `workflow exec` can also request file delivery through context `execution.artifact`. The selected value from the complete success envelope is written as one JSON document, including when `--output jsonl` is selected. It may be an array, scalar, or `null`, rather than an envelope. Default stdout emits the JSON delivery envelope; human stdout retains the Chinese file notice. Without a filter, ordinary file delivery retains the full envelope; unfiltered streamed exports remain an exception.
 
-In the file-mode filtering view, `summary.deliveryMode=file_forced`, and `summary.totalBytes` measures the envelope before filtering rather than the selected file. A global filter disables automatic spill. When an upstream operation fails in file mode, the full error is emitted with a non-zero exit code and is not filtered into a file.
+In the file-mode filtering view, `summary.deliveryMode=file_forced`, and `summary.totalBytes` measures the envelope before filtering. The default stdout delivery envelope has its own byte count in `summary.totalBytes`; `artifacts[].sizeBytes` measures the actual selected file. A global filter disables automatic spill. When an upstream operation fails in file mode, the full error is emitted with a non-zero exit code and is not filtered into a file.
 
 ```bash
 volclog --profile default --output jsonl --output-mode file --output-dir ./out \
@@ -28,24 +28,24 @@ volclog --profile default --output jsonl --output-mode file --output-dir ./out \
   tool exec project.describe-projects --input '{"PageSize":20}'
 ```
 
-Read the file path from the stdout notice; the file contains the selected project-name array as JSON. See [Usage](4-Usage.md) section 8.3 for the `execution.artifact` and projection variant.
+Read the file path from the default stdout envelope's `artifacts[].path`; the file contains the selected project-name array as JSON. See [Usage](4-Usage.md) section 8.3 for the `execution.artifact` and projection variant.
 
 ## 2. Large-result delivery
 
 Forced file mode (`--output-mode file`) behavior depends on the command surface:
 
-- `raw`, `tool exec`, `workflow exec`: the complete success envelope, or the value selected by `--jmes-filter`, is written to an artifact under `--output-dir`; stdout contains only the fixed Chinese file notice.
+- `raw`, `tool exec`, `workflow exec`: the complete success envelope, or the value selected by `--jmes-filter`, is written to an artifact under `--output-dir`; default stdout contains a delivery envelope with `data=null` and `artifacts[].path`, while human stdout retains the Chinese notice.
 - Non-envelope groups: the raw result is written to the selected file and stdout emits only the bare file path.
 - Generic human-shortcut envelope commands (for example `project list`, `topic create`): the envelope artifact is written to the file and the complete envelope is also emitted to stdout.
 - Human `volclog-human log export` / `log export-analysis` without `--jmes-filter`: exported data rows are streamed into the file artifact (JSON array for `--output json`, JSONL rows for `--output jsonl`) and stdout emits the complete envelope containing artifact metadata. The artifact itself is not an envelope.
 
-The fixed Chinese notice is limited to `raw`, `tool exec`, and `workflow exec`; human log exports do not use it. Automation must follow the output contract of the command surface it invokes.
+For default file delivery, read the path from `artifacts[].path`; scripts parsing the former Chinese notice must migrate. Human log shortcuts retain their own output contract.
 
-Automatic spill (`file_auto`) applies to `tool exec` and `workflow exec` when all of these hold: output format is JSON (`--output json`, default or explicit), output mode is `stdout` and not explicitly set, there is no `--jmes-filter`, and no `execution.artifact`/`execution.projection`. When the estimated envelope size exceeds 16 KiB, the complete envelope is written to a file under `--output-dir`; stdout emits only the fixed file notice. If `--output-dir` is missing or unwritable, the command errors with `result too large for stdout; specify --output-dir <writable-dir> to allow automatic file delivery`.
+Automatic spill (`file_auto`) applies to `tool exec` and `workflow exec` when all of these hold: output format is JSON (`--output json`, default or explicit), output mode is `stdout` and not explicitly set, there is no `--jmes-filter`, and no `execution.artifact`/`execution.projection`. When the estimated envelope size exceeds 16 KiB, the complete envelope is written to a file under `--output-dir`; default stdout emits a delivery envelope without a result preview. If `--output-dir` is missing or unwritable, the command errors with `result too large for stdout; specify --output-dir <writable-dir> to allow automatic file delivery`.
 
 The following default streamed-export behavior applies without `--jmes-filter`. With a filter, the streamed writer is disabled and results are accumulated in memory before filtering and file delivery. For large exports, prefer unfiltered streaming or server-side field selection where available; client-side filtering does not reduce server scanning or network traffic.
 
-Default `workflow exec log.export` and `log.export-analysis` stream exported rows directly into a data artifact (JSON array or JSONL), not an envelope. On success stdout contains the fixed file notice; the row file itself does not contain `status`, `summary`, `requestId`, `ResultStatus`, or `ListOver`. Pure-search `log.export` defaults to at most 100 pages when `MaxPages` is omitted. Reaching the budget before the observed end or a later failure returns nonzero with `summary.completeness` and retained rows. A streamed partial uses a unique data path and `.meta.json` sidecar, reported in its artifact descriptor as `completeness` and `metadataPath`; a previous complete target remains intact. `log.export-analysis` does not auto-paginate analysis rows and requires `ResultStatus=complete` for a complete result.
+Default `workflow exec log.export` and `log.export-analysis` stream exported rows directly into a data artifact (JSON array or JSONL), not an envelope. On success stdout contains the JSON delivery envelope; the row file itself does not contain `status`, `summary`, `requestId`, `ResultStatus`, or `ListOver`. Pure-search `log.export` defaults to at most 100 pages when `MaxPages` is omitted. Reaching the budget before the observed end or a later failure returns nonzero with `summary.completeness` and retained rows. A streamed partial uses a unique data path and `.meta.json` sidecar, reported in its artifact descriptor as `completeness` and `metadataPath`; a previous complete target remains intact. `log.export-analysis` does not auto-paginate analysis rows and requires `ResultStatus=complete` for a complete result.
 
 ## 3. Pagination
 
@@ -69,7 +69,7 @@ The `error_message` field stores the transport error string directly, which can 
 
 ## 6. Error recovery
 
-`raw`, all `tool` commands (including `list`/`describe`), all `workflow` commands (including `list`/`describe`), and human-shortcut envelope groups use structured error envelopes (`status: failed`, `error` object). Other non-envelope groups write flat JSON to stderr in this field order: `errorCode`, `errorMessage`, `requestId`, `statusCode`, `kind`, `hint`.
+Default `volclog` uses structured error envelopes (`status: failed`, `error` object) for `raw`, `tool exec`, `workflow exec`, and early usage failures. Explicit help, `--version`, text discovery, and the frozen auth command output and error contracts retain their existing formats; human-shortcut envelope groups retain their existing error contract. A broken stdout returns exit code 3 with a best-effort structured report on stderr.
 
 The `requestId` in the envelope (or `x-tls-requestid` response header) identifies the request for support and troubleshooting. Capture it when reporting issues.
 
@@ -139,14 +139,14 @@ For automation: pass `--profile` (or `--secrets-file`) explicitly, use determini
 
 Identity determinism: in static AK mode, a complete `VOLCENGINE_ACCESS_KEY_ID` + `VOLCENGINE_ACCESS_KEY_SECRET` environment pair bypasses the explicitly selected profile. Automation that intends to use a static profile must remove unintended static credential environment variables, or use a controlled complete `--secrets-file` as the intended identity source. Dynamic provider modes ignore environment AK/SK. See [Configuration](3-Configuration.md) section 5 for the exact precedence.
 
-Request-ID sources: for ordinary envelope-producing commands, capture `requestId` from the envelope. For default forced-file `workflow exec log.export` / `log.export-analysis`, stdout is only the fixed notice and the data artifact has no `requestId`. If transport Request IDs for streamed or multi-page export are required, enable a restricted `--trace-dir`, inspect the trace file, and follow the trace sensitivity guidance in section 5.
+Request-ID sources: capture `requestId` from the stdout envelope when present. For default forced-file `workflow exec log.export` / `log.export-analysis`, the row artifact has no `requestId`. If transport Request IDs for streamed or multi-page export are required, enable a restricted `--trace-dir`, inspect the trace file, and follow the trace sensitivity guidance in section 5.
 
 ## 10. General troubleshooting
 
 - Use `volclog --profile <profile> doctor` for local config/credential checks and `doctor --online` for a minimal live connectivity check.
 - If a command fails with `conflicting runtime selectors`, check the identity selector rules in [Configuration](3-Configuration.md) section 5.3: an explicit selector is optional; any profile selector combined with any secrets-file selector conflicts; two secrets-file selectors conflict; global/context profiles conflict only if the names differ; repeating the same profile name is accepted but redundant.
 - If `--output table` is rejected, you are on the default `volclog` agent path; use `--output json` or `--output jsonl`, or switch to `volclog-human` for the specific shortcut surfaces that support table.
-- If `--output-mode file` produces no envelope on stdout for `tool exec`/`workflow exec`, that is expected: stdout contains only the fixed file notice; read the artifact file.
+- For a successful default `--output-mode file` on `tool exec`/`workflow exec`, read the artifact path from the stdout delivery envelope; `data=null` is expected because the result is in the file. Human stdout retains the Chinese notice.
 
 ---
 

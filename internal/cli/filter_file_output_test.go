@@ -494,9 +494,7 @@ func TestHumanShortcutFilterFileKeepsEnvelope(t *testing.T) {
 func runFilteredFileOutput(t *testing.T, args []string) ([]byte, string) {
 	t.Helper()
 	notice, path := runOutputRuntimeNotice(t, args)
-	if want := "结果已写入文件。\n文件: " + path + "\n"; notice != want {
-		t.Fatalf("notice=%q, want %q", notice, want)
-	}
+	assertFileDeliveryNotice(t, notice, path, "file_forced")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read filtered output %q: %v", path, err)
