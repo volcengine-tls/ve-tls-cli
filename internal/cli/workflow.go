@@ -241,6 +241,12 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 		return nil, validationFailure(err, "InvalidWorkflowInput")
 	}
 	options := resolveToolExecutionOptions(cfg)
+	if _, exists := cfg.Execution["page"]; exists {
+		return nil, newUnsupportedFeatureError("workflow does not support execution.page", "remove execution.page; use the workflow's own documented input controls")
+	}
+	if _, exists := cfg.Execution["page_all"]; exists {
+		return nil, newUnsupportedFeatureError("workflow does not support execution.page_all", "remove execution.page_all; use the workflow's own documented input controls")
+	}
 	compiledProjection, err := output.Compile(options.Projection)
 	if err != nil {
 		return nil, &execution.Failure{Kind: "decode", Code: "InvalidProjection", Stage: "validate", Outcome: execution.OutcomeNotSent, Cause: fmt.Errorf("invalid execution.projection: %w", err)}

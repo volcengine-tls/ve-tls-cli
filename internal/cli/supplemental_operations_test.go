@@ -80,7 +80,8 @@ func TestShardMergeDescribeProvidesSafeEndToEndUsage(t *testing.T) {
 		"--dry-run tool exec shard.merge",
 		"tool exec shard.merge",
 		"data.Shards",
-		"required-field presence",
+		"declared schema",
+		"non-negative integer ShardId",
 	} {
 		if !strings.Contains(usage, want) {
 			t.Fatalf("shard.merge usage_notes missing %q: %q", want, usage)

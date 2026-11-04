@@ -57,10 +57,36 @@ func TestCommittedInternalOperationOverridesAreExact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load embedded catalog: %v", err)
 	}
-	for _, override := range operations {
+	policies, err := loadRecoveryPolicies(filepath.Join("..", "..", "contracts", "overrides", "recovery.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	usage, err := loadUsageConstraints(filepath.Join("..", "..", "contracts", "overrides", "usage_constraints.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	docs, err := loadDocumentationOverrides(filepath.Join("..", "..", "contracts", "overrides", "documentation.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	internalDocs := make(map[string]string)
+	for _, operation := range operations {
+		if value, ok := docs[string(operation.ID)]; ok {
+			internalDocs[string(operation.ID)] = value
+		}
+	}
+	expected, err := contract.NewCatalog(embedded.ContractVersion, contract.JSONSchema(defaultToolContextSchema()), contract.JSONSchema(defaultToolExecutionSchema()), operations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err = applyContractPolicies(expected, policies, usage, internalDocs, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, override := range expected.Operations {
 		embeddedOperation := operationByID(t, embedded.Operations, override.ID)
 		if !reflect.DeepEqual(embeddedOperation, override) {
-			t.Fatalf("embedded operation %q differs from override:\nembedded=%#v\noverride=%#v", override.ID, embeddedOperation, override)
+			t.Fatalf("embedded operation %q differs from override and policies:\nembedded=%#v\noverride=%#v", override.ID, embeddedOperation, override)
 		}
 	}
 

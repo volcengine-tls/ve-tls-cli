@@ -29,7 +29,8 @@ Treat this file as the dominant generic operating model for `volclog`, not as an
 - `--profile`/`context.profile` and `--secrets-file`/`context.secrets_file` are runtime selectors, not business input fields.
 - A non-empty explicit profile must exist. Its static credentials and token cannot be replaced or filled from the environment; incomplete static AK/SK fails. Dynamic identities remain provider-backed. Without an explicit profile, the existing environment precedence applies.
 - Global `--region`/`--endpoint` and context `region`/`endpoint` override profile, applicable environment, and project defaults. Different non-empty global and context values for the same field fail validation.
-- Context validation rejects unknown fields, wrong types, and conflicting aliases before applying the context. Legacy trace boolean/string/object and execution artifact/output/page/projection forms remain supported.
+- Context validation rejects unknown fields, wrong types, and conflicting aliases before applying the context. Legacy trace boolean/string/object and execution artifact/output/projection forms remain supported; page controls are for supported tools, not workflows.
+- A global flag that needs a separate value will not consume a following `--flag`; prefix a relative path beginning with `--` with `./`.
 - Never read, print, export, or persist AK/SK or token values in prompts, memory, request artifacts, or skill content.
 
 ## Canonical Agent Loop
@@ -74,7 +75,8 @@ Discover -> Describe -> Exec -> Read Result
 
 - Do not guess command names, tool ids, workflow ids, JSON fields, or output shape.
 - If the action id is still unknown, run `volclog tool list <group>` or `volclog workflow list <group>` before guessing.
-- Let the operation's `risk`, `recovery`, and `usage_constraints` override the generic recovery map below.
+- Let the operation's `risk`, `recovery`, `recovery_source`, `recovery_notes`, and `usage_constraints` override the generic recovery map below; use full describe for details, input policy, documentation source, and API default-header metadata.
+- `reviewed-read-contract` identifies a reviewed read or non-persistent purpose, not proven service idempotency or automatic retry permission. Reconcile unverified outcomes before considering another attempt.
 - Treat `high-risk-retry` as a warning that retrying is high risk. After an ambiguous result, reconcile only through a get/describe/list action named by the contract; otherwise stop and escalate instead of retrying automatically.
 - Do not use human shortcut commands as the primary agent flow.
 - Do not repeat schema details that already exist in `tool describe` or `workflow describe`.
@@ -85,14 +87,15 @@ Discover -> Describe -> Exec -> Read Result
 - Treat `--dry-run` as contract or plan validation, not proof that the business query is correct.
 - A dry-run `request_preview` masks known sensitive keys recursively, including sensitive `Contents`/`LogTags` key/value entries; malformed bodies are omitted and `redacted_fields` may list paths. This affects only the preview, not the wire request or body hash. Ordinary body strings are not guaranteed to be recognized as secrets.
 - Malformed JSON-like query values use `[unparseable query omitted]`; displayed endpoints omit user information, query, and fragment.
-- `summary.remoteOutcome` distinguishes `not_sent`, `unknown`, `success`, `failed`, and `partial`; `summary.deliveryOutcome` is independently `success` or `failed`. `accepted` is reserved for a future explicit asynchronous operation contract.
+- `summary.remoteOutcome` distinguishes `not_sent`, `unknown`, `accepted`, `success`, `failed`, and `partial`; `summary.deliveryOutcome` is independently `success` or `failed`. Download-task creation reports `accepted`, not completion; inspect `summary.async` and the task-specific `summary.asyncTasks` on a later status query. The CLI does not wait automatically; see [references/sops.md](references/sops.md) for the single-call next steps.
 - `summary.pagination.merged=true` means pages were accumulated, not that they are complete. Preserve service `data.Total`; `summary.itemCount` counts collected rows. Inspect `summary.completeness` (`complete`, `stopReason`, `pageCount`, `itemCount`, `resumable`, and optional `next`). A page-all/export budget or later failure returns nonzero with collected data retained when available.
 - If `next` is present, execute its `operationId` and `input` as a single `tool exec` request with the same runtime selectors and page-all disabled (`next.pageAll=false`); do not invent SQL `OFFSET` for continuation. SQL/analysis is complete only for `ResultStatus=complete`; `ListOver` applies to pure search. `incomplete`/`time_out` are incomplete and `error` is failure. User-authored SQL `LIMIT`/`OFFSET` calls are separate queries without a shared-snapshot guarantee.
 - A retained streamed partial uses a unique partial data file and `.meta.json` sidecar; inspect the artifact's `completeness` and `metadataPath`. The completed target is preserved. If sidecar delivery fails, use the retained data path and error.
 - For batch-ingest failures, inspect `summary.progress` or `data.progress`: `confirmedBatches`, `confirmedLogs`, zero-based exclusive `confirmedLogOffset`, one-based active `currentBatch`, `currentBatchOutcome`, and `lastConfirmedRequestId`. Only confirmed success responses count. HTTP 200 followed by a read or protocol failure is `unknown`; never treat an unknown batch as an automatically safe resume point. Current request ID and status refer to the current attempt, not an earlier confirmed batch.
 - Standard catalog JSON responses require HTTP 200 and valid JSON when the body is non-empty. Empty responses and special codec, `raw`, and protobuf paths retain their existing 2xx/text/empty/PB contracts. The CLI adds no retry here; existing `http.Client`/`Transport` and custom-transport behavior still applies.
 - A stdout write failure returns exit code 3 and reports a structured error to stderr on a best-effort basis; broken stdout cannot guarantee JSON. Exit codes 1, 2, and 3 keep their existing roles.
-- If fields are uniquely named, prefer flat JSON input before manual nesting.
+- If fields are uniquely named, prefer flat JSON input before manual nesting. `tool exec` applies the declared schema consistently to flat and sectioned inputs; sectioned extra top-level keys are rejected, section fields follow `additionalProperties`, and an operation without a section schema remains passthrough. Defaults are not injected. Human shortcuts retain legacy validation.
+- `workflow exec` rejects context `execution.page` and `execution.page_all` even when false; use the workflow's own documented controls.
 
 ## Error Recovery Quick Map
 

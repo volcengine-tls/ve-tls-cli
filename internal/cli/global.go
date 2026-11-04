@@ -29,69 +29,69 @@ func parseGlobal(args []string) (group string, rest []string, flags GlobalFlags,
 		}
 		switch a {
 		case "--profile":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.Profile = args[1]
 			args = args[2:]
 		case "--region":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.Region = args[1]
 			args = args[2:]
 		case "--endpoint":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.Endpoint = args[1]
 			args = args[2:]
 		case "--output":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.Output = args[1]
 			args = args[2:]
 		case "--output-mode":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.OutputMode = args[1]
 			flags.OutputModeExplicit = true
 			args = args[2:]
 		case "--output-dir":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.OutputDir = args[1]
 			flags.OutputDirExplicit = true
 			args = args[2:]
 		case "--output-file":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.OutputFile = args[1]
 			args = args[2:]
 		case "--jmes-filter":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.Filter = args[1]
 			args = args[2:]
 		case "--trace-dir":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.TraceDir = args[1]
 			args = args[2:]
 		case "--trace-redact":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.TraceRedact = args[1]
 			args = args[2:]
 		case "--secrets-file":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.SecretsFile = args[1]
@@ -124,45 +124,45 @@ func extractTrailingGlobals(args []string, flags GlobalFlags, allowDryRun bool) 
 		a := args[i]
 		switch a {
 		case "--output":
-			if i+1 >= len(args) {
+			if !hasGlobalFlagValue(args, i) {
 				return nil, GlobalFlags{}, false
 			}
 			merged.Output = args[i+1]
 			i++
 		case "--output-mode":
-			if i+1 >= len(args) {
+			if !hasGlobalFlagValue(args, i) {
 				return nil, GlobalFlags{}, false
 			}
 			merged.OutputMode = args[i+1]
 			merged.OutputModeExplicit = true
 			i++
 		case "--output-dir":
-			if i+1 >= len(args) {
+			if !hasGlobalFlagValue(args, i) {
 				return nil, GlobalFlags{}, false
 			}
 			merged.OutputDir = args[i+1]
 			merged.OutputDirExplicit = true
 			i++
 		case "--output-file":
-			if i+1 >= len(args) {
+			if !hasGlobalFlagValue(args, i) {
 				return nil, GlobalFlags{}, false
 			}
 			merged.OutputFile = args[i+1]
 			i++
 		case "--jmes-filter":
-			if i+1 >= len(args) {
+			if !hasGlobalFlagValue(args, i) {
 				return nil, GlobalFlags{}, false
 			}
 			merged.Filter = args[i+1]
 			i++
 		case "--trace-dir":
-			if i+1 >= len(args) {
+			if !hasGlobalFlagValue(args, i) {
 				return nil, GlobalFlags{}, false
 			}
 			merged.TraceDir = args[i+1]
 			i++
 		case "--trace-redact":
-			if i+1 >= len(args) {
+			if !hasGlobalFlagValue(args, i) {
 				return nil, GlobalFlags{}, false
 			}
 			merged.TraceRedact = args[i+1]
@@ -210,4 +210,14 @@ func allowsTrailingDryRun(group string, rest []string) bool {
 		return false
 	}
 	return false
+}
+
+// Values that are separate option tokens must not swallow execution controls.
+// A path beginning with -- can be expressed with an explicit ./ prefix.
+func hasGlobalFlagValue(args []string, index int) bool {
+	if index+1 >= len(args) {
+		return false
+	}
+	next := args[index+1]
+	return next != "-h" && !strings.HasPrefix(next, "--")
 }

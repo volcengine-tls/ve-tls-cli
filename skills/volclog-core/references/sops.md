@@ -3,7 +3,7 @@
 Use this file only for cross-group execution order, stop conditions, and hand-off points between surfaces.
 
 Pick one SOP, follow it until its stop condition, then stop. Do not chain multiple SOPs unless the current one fails to resolve the task.
-If any step returns an error envelope, first follow `SKILL.md` Error Recovery Quick Map, then retry the same step or stop if the task itself changed.
+If any step returns an error envelope, first follow `SKILL.md` Error Recovery Quick Map. Retry only when the operation contract and observed outcome permit it; otherwise reconcile or stop.
 
 ## Create A Searchable Log Pipeline
 
@@ -90,6 +90,14 @@ Stop when:
 
 Notes:
 - Read the default stdout delivery envelope and, if needed, the file at `artifacts[].path`; human stdout retains the file notice. Stop once the expected output shape is confirmed.
+
+## Follow A Download Task
+
+1. Describe and execute `log.create-download-task`; `summary.remoteOutcome=accepted` and `summary.async` mean submission, not completion.
+2. When present, execute `summary.async.next.operationId` with `summary.async.next.input` as one `tool exec` call, using the same runtime selectors and no page-all. The CLI does not wait automatically.
+3. Match `Tasks[].TaskId` to `summary.async.taskId` across list pages; `TaskName` is only a fuzzy filter. Inspect the matching item in `summary.asyncTasks`.
+
+If the task is absent on the current page, check the remaining list pages before concluding it was not found. Stop after a status query if the matched task is still `wait`/`creating` or unknown; decide separately whether another status query is needed. `success` means the file was generated and its item may expose a `next` for the download URL. `created_cut` is partial and its `possibleNext` is conditional because only some truncated tasks have a file; `fail` is failure. A URL expires after five minutes. Request limits, precision options, and service limits mean file generation does not by itself prove the entire query window was exported.
 
 ## Resolve Application Resources
 

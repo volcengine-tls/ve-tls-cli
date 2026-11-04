@@ -87,6 +87,10 @@ volclog tool describe project.create --view full
 
 `tool list` 将组作为位置参数（不是 `--group` 标志），并支持 `--verb` 按动词过滤和 `--format text|json`（默认 `text`）。`tool describe <group.action>` 显示工具的标识、输入模式、上下文模式、执行模式、行为、输出策略和契约摘要。`--view` 标志选择 `compact`（默认）或 `full`；显式 JSON 输出默认为 `full`。
 
+`full` 视图还提供 `recovery_source`、`recovery_notes`、`doc_url`、`doc_url_source`、`input_policy` 和 `source`；没有核实到精确文档地址时 `doc_url` 为 `null`。`identity.api_version_default` 是客户端默认请求头版本（`0.3.0`），`identity.api_version_source` 说明其来源；它不是逐操作核实的 API 版本。`full` 中未知的 `identity.maintainer` 和 `identity.deprecated` 为 `null`，`compact` 会省略部分细节。
+
+`recovery_source=reviewed-read-contract` 表示已核实该操作用于读取或非持久化用途，不证明服务端幂等，也不启用自动重试。对于 `unverified`，重试前先对账操作结果。
+
 ### 2.2 `workflow list` 和 `workflow describe`
 
 ```bash
@@ -110,9 +114,9 @@ volclog --profile default tool exec project.describe-projects
 
 ### 3.1 输入与上下文
 
-`--input` 提供请求体。它接受 `file://<path>`、`-`（标准输入）或内联 JSON 对象（必须以 `{` 开头）。`--context` 使用相同的来源提供运行时和执行控制。
+`--input` 提供操作请求字段。它接受 `file://<path>`、`-`（标准输入）或内联 JSON 对象（必须以 `{` 开头）。`--context` 使用相同的来源提供运行时和执行控制。
 
-上下文会在应用前校验未知字段、错误类型和冲突的别名。既有形式继续支持：`trace` 的布尔值、字符串或对象；`execution.artifact` 的布尔值、字符串或对象；`execution.output`/`output_mode`；`execution.page.all`/`page_all`；以及字符串、对象或数组形式的 `execution.projection`。
+上下文会在应用前校验未知字段、错误类型和冲突的别名。既有形式继续支持：`trace` 的布尔值、字符串或对象；`execution.artifact` 的布尔值、字符串或对象；`execution.output`/`output_mode`；字符串、对象或数组形式的 `execution.projection`；以及受支持的分页工具的 `execution.page.all`/`page_all`。
 
 ```bash
 volclog --profile default tool exec project.create \
@@ -127,7 +131,7 @@ volclog --profile default tool exec project.create \
 
 ### 3.2 契约校验与预执行
 
-在任何网络调用之前，`tool exec` 将扁平输入规范化为正确的 `query`/`path`/`header`/`body` 段（当契约定义了输入模式时），并校验必填字段。缺少必填字段会在发送请求前失败。
+在任何网络调用之前，`tool exec` 将无歧义的扁平输入路由到 `query`/`path`/`header`/`body`，并对扁平和分段输入应用相同的已声明 schema。分段输入会拒绝额外的顶层键；段内额外字段按 `additionalProperties` 声明拒绝、接受或按子 schema 校验（未声明时允许）。没有分段 schema 的操作保留透传行为，仍受输入和上下文形状规则约束。CLI 不注入 schema 默认值；human 快捷方式保留原有 legacy 校验，服务端仍会继续校验。
 
 `--dry-run` 运行相同的契约校验，然后跳过网络调用并返回一个本地计划，该计划检查配置档、endpoint、region 和请求体 JSON 的有效性：
 
@@ -151,7 +155,7 @@ volclog --profile default workflow exec log.export \
 
 ### 4.1 输入与上下文
 
-`--input` 和 `--context` 的行为与 `tool exec` 完全相同：`file://<path>`、`-`（标准输入）或内联 JSON 对象。工作流的必填参数在执行前会被校验。
+`--input` 和 `--context` 接受与 `tool exec` 相同的来源：`file://<path>`、`-`（标准输入）或内联 JSON 对象。工作流的必填参数在执行前会被校验。
 
 ### 4.2 执行控制
 
@@ -161,7 +165,7 @@ volclog --profile default workflow exec log.export \
 - `execution.artifact` — 强制文件交付
 - `execution.projection` — 在构建信封之前用 JMESPath 表达式投影原始结果
 
-虽然上下文解析器能识别 `execution.page.all` / `execution.page_all`，但当前工作流执行不会消费它们。分页语义是工作流专属的；请遵循 `workflow describe` 中针对你所使用工作流的指导。不要依赖工作流的 page-all 上下文控制。
+`workflow exec` 会显式拒绝上下文中的 `execution.page` 和 `execution.page_all`，即使值为 `false`。分页语义是工作流专属的；请遵循 `workflow describe` 中针对你所使用工作流的指导。
 
 ```bash
 volclog --profile default workflow exec log.export \
@@ -236,6 +240,8 @@ volclog --profile default raw --method POST --path /CreateProject \
 冲突会失败并报错 `conflicting runtime selectors`（当提供两个不同的配置档名称时为 `conflicting profile selectors`）。
 
 全局 `--region`、`--endpoint` 和 `context.region`、`context.endpoint` 都是单次命令的运行时覆盖，优先于适用的配置档、环境和项目默认值，且不会落盘。同一字段的全局标志与上下文值均非空但不同时，校验失败。完整的 region/endpoint/timeout 优先级见 [配置](3-Configuration_zh.md)。
+
+需要独立值的全局标志不会吞掉后续 `--flag`：例如 `--output-dir --dry-run` 会报告缺少值。以 `--` 开头的相对路径可加 `./` 前缀。
 
 ### 6.2 `--dry-run` 与上下文预执行
 
@@ -339,13 +345,15 @@ volclog --profile default --output-dir ./out --jmes-filter 'data' \
 
 ### 8.5 信封字段与错误输出
 
-成功信封：`status`、`action`、`requestId`、`summary`（`outputMode`、`deliveryMode`、`remoteOutcome`、`deliveryOutcome`、`dryRun`、`itemCount`、`totalBytes`、可选的 `pagination`/`completeness`/`tracePath`）、`artifacts`、`data`、`error`（`null`）。
+成功信封：`status`、`action`、`requestId`、`summary`（`outputMode`、`deliveryMode`、`remoteOutcome`、`deliveryOutcome`、`dryRun`、`itemCount`、`totalBytes`、可选的 `pagination`/`completeness`/`async`/`asyncTasks`/`tracePath`）、`artifacts`、`data`、`error`（`null`）。
 
 错误信封：`status`（`failed`）、`action`、`requestId`、`summary`、`artifacts`、`data`、`error`（`source`、`code`、`message`、`requestId`、`statusCode`、`kind`、`hint`、可选的 `details`）。`data` 通常为 `null`，也可能包含保留的部分结果或批量写入进度；`artifacts` 可能描述保留的部分文件。
 
 默认 `volclog` 的早期用法错误也在标准输出给出失败 JSON 信封并返回非零，包括无参数、未知选项或命令组、选项缺值。显式帮助和 `--version` 仍为文本；机器读取版本请使用 `version` 命令。`tool`/`workflow` 的文本发现输出，以及 `login`、`logout`、`sso`、`configure sso` 的冻结 JSON 形状和错误契约保持不变。human 快捷方式信封组保留既有错误契约。标准输出损坏时，CLI 返回退出码 3，并尽力向标准错误输出结构化报告。
 
-`summary.remoteOutcome` 表示业务操作状态：`not_sent`（未发送）、`unknown`（结果未知）、`success`（成功）、`failed`（失败）或 `partial`（部分完成）。`accepted` 为将来有明确异步契约的操作保留。`summary.deliveryOutcome`（`success` 或 `failed`）独立表示结果交付状态。遇到 `output_failed` 应修复交付问题，不要重跑原写操作；遇到 `result_unknown` 应先对账，再决定是否写入。本次 CLI 改动不新增重试；既有 `http.Client`/`Transport` 策略及自定义 transport 的行为仍然适用。
+`summary.remoteOutcome` 表示业务操作状态：`not_sent`（未发送）、`unknown`（结果未知）、`accepted`（已接受）、`success`（成功）、`failed`（失败）或 `partial`（部分完成）。`accepted` 表示有明确契约的异步提交已被接受，不代表任务已完成。`summary.deliveryOutcome`（`success` 或 `failed`）独立表示结果交付状态。遇到 `output_failed` 应修复交付问题，不要重跑原写操作；遇到 `result_unknown` 应先对账，再决定是否写入。本次 CLI 改动不新增重试；既有 `http.Client`/`Transport` 策略及自定义 transport 的行为仍然适用。
+
+创建下载任务返回 `accepted` 和 `summary.async`，包含任务 ID；有主题 ID 时还包含一次调用 `log.describe-download-tasks` 的 `next`。CLI 不自动等待。`TaskName` 为模糊筛选，应跨页匹配 `Tasks[].TaskId`，再查看 `summary.asyncTasks` 中对应条目。`wait`/`creating` 是非终态；`success` 表示文件已生成；`created_cut` 是部分结果，仅部分任务可下载；`fail` 表示失败，未知状态仍为未知。成功条目可提供 `log.describe-download-url` 的 `next`，截断条目只提供有条件的 `possibleNext`。下载链接有效期为 5 分钟。文件生成不保证导出整个查询窗口，请同时考虑请求条数、精度选项和服务端限制。
 
 批量写入出现 `partial_failure` 时，检查 `summary.progress` 或 `data.progress` 中的 `confirmedBatches`、`confirmedLogs`、`confirmedLogOffset`（从零开始的排他偏移）、`currentBatch`（有当前批次时从 1 开始）、`currentBatchOutcome` 和 `lastConfirmedRequestId`。只有收到确认成功的响应才增加计数；HTTP 200 后读取失败或响应不符合协议时结果为 `unknown`，不能把未知批次当作可自动续传的安全断点。当前 `requestId` 和 `statusCode` 只对应当前尝试，不沿用先前确认批次的值。
 

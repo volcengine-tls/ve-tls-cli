@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
+	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
 )
 
 type toolDescribeView string
@@ -410,8 +411,8 @@ func buildToolDescribeCommon(operation contract.Operation) (toolDescribeCommon, 
 	usageNotes := []any{}
 	if supportsAll {
 		usageNotes = append(usageNotes,
-			"page.all merges page payloads, not necessarily a complete result. Check summary.completeness and summary.itemCount; service Total is preserved.",
-			"If incomplete, exit is nonzero with collected data. Use next.operationId and next.input in a single-page tool exec with the same runtime selectors; disable page-all.",
+			"page.all merges page payloads; check summary.completeness. Service Total is preserved; summary.itemCount counts collected rows.",
+			"Incomplete results exit nonzero with data. Resume via next.operationId and next.input with the same runtime selectors and page-all disabled.",
 		)
 	}
 	usageNotes = append(usageNotes, toolSpecificUsageNotes(operation)...)
@@ -423,16 +424,20 @@ func buildToolDescribeCommon(operation contract.Operation) (toolDescribeCommon, 
 		executionSchema: executionSchema,
 		execution:       execution,
 		identity: map[string]any{
-			"id":         strings.TrimSpace(string(operation.ID)),
-			"group":      strings.TrimSpace(operation.Group),
-			"action":     strings.TrimSpace(operation.Action),
-			"resource":   strings.TrimSpace(operation.Resource),
-			"verb":       verb,
-			"family":     strings.TrimSpace(operation.Family),
-			"method":     strings.ToUpper(strings.TrimSpace(operation.Wire.Method)),
-			"path":       strings.TrimSpace(operation.Wire.Path),
-			"visibility": strings.TrimSpace(operation.Visibility),
-			"summary":    strings.TrimSpace(operation.Docs.Summary),
+			"id":                  strings.TrimSpace(string(operation.ID)),
+			"group":               strings.TrimSpace(operation.Group),
+			"action":              strings.TrimSpace(operation.Action),
+			"resource":            strings.TrimSpace(operation.Resource),
+			"verb":                verb,
+			"family":              strings.TrimSpace(operation.Family),
+			"method":              strings.ToUpper(strings.TrimSpace(operation.Wire.Method)),
+			"path":                strings.TrimSpace(operation.Wire.Path),
+			"visibility":          strings.TrimSpace(operation.Visibility),
+			"summary":             strings.TrimSpace(operation.Docs.Summary),
+			"api_version_default": tlsapi.DefaultAPIVersion,
+			"api_version_source":  "client-default-header",
+			"deprecated":          nil,
+			"maintainer":          nil,
 		},
 		usageNotes:       usageNotes,
 		usageConstraints: strings.TrimSpace(operation.Docs.UsageConstraints),
@@ -450,14 +455,14 @@ func buildToolDescribeCommon(operation contract.Operation) (toolDescribeCommon, 
 		contractDigest: map[string]any{
 			"value":   digestValue,
 			"policy":  "soft",
-			"warning": "contract digest mismatch is advisory; continue execution if mismatch",
+			"warning": "Contract digest mismatch is advisory; execution continues.",
 		},
 		contractCache: map[string]any{
-			"safe_scope": "Safe to reuse within the same CLI build while contract_digest.value stays unchanged.",
+			"safe_scope": "Reuse within one CLI build while contract_digest.value is unchanged.",
 			"refresh_when": []any{
 				"contract_digest changes",
 				"CLI version or build changes",
-				"execution returns unknown field, contract mismatch, or nearby usage errors for this action",
+				"unknown field, contract mismatch, or usage errors for this action",
 			},
 		},
 	}, nil
@@ -471,7 +476,7 @@ func toolSpecificUsageNotes(operation contract.Operation) []any {
 			"Preflight: run volclog --profile <profile> --region <region> --endpoint <tls-endpoint> tool exec shard.describe --input '{\"TopicId\":\"<topic-id>\"}' --page-all; select a non-final readwrite shard whose next shard is contiguous and readwrite.",
 			"Plan without mutation: run volclog --profile <profile> --region <region> --endpoint <tls-endpoint> --dry-run tool exec shard.merge --input '{\"TopicId\":\"<topic-id>\",\"ShardId\":0}' after replacing the placeholders and ShardId.",
 			"Execute once after reviewing the plan: run volclog --profile <profile> --region <region> --endpoint <tls-endpoint> tool exec shard.merge --input '{\"TopicId\":\"<topic-id>\",\"ShardId\":0}'.",
-			"Dry-run validates request planning and required-field presence only; TopicId UUID syntax, ShardId range, and shard mergeability remain service-side validation.",
+			"Dry-run validates the declared schema and request plan, including non-negative integer ShardId; TopicId UUID syntax and shard mergeability require service-side validation.",
 			"On success, read status first and then the resulting shard list from data.Shards. If the result is ambiguous, preserve error.requestId and run shard.describe again; do not retry shard.merge automatically.",
 		}
 	case "log.search":
@@ -513,6 +518,11 @@ func buildToolDescribeFullOutput(operation contract.Operation, common toolDescri
 		"output_policy":       strings.TrimSpace(operation.Output.Policy),
 		"risk":                strings.TrimSpace(operation.Risk.Level),
 		"recovery":            strings.TrimSpace(operation.Risk.ErrorRecovery),
+		"recovery_source":     strings.TrimSpace(operation.Risk.RecoverySource),
+		"recovery_notes":      strings.TrimSpace(operation.Risk.RecoveryNotes),
+		"doc_url":             toolDocumentationURL(operation),
+		"doc_url_source":      strings.TrimSpace(operation.Docs.URLSource),
+		"input_policy":        toolInputPolicy(operation),
 		"source":              strings.TrimSpace(operation.Docs.Source),
 		"contract_digest":     common.contractDigest,
 		"contract_cache_hint": common.contractCache,
@@ -530,11 +540,12 @@ func buildToolDescribeCompactOutput(operation contract.Operation, common toolDes
 	compactInputSchema := compactToolInputSchema(common.inputSchema)
 	target := map[string]any{
 		"identity": map[string]any{
-			"id":     common.identity["id"],
-			"group":  common.identity["group"],
-			"action": common.identity["action"],
-			"method": common.identity["method"],
-			"path":   common.identity["path"],
+			"id":                  common.identity["id"],
+			"group":               common.identity["group"],
+			"action":              common.identity["action"],
+			"method":              common.identity["method"],
+			"path":                common.identity["path"],
+			"api_version_default": common.identity["api_version_default"],
 		},
 		"context_schema":      compactToolContextSchema(common.contextSchema),
 		"execution_schema":    compactToolExecutionSchema(common.executionSchema),
@@ -543,6 +554,9 @@ func buildToolDescribeCompactOutput(operation contract.Operation, common toolDes
 		"behavior":            common.behavior,
 		"risk":                strings.TrimSpace(operation.Risk.Level),
 		"recovery":            strings.TrimSpace(operation.Risk.ErrorRecovery),
+		"recovery_source":     strings.TrimSpace(operation.Risk.RecoverySource),
+		"doc_url":             toolDocumentationURL(operation),
+		"input_policy":        toolInputPolicy(operation),
 		"output_policy":       strings.TrimSpace(operation.Output.Policy),
 		"source":              strings.TrimSpace(operation.Docs.Source),
 		"contract_digest":     common.contractDigest,
@@ -602,10 +616,14 @@ func buildToolFlatInputSchema(inputSchema map[string]any) map[string]any {
 	props := map[string]any{}
 	requiredSet := map[string]struct{}{}
 	locations := map[string][]string{}
+	allSectionsClosed := true
 	for _, section := range []string{"body", "query", "path", "header"} {
 		raw, ok := inputSchema[section].(map[string]any)
-		if !ok || len(raw) == 0 {
+		if !ok {
 			continue
+		}
+		if additional, ok := raw["additionalProperties"].(bool); !ok || additional {
+			allSectionsClosed = false
 		}
 		required := toolRequiredFields(raw["required"])
 		requiredLookup := map[string]struct{}{}
@@ -653,6 +671,9 @@ func buildToolFlatInputSchema(inputSchema map[string]any) map[string]any {
 		"type":       "object",
 		"properties": flatProps,
 	}
+	if allSectionsClosed {
+		out["additionalProperties"] = false
+	}
 	if len(requiredSet) > 0 {
 		required := make([]string, 0, len(requiredSet))
 		for name := range requiredSet {
@@ -697,13 +718,13 @@ func buildToolInputEncodingHint(inputSchema map[string]any) map[string]any {
 	sort.Strings(overlaps)
 	hint := map[string]any{
 		"transport": "--input accepts file://req.json, -, or inline JSON object.",
-		"sectioned": "Nested form stays authoritative: {\"query\": {...}, \"path\": {...}, \"header\": {...}, \"body\": {...}}.",
+		"sectioned": "Use nested {query,path,header,body} for explicit placement.",
 	}
 	switch {
 	case len(sections) == 1 && sections[0] == "body":
 		hint["recommended"] = "flat input is the natural form for this tool; top-level keys map directly to the request body."
 	case len(sections) == 1:
-		hint["recommended"] = "flat input is accepted for this tool; top-level keys map directly to " + sections[0] + " fields."
+		hint["recommended"] = "flat input keys map directly to " + sections[0] + " fields."
 	default:
 		hint["recommended"] = "flat input is accepted when each key maps unambiguously to one section; use nested sections when you want explicit query/path/header/body placement."
 	}
@@ -744,10 +765,8 @@ func appendToolSchemaLocation(existing []string, section string) []string {
 
 func compactToolInputSection(schema map[string]any) (map[string]any, bool) {
 	props, _ := schema["properties"].(map[string]any)
-	if len(props) == 0 {
-		return nil, false
-	}
 	out := map[string]any{}
+	copyToolSchemaConstraints(out, schema)
 	if fieldType := strings.TrimSpace(strings.ToLower(toolAnyToString(schema["type"]))); fieldType != "" {
 		out["type"] = fieldType
 	}
@@ -801,11 +820,7 @@ func compactToolFieldSchemaAtDepth(schema map[string]any, depth int) map[string]
 	if fieldType := strings.TrimSpace(strings.ToLower(toolAnyToString(schema["type"]))); fieldType != "" {
 		out["type"] = fieldType
 	}
-	for _, key := range []string{"format", "default", "enum", "pattern", "minimum", "maximum", "minLength", "maxLength"} {
-		if value, ok := schema[key]; ok {
-			out[key] = deepCloneToolValue(value)
-		}
-	}
+	copyToolSchemaConstraints(out, schema)
 	if shouldKeepCompactToolFieldDescription(schema, depth) {
 		if description := strings.TrimSpace(toolAnyToString(schema["description"])); description != "" {
 			out["description"] = description
@@ -841,6 +856,14 @@ func compactToolFieldSchemaAtDepth(schema map[string]any, depth int) map[string]
 		return map[string]any{}
 	}
 	return out
+}
+
+func copyToolSchemaConstraints(out, schema map[string]any) {
+	for _, key := range []string{"format", "default", "enum", "const", "pattern", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems", "additionalProperties", "oneOf", "allOf", "if", "then", "else"} {
+		if value, ok := schema[key]; ok {
+			out[key] = deepCloneToolValue(value)
+		}
+	}
 }
 
 func shouldKeepCompactToolFieldDescription(schema map[string]any, depth int) bool {
@@ -970,6 +993,7 @@ func compactToolExecutionSchema(schema map[string]any) map[string]any {
 
 func compactToolExecutionFieldSchema(schema map[string]any) map[string]any {
 	out := compactToolDocFieldSchema(schema)
+	delete(out, "when_to_use")
 	props, _ := schema["properties"].(map[string]any)
 	if len(props) == 0 || hasToolOneOf(schema) {
 		return out
@@ -977,7 +1001,9 @@ func compactToolExecutionFieldSchema(schema map[string]any) map[string]any {
 	compactProps := make(map[string]any, len(props))
 	for name, raw := range props {
 		field, _ := raw.(map[string]any)
-		compactProps[name] = compactToolDocFieldSchema(field)
+		compactField := compactToolDocFieldSchema(field)
+		delete(compactField, "when_to_use")
+		compactProps[name] = compactField
 	}
 	out["properties"] = compactProps
 	return out
@@ -1201,8 +1227,8 @@ func enrichToolExecutionSchema(base map[string]any, supportsAll bool) map[string
 	exec["additionalProperties"] = false
 	props := ensureToolSchemaProperties(exec)
 	executionDocs := map[string]string{
-		"dry_run":    "When true, runtime validates and builds request envelope but does not call remote API.",
-		"projection": "Projection filter for response payload; supports string, object with jmes, or recursively nested arrays. Every array item is validated, and the first non-empty expression is used.",
+		"dry_run":    "Validate and plan without a remote request.",
+		"projection": "Filter response data with a string, {jmes:...}, or nested arrays; every item is validated and the first non-empty expression is used.",
 		"artifact":   "Artifact export control; supports boolean, output path string, or object with path and dir. Output aliases must agree.",
 	}
 	if supportsAll {

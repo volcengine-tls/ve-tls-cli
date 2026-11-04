@@ -68,6 +68,9 @@ func executeShortcutOperation(ctx *Context, request shortcutExecutionRequest) (a
 		}
 		return shortcutExecutionPlanValue(result.Plan)
 	}
+	if err := applyTaskResult(ctx, string(operation.ID), request.Input, result.Data); err != nil {
+		return nil, err
+	}
 	return result.Data, nil
 }
 

@@ -21,6 +21,9 @@ import (
 	"github.com/volcengine/volc-sdk-golang/base"
 )
 
+// DefaultAPIVersion is the default request header; raw callers may override it.
+const DefaultAPIVersion = "0.3.0"
+
 // requestSigner signs an HTTP request using the supplied credentials. The
 // production default delegates to base.Credentials.Sign; tests may inject a
 // fixed-time implementation. It is package-private and not part of the public
@@ -240,7 +243,7 @@ func (c *Client) Do(ctx context.Context, method, path string, query map[string]s
 	req.Host = u.Host
 
 	req.Header.Set("User-Agent", "volclog/"+version.Version)
-	req.Header.Set("x-tls-apiversion", "0.3.0")
+	req.Header.Set("x-tls-apiversion", DefaultAPIVersion)
 	req.Header.Set("Content-Type", "application/json")
 
 	if len(body) > 0 {

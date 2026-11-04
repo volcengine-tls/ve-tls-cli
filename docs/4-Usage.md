@@ -87,6 +87,10 @@ volclog tool describe project.create --view full
 
 `tool list` takes the group as a positional argument (not a `--group` flag) and supports `--verb` to filter by verb and `--format text|json` (default `text`). `tool describe <group.action>` shows the tool's identity, input schema, context schema, execution schema, behavior, output policy, and contract digest. The `--view` flag selects `compact` (default) or `full`; explicit JSON output defaults to `full`.
 
+The full view also exposes `recovery_source`, `recovery_notes`, `doc_url`, `doc_url_source`, `input_policy`, and `source`. A missing verified documentation URL is `null`. `identity.api_version_default` is the client's default request header (`0.3.0`), with `identity.api_version_source` identifying its source; it is not a verified per-operation API version. Unknown `identity.maintainer` and `identity.deprecated` are `null` in the full view. Compact output omits some of these details.
+
+`recovery_source=reviewed-read-contract` identifies a reviewed read or non-persistent purpose; it does not establish service idempotency or enable automatic retries. For `unverified` recovery, reconcile the operation outcome before considering a retry.
+
 ### 2.2 `workflow list` and `workflow describe`
 
 ```bash
@@ -110,9 +114,9 @@ volclog --profile default tool exec project.describe-projects
 
 ### 3.1 Input and context
 
-`--input` supplies the request body. It accepts `file://<path>`, `-` (stdin), or an inline JSON object (must start with `{`). `--context` supplies runtime and execution controls using the same sources.
+`--input` supplies operation request fields. It accepts `file://<path>`, `-` (stdin), or an inline JSON object (must start with `{`). `--context` supplies runtime and execution controls using the same sources.
 
-Context validation rejects unknown fields, incorrect types, and conflicting aliases before applying the context. Supported legacy forms remain available: `trace` as a boolean, string, or object; `execution.artifact` as a boolean, string, or object; `execution.output`/`output_mode`; `execution.page.all`/`page_all`; and `execution.projection` as a string, object, or array.
+Context validation rejects unknown fields, incorrect types, and conflicting aliases before applying the context. Supported legacy forms remain available: `trace` as a boolean, string, or object; `execution.artifact` as a boolean, string, or object; `execution.output`/`output_mode`; `execution.projection` as a string, object, or array; and `execution.page.all`/`page_all` for supported paginated tools.
 
 ```bash
 volclog --profile default tool exec project.create \
@@ -127,7 +131,7 @@ The `file://req.json` file must contain the required `ProjectName` and `Region` 
 
 ### 3.2 Contract validation and dry-run
 
-Before any network call, `tool exec` normalizes flat input into the correct `query`/`path`/`header`/`body` sections (when the contract defines an input schema) and validates required fields. A missing required field fails before the request is sent.
+Before any network call, `tool exec` routes unambiguous flat input to `query`/`path`/`header`/`body` and applies the declared schema to both flat and sectioned input. Sectioned input rejects extra top-level keys; inside a section, `additionalProperties` determines whether extra fields are rejected, accepted, or validated against a schema (an absent declaration permits them). An operation without a section schema retains passthrough behavior, subject to input and context shape rules. The CLI does not inject schema defaults. Human shortcuts retain their existing legacy validation; service-side validation still applies.
 
 `--dry-run` runs the same contract validation, then skips the network call and returns a local plan that checks profile, endpoint, region, and body JSON validity:
 
@@ -151,7 +155,7 @@ volclog --profile default workflow exec log.export \
 
 ### 4.1 Input and context
 
-`--input` and `--context` behave exactly as in `tool exec`: `file://<path>`, `-` (stdin), or inline JSON object. The workflow's required params are validated before execution.
+`--input` and `--context` accept the same sources as in `tool exec`: `file://<path>`, `-` (stdin), or inline JSON object. The workflow's required params are validated before execution.
 
 ### 4.2 Execution controls
 
@@ -161,7 +165,7 @@ volclog --profile default workflow exec log.export \
 - `execution.artifact` — force file delivery
 - `execution.projection` — project the raw result with a JMESPath expression before the envelope is built
 
-Although the context parser recognizes `execution.page.all` / `execution.page_all`, current workflow execution does not consume them. Pagination semantics are workflow-specific; follow the guidance in `workflow describe` for the workflow you are using. Do not rely on page-all context controls for workflows.
+`workflow exec` explicitly rejects `execution.page` and `execution.page_all` in context, including `false` values. Pagination semantics are workflow-specific; follow the guidance in `workflow describe` for the workflow you are using.
 
 ```bash
 volclog --profile default workflow exec log.export \
@@ -236,6 +240,8 @@ The identity selectors are: global `--profile`, global `--secrets-file`, `contex
 A conflict fails with `conflicting runtime selectors` (or `conflicting profile selectors` when two different profile names are supplied).
 
 Global `--region` and `--endpoint` flags and `context.region`/`context.endpoint` are one-command runtime overrides. They take precedence over applicable profile, environment, and project defaults and are never persisted. When a global flag and context provide different non-empty values for the same field, validation fails. The full region/endpoint/timeout precedence is detailed in [Configuration](3-Configuration.md).
+
+A global flag requiring a separate value does not consume a following `--flag`: for example, `--output-dir --dry-run` fails as a missing value. Prefix a relative path starting with `--` with `./`.
 
 ### 6.2 `--dry-run` and context dry-run
 
@@ -339,13 +345,15 @@ Dynamic JSON is decoded and encoded with `json.Number` preserved across request 
 
 ### 8.5 Envelope fields and error output
 
-Success envelope: `status`, `action`, `requestId`, `summary` (`outputMode`, `deliveryMode`, `remoteOutcome`, `deliveryOutcome`, `dryRun`, `itemCount`, `totalBytes`, optional `pagination`/`completeness`/`tracePath`), `artifacts`, `data`, `error` (`null`).
+Success envelope: `status`, `action`, `requestId`, `summary` (`outputMode`, `deliveryMode`, `remoteOutcome`, `deliveryOutcome`, `dryRun`, `itemCount`, `totalBytes`, optional `pagination`/`completeness`/`async`/`asyncTasks`/`tracePath`), `artifacts`, `data`, `error` (`null`).
 
 Error envelope: `status` (`failed`), `action`, `requestId`, `summary`, `artifacts`, `data`, `error` (`source`, `code`, `message`, `requestId`, `statusCode`, `kind`, `hint`, optional `details`). `data` is normally `null`, but may contain retained partial results or batch-ingest progress; `artifacts` may describe a retained partial file.
 
 Default `volclog` also emits a failed JSON envelope on stdout and exits nonzero for early usage failures, including no arguments, unknown flags or groups, and missing option values. Explicit help and `--version` remain text; use the `version` command for JSON. Text-mode `tool`/`workflow` discovery and the frozen JSON shapes and error contracts of `login`, `logout`, `sso`, and `configure sso` remain unchanged. Human-shortcut envelope groups retain their existing error contract. If stdout is broken, the CLI exits with code 3 and makes a best-effort structured report on stderr.
 
-`summary.remoteOutcome` describes the business operation: `not_sent`, `unknown`, `success`, `failed`, or `partial`. `accepted` is reserved for a future operation with an explicit asynchronous contract. `summary.deliveryOutcome` (`success` or `failed`) separately describes result delivery. For `output_failed`, repair delivery and do not repeat the original write. For `result_unknown`, reconcile the remote state before considering another write. The CLI adds no retry in this change; existing `http.Client`/`Transport` policies still apply, including any behavior of a custom transport.
+`summary.remoteOutcome` describes the business operation: `not_sent`, `unknown`, `accepted`, `success`, `failed`, or `partial`. `accepted` means a documented asynchronous submission was accepted, not that its work completed. `summary.deliveryOutcome` (`success` or `failed`) separately describes result delivery. For `output_failed`, repair delivery and do not repeat the original write. For `result_unknown`, reconcile the remote state before considering another write. The CLI adds no retry in this change; existing `http.Client`/`Transport` policies still apply, including any behavior of a custom transport.
+
+Creating a download task returns `accepted` and `summary.async` with its task ID and, when the topic is available, a single-call `next` for `log.describe-download-tasks`. The CLI does not wait automatically. `TaskName` is a fuzzy filter: match `Tasks[].TaskId` across pages, then inspect that entry in `summary.asyncTasks`. `wait`/`creating` are nonterminal; `success` means the file was generated; `created_cut` is partial and only some such tasks have a downloadable file; `fail` is failed and unknown states remain unknown. A successful entry can provide a `next` for `log.describe-download-url`; a truncated entry can provide only a conditional `possibleNext`. The returned download URL expires after five minutes. File generation alone does not guarantee the entire query window was exported: request limits, precision options, and service limits still apply.
 
 For batch-ingest `partial_failure`, inspect `summary.progress` or `data.progress`: `confirmedBatches`, `confirmedLogs`, `confirmedLogOffset` (zero-based exclusive), `currentBatch` (one-based when a batch is active), `currentBatchOutcome`, and `lastConfirmedRequestId`. Only a confirmed successful response increments the counts. A read failure or invalid response after HTTP 200 is `unknown`; an unknown batch is not a safe automatic resume point. The current `requestId` and `statusCode` describe the current attempt and are not inherited from a previous confirmed batch.
 

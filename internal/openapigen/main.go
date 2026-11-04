@@ -99,6 +99,7 @@ func main() {
 	mergeInternalOnly := flag.Bool("merge-internal-operations-only", false, "merge internal operation overrides into the checked-in catalog without external source inputs")
 	supplementalOperationsPath := flag.String("supplemental-operation-overrides", "contracts/overrides/supplemental_operations.json", "path to supplemental public or internal operation overrides")
 	mergeSupplementalOnly := flag.Bool("merge-supplemental-operations-only", false, "merge supplemental operation overrides into the checked-in catalog without external source inputs")
+	refreshPoliciesOnly := flag.Bool("refresh-contract-policies-only", false, "refresh recovery policies and input sections from the checked-in catalog and lock")
 	lockRoot := flag.String("lock-root", ".", "root used to make generation lock input paths relative")
 	groupKeyMapping := flag.String("group-key-mapping", "contracts/agentic-stage1/group_key_mapping.yaml", "path to group key mapping yaml")
 	swaggerTagMapping := flag.String("swagger-tag-mapping", "repos/日志服务/_swagger_tag_mapping.yaml", "path to swagger tag title mapping yaml")
@@ -107,11 +108,28 @@ func main() {
 	toolRecoveryOverridesPath := flag.String("tool-recovery-overrides", "contracts/overrides/recovery.yaml", "path to tool error recovery override yaml")
 	toolOutputPolicyOverridesPath := flag.String("tool-output-policy-overrides", "contracts/overrides/output_policy.yaml", "path to tool output policy override yaml")
 	toolUsageConstraintsPath := flag.String("tool-usage-constraints-overrides", "contracts/overrides/usage_constraints.yaml", "path to tool usage constraints override yaml")
+	toolDocumentationPath := flag.String("tool-documentation-overrides", "contracts/overrides/documentation.json", "path to official documentation URL overrides")
 	contractVersion := flag.String("contract-version", "v1", "operation contract version")
 	flag.Parse()
 
-	if *mergeInternalOnly && *mergeSupplementalOnly {
-		fatal(errors.New("--merge-internal-operations-only and --merge-supplemental-operations-only cannot be used together"))
+	modeCount := 0
+	for _, enabled := range []bool{*mergeInternalOnly, *mergeSupplementalOnly, *refreshPoliciesOnly} {
+		if enabled {
+			modeCount++
+		}
+	}
+	if modeCount > 1 || (*refreshPoliciesOnly && strings.TrimSpace(*spec) != "") {
+		fatal(errors.New("source generation and merge-only/refresh-only modes are mutually exclusive"))
+	}
+	if *refreshPoliciesOnly {
+		recoveryPath, usagePath, documentationPath, err := policyInputPaths(*lockRoot, []string{*toolRecoveryOverridesPath, *toolUsageConstraintsPath, *toolDocumentationPath})
+		if err != nil {
+			fatal(err)
+		}
+		if err := refreshContractPoliciesOnly(*outOperationCatalog, *outOperationCatalogLock, *lockRoot, recoveryPath, usagePath, documentationPath); err != nil {
+			fatal(err)
+		}
+		return
 	}
 	if *mergeInternalOnly {
 		if err := mergeInternalOperationsIntoCheckedInCatalog(
@@ -119,6 +137,9 @@ func main() {
 			*outOperationCatalogLock,
 			*internalOperationsPath,
 			*lockRoot,
+			*toolRecoveryOverridesPath,
+			*toolUsageConstraintsPath,
+			*toolDocumentationPath,
 		); err != nil {
 			fatal(err)
 		}
@@ -130,6 +151,9 @@ func main() {
 			*outOperationCatalogLock,
 			*supplementalOperationsPath,
 			*lockRoot,
+			*toolRecoveryOverridesPath,
+			*toolUsageConstraintsPath,
+			*toolDocumentationPath,
 		); err != nil {
 			fatal(err)
 		}
@@ -179,20 +203,39 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	policies, err := loadRecoveryPolicies(*toolRecoveryOverridesPath)
+	if err != nil {
+		fatal(err)
+	}
+	usage, err := loadUsageConstraints(*toolUsageConstraintsPath)
+	if err != nil {
+		fatal(err)
+	}
+	docs, err := loadDocumentationOverrides(*toolDocumentationPath)
+	if err != nil {
+		fatal(err)
+	}
+	operationCatalog, err = applyContractPolicies(operationCatalog, policies, usage, docs, false)
+	if err != nil {
+		fatal(err)
+	}
 
 	lock, err := buildOperationCatalogLock(*lockRoot, "source", operationCatalog, map[string]string{
 		"api_doc_root":                      *apiDocRoot,
 		"contract_catalog":                  "internal/contract/catalog.go",
 		"contract_digest":                   "internal/contract/digest.go",
+		"contract_legacy":                   "internal/contract/legacy.go",
 		"contract_schema":                   "internal/contract/schema.go",
 		"contract_types":                    "internal/contract/types.go",
 		"generator_catalog_v2":              "internal/openapigen/catalog_v2.go",
+		"generator_contract_policies":       "internal/openapigen/contract_policies.go",
 		"generator_internal_operations":     "internal/openapigen/internal_operations.go",
 		"generator_supplemental_operations": "internal/openapigen/supplemental_operations.go",
 		"generator_main":                    "internal/openapigen/main.go",
 		"generator_source_operations":       "internal/openapigen/source_operations.go",
 		"group_key_mapping":                 *groupKeyMapping,
 		"override_internal_operations":      *internalOperationsPath,
+		"override_documentation":            *toolDocumentationPath,
 		"override_supplemental_operations":  *supplementalOperationsPath,
 		"override_output_policy":            *toolOutputPolicyOverridesPath,
 		"override_recovery":                 *toolRecoveryOverridesPath,
@@ -263,7 +306,7 @@ func buildToolCatalogOverrides(riskPath, recoveryPath, outputPolicyPath, usageCo
 	if err != nil {
 		return toolCatalogOverrides{}, err
 	}
-	usage, err := loadToolCatalogOverrideMap(usageConstraintsPath)
+	usage, err := loadUsageConstraints(usageConstraintsPath)
 	if err != nil {
 		return toolCatalogOverrides{}, err
 	}
@@ -1204,13 +1247,8 @@ func inferToolOutputPolicy(action, method string) string {
 }
 
 func inferToolErrorRecovery(action, method string) string {
-	if strings.TrimSpace(strings.ToLower(method)) == "get" {
-		return "safe-retry"
-	}
-	if strings.Contains(strings.ToLower(action), "create") || strings.Contains(strings.ToLower(action), "modify") || strings.Contains(strings.ToLower(action), "delete") {
-		return "high-risk-retry"
-	}
-	return "retry"
+	_, _ = action, method
+	return "high-risk-retry"
 }
 
 func inferToolUsageConstraints(action, group, path string) string {

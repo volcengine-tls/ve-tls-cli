@@ -133,6 +133,11 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 		return nil, adaptToolExecutionError(err)
 	}
 	result := executionResult.Data
+	if executionResult.Plan == nil {
+		if err := applyTaskResult(ctx, string(operation.ID), input, result); err != nil {
+			return nil, err
+		}
+	}
 	if executionResult.Plan != nil {
 		ctx.traceToolExecutionPlan(executionResult.Plan)
 		result, err = toolExecutionPlanValue(executionResult.Plan)

@@ -16,6 +16,7 @@ func (c *Context) beginRequest() {
 	c.StatusCode = 0
 	c.RemoteOutcome = execution.OutcomeNotSent
 	c.Completeness = nil
+	c.TaskMeta = nil
 }
 
 func (c *Context) recordDecodedResult(data any, err error) (any, error) {
@@ -83,6 +84,9 @@ func augmentOutcomeSummary(summary map[string]any, ctx *Context, err error) {
 		}
 		if ctx.PaginationMeta != nil {
 			summary["pagination"] = ctx.PaginationMeta
+		}
+		for name, value := range ctx.TaskMeta {
+			summary[name] = value
 		}
 	}
 	var incomplete interface {
@@ -162,6 +166,14 @@ func writeBrokenStdout(stderr io.Writer, cause error, env map[string]any) int {
 			ctx.Progress, _ = summary["progress"].(map[string]any)
 			ctx.Completeness = completenessValue(summary["completeness"])
 			ctx.PaginationMeta, _ = summary["pagination"].(map[string]any)
+			for _, name := range []string{"async", "asyncTasks"} {
+				if value, ok := summary[name]; ok {
+					if ctx.TaskMeta == nil {
+						ctx.TaskMeta = map[string]any{}
+					}
+					ctx.TaskMeta[name] = value
+				}
+			}
 		}
 		if original, ok := env["error"].(map[string]any); ok {
 			switch status := original["statusCode"].(type) {

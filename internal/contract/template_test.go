@@ -2,6 +2,7 @@ package contract_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"reflect"
 	"strings"
@@ -610,5 +611,193 @@ func assertPassesRequiredValidation(t *testing.T, operation contract.Operation, 
 	})
 	if err != nil {
 		t.Fatalf("execution.ValidateInput(template): %v", err)
+	}
+}
+
+func TestRequestTemplateProjectsEmbeddedConditionalBranches(t *testing.T) {
+	catalog, err := contract.LoadEmbedded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	operations := make(map[contract.OperationID]contract.Operation, len(catalog.Operations))
+	for _, operation := range catalog.Operations {
+		operations[operation.ID] = operation
+	}
+
+	for _, id := range []contract.OperationID{"index.create", "index.modify"} {
+		t.Run(string(id), func(t *testing.T) {
+			operation := operations[id]
+			before, err := json.Marshal(operation.InputSchema)
+			if err != nil {
+				t.Fatal(err)
+			}
+			required, err := contract.RequestTemplate(operation, contract.TemplateRequired)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := required["FullText"]; ok {
+				t.Fatal("optional FullText promoted in required mode")
+			}
+			full, err := contract.RequestTemplate(operation, contract.TemplateFull)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fullText := full["FullText"].(map[string]any)
+			if fullText["IncludeChinese"] != false || fullText["Delimiter"] == "" {
+				t.Fatalf("else branch template: %#v", fullText)
+			}
+			assertPassesRequiredValidation(t, operation, full)
+			after, err := json.Marshal(operation.InputSchema)
+			if err != nil || string(before) != string(after) {
+				t.Fatal("projection mutated source schema")
+			}
+		})
+	}
+
+	for _, taskType := range []int{0, 1, 2} {
+		t.Run(fmt.Sprintf("download-task-type-%d", taskType), func(t *testing.T) {
+			operation := operations["log.create-download-task"]
+			encoded, err := json.Marshal(operation.InputSchema)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var copied contract.JSONSchema
+			if err := json.Unmarshal(encoded, &copied); err != nil {
+				t.Fatal(err)
+			}
+			operation.InputSchema = copied
+			body := copied["body"].(map[string]any)
+			properties := body["properties"].(map[string]any)
+			properties["TaskType"].(map[string]any)["example"] = float64(taskType)
+			before, err := json.Marshal(operation.InputSchema)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, mode := range []contract.TemplateMode{contract.TemplateRequired, contract.TemplateFull} {
+				template, err := contract.RequestTemplate(operation, mode)
+				if err != nil {
+					t.Fatalf("%s: %v", mode, err)
+				}
+				if template["TaskType"] != float64(taskType) {
+					t.Fatalf("%s task type: %#v", mode, template)
+				}
+				if taskType < 2 {
+					limit, ok := template["Limit"].(float64)
+					if !ok || limit < 1 || (template["Sort"] != "asc" && template["Sort"] != "desc") {
+						t.Fatalf("%s search branch: %#v", mode, template)
+					}
+					if mode == contract.TemplateRequired {
+						if _, ok := template["LogContextInfos"]; ok {
+							t.Fatal("inactive context branch promoted")
+						}
+					}
+				} else {
+					context, ok := template["LogContextInfos"].(map[string]any)
+					if !ok || context["ContextFlow"] == "" || context["Source"] == "" {
+						t.Fatalf("%s context branch: %#v", mode, template)
+					}
+					if mode == contract.TemplateRequired {
+						if _, ok := template["Limit"]; ok {
+							t.Fatal("inactive search branch promoted")
+						}
+					}
+				}
+				assertPassesRequiredValidation(t, operation, template)
+				repeat, err := contract.RequestTemplate(operation, mode)
+				if err != nil || !reflect.DeepEqual(template, repeat) {
+					t.Fatalf("%s nondeterministic: %#v / %#v; %v", mode, template, repeat, err)
+				}
+			}
+			after, err := json.Marshal(operation.InputSchema)
+			if err != nil || string(before) != string(after) {
+				t.Fatal("projection mutated source schema")
+			}
+		})
+	}
+}
+
+func TestRequestTemplateConditionalPreservesPreferredAndSafetyLimits(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		field  map[string]any
+		branch map[string]any
+		want   string
+	}{
+		{"invalid preferred", map[string]any{"type": "string", "example": ""}, map[string]any{"minLength": float64(1)}, "length must be at least 1"},
+		{"safety limit", map[string]any{"type": "string"}, map[string]any{"minLength": float64(65537)}, "exceeds safety limit"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			operation := templateTestOperation(contract.JSONSchema{
+				"type": "object", "required": []any{"Kind"},
+				"properties": map[string]any{"Kind": map[string]any{"type": "string", "enum": []any{"on"}}, "Value": tt.field},
+				"allOf":      []any{map[string]any{"if": map[string]any{"required": []any{"Kind"}, "properties": map[string]any{"Kind": map[string]any{"const": "on"}}}, "then": map[string]any{"required": []any{"Value"}, "properties": map[string]any{"Value": tt.branch}}}},
+			})
+			if _, err := contract.RequestTemplate(operation, contract.TemplateRequired); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestRequestTemplateMergesConditionalConstraints(t *testing.T) {
+	operation := templateTestOperation(contract.JSONSchema{
+		"type": "object", "required": []any{"Kind"},
+		"properties": map[string]any{
+			"Kind":     map[string]any{"type": "string", "enum": []any{"on"}},
+			"Number":   map[string]any{"type": "integer", "minimum": float64(3), "maximum": float64(10)},
+			"Text":     map[string]any{"type": "string", "minLength": float64(2), "maxLength": float64(5)},
+			"Choice":   map[string]any{"type": "string", "enum": []any{"a", "b"}},
+			"Optional": map[string]any{"type": "string"},
+		},
+		"allOf": []any{map[string]any{
+			"if": map[string]any{"required": []any{"Kind"}, "properties": map[string]any{"Kind": map[string]any{"const": "on"}}},
+			"then": map[string]any{"required": []any{"Number", "Text", "Choice"}, "properties": map[string]any{
+				"Number": map[string]any{"minimum": float64(5), "maximum": float64(7)},
+				"Text":   map[string]any{"minLength": float64(4), "maxLength": float64(4)},
+				"Choice": map[string]any{"enum": []any{"b", "c"}},
+			}},
+		}},
+	})
+	got, err := contract.RequestTemplate(operation, contract.TemplateRequired)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"Kind": "on", "Number": float64(5), "Text": "xxxx", "Choice": "b"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("conditional merge = %#v, want %#v", got, want)
+	}
+	assertPassesRequiredValidation(t, operation, got)
+}
+
+func TestRequestTemplateConditionalRejectsConflictsAndInvalidSeed(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		field  map[string]any
+		branch map[string]any
+		seed   map[string]any
+		want   string
+	}{
+		{"disjoint enum", map[string]any{"type": "string", "enum": []any{"a"}}, map[string]any{"enum": []any{"b"}}, nil, "conditional enums have no common value"},
+		{"conflicting bounds", map[string]any{"type": "integer", "minimum": float64(2)}, map[string]any{"maximum": float64(1)}, nil, "must be at most 1"},
+		{"non-finite conditional minimum", map[string]any{"type": "string", "minLength": float64(1)}, map[string]any{"minLength": math.NaN()}, nil, "minLength must be a finite number"},
+		{"explicit invalid seed", map[string]any{"type": "integer"}, map[string]any{"minimum": float64(2)}, map[string]any{"Kind": "on", "Value": float64(1)}, "must be at least 2"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := contract.JSONSchema{
+				"type": "object", "required": []any{"Kind"},
+				"properties": map[string]any{"Kind": map[string]any{"type": "string", "enum": []any{"on"}}, "Value": tt.field},
+				"allOf": []any{map[string]any{
+					"if":   map[string]any{"required": []any{"Kind"}, "properties": map[string]any{"Kind": map[string]any{"const": "on"}}},
+					"then": map[string]any{"required": []any{"Value"}, "properties": map[string]any{"Value": tt.branch}},
+				}},
+			}
+			if tt.seed != nil {
+				schema["example"] = tt.seed
+			}
+			_, err := contract.RequestTemplate(templateTestOperation(schema), contract.TemplateRequired)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
 	}
 }

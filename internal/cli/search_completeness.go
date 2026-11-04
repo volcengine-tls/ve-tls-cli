@@ -9,9 +9,9 @@ import (
 	"github.com/volcengine-tls/ve-tls-cli/internal/jsonx"
 )
 
-func (c *Context) recordSearchResult(method, path string, header map[string]string, body []byte, data any, err error) (any, error) {
+func (c *Context) recordOperationResult(method, path string, header map[string]string, body []byte, data any, err error) (any, error) {
 	data, err = c.recordDecodedResult(data, err)
-	if err != nil || strings.ToUpper(method) != "POST" || strings.SplitN(path, "?", 2)[0] != "/SearchLogs" {
+	if err != nil {
 		return data, err
 	}
 	input := execution.Input{Header: map[string]any{}}
@@ -19,7 +19,18 @@ func (c *Context) recordSearchResult(method, path string, header map[string]stri
 		input.Header[name] = value
 	}
 	_ = jsonx.Unmarshal(body, &input.Body.JSON)
-	return inspectSearchCompleteness(c, input, data)
+	method = strings.ToUpper(method)
+	path = strings.SplitN(path, "?", 2)[0]
+	if method == "POST" && path == "/SearchLogs" {
+		return inspectSearchCompleteness(c, input, data)
+	}
+	operationID := ""
+	if method == "POST" && path == "/CreateDownloadTask" {
+		operationID = "log.create-download-task"
+	} else if method == "GET" && path == "/DescribeDownloadTasks" {
+		operationID = "log.describe-download-tasks"
+	}
+	return data, applyTaskResult(c, operationID, input, data)
 }
 
 // SearchLogs has two different completion contracts: ListOver applies only to

@@ -2,19 +2,24 @@
   "schema_version": 1,
   "contract_version": "v1",
   "digest_algorithm": "sha256/go-json-v1",
-  "catalog_digest": "17d3fb8f2500ddbab074b3e2e6f4cb721d062ba45e13502e75b372e33d0a14ab",
+  "catalog_digest": "2ca7d786275907ec3b4327afd89d2cd8b8ff6e88100ddf70010303bcd242d6c2",
   "operation_count": 165,
   "generation_mode": "bootstrap",
   "inputs": [
     {
       "name": "contract_catalog",
       "path": "internal/contract/catalog.go",
-      "sha256": "199dee89a8dcf44384e4cbb2ac607fab30367bbe4ff050cea48d1c2ef6dd19ed"
+      "sha256": "ee02ca717a1394caffa291bc6370a3adbb6df500c5ae5a59534d13e8fc728209"
     },
     {
       "name": "contract_digest",
       "path": "internal/contract/digest.go",
       "sha256": "6d2f3f38b24bf7257f1b7bba43c5a9d2b5d74a45f671121072470fad7f712a5f"
+    },
+    {
+      "name": "contract_legacy",
+      "path": "internal/contract/legacy.go",
+      "sha256": "9203fda85bb2140b613ea747921619b56e01c230cedb0ad56e28685576cac6ab"
     },
     {
       "name": "contract_schema",
@@ -24,7 +29,7 @@
     {
       "name": "contract_types",
       "path": "internal/contract/types.go",
-      "sha256": "c00e0b47bb93f73a9f1d0b44c00671a31a645f5627046acd89c758f41dfeb68d"
+      "sha256": "7b0ae0c04b6185f357193ef3cd97c152c2d4760da576eed19f1737267fe2c35c"
     },
     {
       "name": "generator_catalog_v2",
@@ -32,14 +37,19 @@
       "sha256": "313e8f6522687f4894254d81bd9f7b972787166289cb3271b679342b33a7bf2a"
     },
     {
+      "name": "generator_contract_policies",
+      "path": "internal/openapigen/contract_policies.go",
+      "sha256": "cde850fc00ce36d5d41cf5e988ea0fc6f91454996d021ae9b0b0d42e915629de"
+    },
+    {
       "name": "generator_internal_operations",
       "path": "internal/openapigen/internal_operations.go",
-      "sha256": "941679ef8f53955755390286790047ab783a030d2ce589838477232c534af816"
+      "sha256": "790f7adc55d32b994f55629341c7564b544497bcd6b49350809813e4472aff23"
     },
     {
       "name": "generator_main",
       "path": "internal/openapigen/main.go",
-      "sha256": "6d48d82bb6180172d0ff2811b7647ebb4646bdea1f2c3afea9905072bf2c11b2"
+      "sha256": "0dcd7279a59347d764a41f71a98b072e3228b34aafe7563aebadfc9246942ee9"
     },
     {
       "name": "generator_source_operations",
@@ -49,7 +59,12 @@
     {
       "name": "generator_supplemental_operations",
       "path": "internal/openapigen/supplemental_operations.go",
-      "sha256": "d8beeba2400559d0acd9c3b5dcf5a2dd5f688d1d9c2a0bcf726e0e6e45fb5f75"
+      "sha256": "e256e7bee057ce4445686b7b36854682f0fb5b4906527ddc5b2966c7b084ef86"
+    },
+    {
+      "name": "override_documentation",
+      "path": "contracts/overrides/documentation.json",
+      "sha256": "73df3c1d65b75a27d3567a46977e01a2de2abaa0a74194beb8133ea8b748d4d1"
     },
     {
       "name": "override_internal_operations",
@@ -57,9 +72,19 @@
       "sha256": "913390273713f988ed58f4bed3b92f067d92366e1715169fec5a149f13584bd7"
     },
     {
+      "name": "override_recovery",
+      "path": "contracts/overrides/recovery.yaml",
+      "sha256": "7095fbabdfe7d5f579c41315e99717a0c15386166bd086e57723518f8bbbf8fb"
+    },
+    {
       "name": "override_supplemental_operations",
       "path": "contracts/overrides/supplemental_operations.json",
-      "sha256": "1b6d0595bfcedc4cb65ca3d54666cc9d75344bdf63e15f4279d11f69e0291268"
+      "sha256": "d6c59320857bf70218436228448940b5601b8370690b4c19daec7d00d9f2e99e"
+    },
+    {
+      "name": "override_usage_constraints",
+      "path": "contracts/overrides/usage_constraints.yaml",
+      "sha256": "6f0d01ef3cf644a10bdcb82feede89293e9c15d4f28e4205ff9ded464156baa6"
     }
   ]
 }

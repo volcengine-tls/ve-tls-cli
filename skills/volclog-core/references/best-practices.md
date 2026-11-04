@@ -38,7 +38,7 @@ Key rules:
   - auto spill because the envelope is too large -> `deliveryMode=file_auto`
   - normal stdout -> `deliveryMode=stdout`
 - For large responses, prefer `--output-mode file --output-dir <writable-dir>`.
-- If auto spill fails because no writable directory was provided, rerun with `--output-dir <writable-dir>` instead of inventing a filename.
+- If auto spill fails because no writable directory was provided, inspect `remoteOutcome` and repair delivery. Do not repeat a successful write; when a repeatable read may be rerun, provide `--output-dir <writable-dir>` instead of inventing a filename.
 - On successful file delivery, `tool / workflow / raw` normally write the full JSON envelope; with `--jmes-filter` they write the selected value as a single JSON document, even when `--output jsonl` is set. Default stdout is a JSON delivery envelope with `data=null` and the file path in `artifacts[].path`; human stdout retains the Chinese notice. Migrate scripts that parsed the default edition's old notice to the artifact path.
 - The delivery envelope's `summary.itemCount` retains the business-result count, `summary.totalBytes` is the stdout envelope's byte length, and `artifacts[].sizeBytes` is the actual file size.
 - Without `--jmes-filter`, `workflow exec log.export` and `log.export-analysis` are the exception: their files contain streamed data rows, while default stdout contains the JSON delivery envelope. A filter disables the streamed writer, so the results are accumulated in memory before filtering. For large exports, prefer unfiltered streaming or server-side field selection where available; client-side filtering does not reduce server scanning or network traffic.
@@ -48,7 +48,10 @@ Key rules:
 - Use compact `tool describe` output for discovery and ordinary flat requests.
 - Run `volclog tool describe <group.action> --view full` before authoring nested objects or whenever an expected optional field is absent from compact output.
 - Treat full view as the request-authoring schema; do not infer omitted optional fields from compact view.
-- Read `risk`, `recovery`, and `usage_constraints` before executing or recovering a mutating operation. These operation-specific fields override the generic recovery tables in this skill.
+- Read `risk`, `recovery`, `recovery_source`, `recovery_notes`, and `usage_constraints` before executing or recovering an operation. These operation-specific fields override the generic recovery tables in this skill.
+- `reviewed-read-contract` means the operation was reviewed as read or non-persistent; it does not prove service idempotency or permit automatic retry. For `unverified`, reconcile the outcome before retrying.
+- Full describe includes `input_policy`, `doc_url`, `doc_url_source`, and `source`; `doc_url` is `null` if no exact URL is verified. `identity.api_version_default` is the client default header (`0.3.0`), with `identity.api_version_source` indicating its source, not a per-operation version guarantee. Unknown `identity.maintainer` and `identity.deprecated` are `null` in full view; compact may omit details.
+- `tool exec` applies the declared schema to both flat and sectioned inputs. Sectioned extra top-level keys are rejected; section fields follow `additionalProperties`, whose absence permits extra fields. An operation without a section schema remains passthrough, subject to input and context shape rules. Schema defaults are not injected; human shortcuts retain legacy validation.
 - Interpret `high-risk-retry` as “retrying is high risk,” not as permission to retry automatically.
 - After an ambiguous high-risk result, use a get/describe/list reconciliation action only when the contract names one. If it does not, stop and escalate with the request ID and business error evidence.
 
@@ -58,6 +61,7 @@ Key rules:
 - For `tool exec` and `workflow exec`, `--dry-run` validates contract shape and execution plan without sending the real mutating call.
 - For `raw`, `--dry-run` only validates the transport/local plan. It does not validate API-required fields the way `tool exec` or `workflow exec` can.
 - Treat any dry-run success as transport or contract confidence only. It is not proof that the business query or time window is semantically correct.
+- `workflow exec` rejects context `execution.page` and `execution.page_all`, including `false`; use the workflow's documented controls instead.
 
 ## Envelope Filtering
 
@@ -148,7 +152,7 @@ The CLI validates contract shape and runtime preconditions. It does not validate
 
 What the CLI does validate:
 
-- required fields and JSON shape
+- declared request types, enums, bounds, required fields, conditional requirements, and JSON shape on `tool exec`
 - conflicting runtime selectors or output flags
 - local output path / writable directory constraints
 

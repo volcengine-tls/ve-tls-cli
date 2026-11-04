@@ -117,6 +117,9 @@ func TestMergeSupplementalOperationsIntoCheckedInCatalogUpdatesCatalogAndLock(t 
 	if got, want := len(merged.Operations), len(base.Operations)+1; got != want {
 		t.Fatalf("operations=%d, want %d", got, want)
 	}
+	replacement.Risk.ErrorRecovery = "high-risk-retry"
+	replacement.Risk.RecoverySource = unverifiedRecoverySource
+	replacement.Risk.RecoveryNotes = unverifiedRecoveryNotes
 	if got := operationByID(t, merged.Operations, replacement.ID); !reflect.DeepEqual(got, replacement) {
 		t.Fatalf("replacement=%#v, want %#v", got, replacement)
 	}
@@ -254,6 +257,21 @@ func prepareSupplementalMergeFixture(t *testing.T, includeSupplementalInputs boo
 	}
 	if err := os.WriteFile(supplementalGeneratorPath, []byte("initial supplemental generator\n"), 0o600); err != nil {
 		t.Fatal(err)
+	}
+	for name, body := range map[string]string{
+		"internal/openapigen/contract_policies.go":   "policy generator\n",
+		"internal/contract/legacy.go":                "legacy projection\n",
+		"contracts/overrides/recovery.yaml":          "log.extract: high-risk-retry\n",
+		"contracts/overrides/usage_constraints.yaml": "# no guides\n",
+		"contracts/overrides/documentation.json":     "{}\n",
+	} {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	supplementalPath = filepath.Join(root, "contracts", "overrides", "supplemental_operations.json")
 	original := supplementalTestOperation("log.extract", "public", "ExtractLogSample", "/ExtractLogSample")
