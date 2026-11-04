@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -59,14 +58,17 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 	ctx.Action = "tool." + strings.TrimSpace(string(operation.ID))
 	ctxCfg := toolExecContext{Execution: map[string]any{}}
 	if strings.TrimSpace(contextArg) != "" {
-		ctxCfg, err = loadToolExecContext(contextArg)
+		ctxCfg, err = loadToolExecContext(contextArg, ctx)
 		if err != nil {
 			return nil, err
 		}
 	}
+	if err := ctx.applyExecutionControls(ctxCfg); err != nil {
+		return nil, err
+	}
 	rawInput := map[string]any{}
 	if strings.TrimSpace(inputArg) != "" {
-		rawInput, err = readToolJSONObjectFlag("--input", inputArg)
+		rawInput, err = readToolJSONObjectFlag("--input", inputArg, ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -119,7 +121,7 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 		newContextExecutionTransport(ctx),
 		codecs,
 	)
-	executionResult, err := executor.Execute(context.Background(), execution.Invocation{
+	executionResult, err := executor.Execute(ctx.ExecutionContext(), execution.Invocation{
 		Operation: operation,
 		Input:     input,
 		Options: execution.Options{

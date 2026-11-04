@@ -97,7 +97,7 @@ func validateToolContextTrace(value any, path string) error {
 		return validateToolContextObject(value, path, map[string]toolContextFieldValidator{
 			"enabled": validateToolContextBool,
 			"dir":     validateToolContextString,
-			"redact":  validateToolContextString,
+			"redact":  validateToolContextTraceRedact,
 		})
 	default:
 		return &toolContextValidationError{Path: path, Reason: "must be a boolean, string, or object"}
@@ -106,14 +106,39 @@ func validateToolContextTrace(value any, path string) error {
 
 func validateToolContextExecution(value any, path string) error {
 	return validateToolContextObject(value, path, map[string]toolContextFieldValidator{
-		"dry_run":     validateToolContextBool,
-		"artifact":    validateToolContextArtifact,
-		"output_mode": validateToolContextOutputMode,
-		"output":      validateToolContextOutput,
-		"page":        validateToolContextPage,
-		"page_all":    validateToolContextBool,
-		"projection":  validateToolContextProjection,
+		"allow_write":     validateToolContextBool,
+		"non_interactive": validateToolContextBool,
+		"timeout":         validateToolContextTimeout,
+		"dry_run":         validateToolContextBool,
+		"artifact":        validateToolContextArtifact,
+		"output_mode":     validateToolContextOutputMode,
+		"output":          validateToolContextOutput,
+		"page":            validateToolContextPage,
+		"page_all":        validateToolContextBool,
+		"projection":      validateToolContextProjection,
 	})
+}
+
+func validateToolContextTimeout(value any, path string) error {
+	text, ok := value.(string)
+	if !ok {
+		return &toolContextValidationError{Path: path, Reason: "must be a positive duration string"}
+	}
+	if _, err := parseInvocationTimeout(text); err != nil {
+		return &toolContextValidationError{Path: path, Reason: err.Error()}
+	}
+	return nil
+}
+
+func validateToolContextTraceRedact(value any, path string) error {
+	text, ok := value.(string)
+	if !ok {
+		return &toolContextValidationError{Path: path, Reason: "must be a string"}
+	}
+	if err := validateTraceRedactValue(text); err != nil {
+		return &toolContextValidationError{Path: path, Reason: err.Error()}
+	}
+	return nil
 }
 
 func validateToolContextArtifact(value any, path string) error {

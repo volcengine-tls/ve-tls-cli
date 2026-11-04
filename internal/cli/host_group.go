@@ -8,7 +8,6 @@ import (
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
 	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
-	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 func runHostGroup(ctx *Context, args []string) (any, error) {
@@ -156,7 +155,7 @@ func hostGroupGet(ctx *Context, args []string) (any, error) {
 }
 
 func hostGroupCreate(ctx *Context, args []string) (any, error) {
-	req, err := buildHostGroupBody(args, false)
+	req, err := buildHostGroupBody(args, false, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +168,7 @@ func hostGroupCreate(ctx *Context, args []string) (any, error) {
 }
 
 func hostGroupModify(ctx *Context, args []string) (any, error) {
-	req, err := buildHostGroupBody(args, true)
+	req, err := buildHostGroupBody(args, true, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +206,7 @@ func hostGroupDelete(ctx *Context, args []string) (any, error) {
 	})
 }
 
-func buildHostGroupBody(args []string, modify bool) (map[string]any, error) {
+func buildHostGroupBody(args []string, modify bool, invocation ...*Context) (map[string]any, error) {
 	var (
 		hostGroupID     string
 		hostGroupName   string
@@ -299,7 +298,7 @@ func buildHostGroupBody(args []string, modify bool) (map[string]any, error) {
 			return nil, errors.New("unknown flag: " + args[0])
 		}
 	}
-	req, err := readJSONObjectRequestArg(requestArg)
+	req, err := readJSONObjectRequestArg(requestArg, invocation...)
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +329,7 @@ func buildHostGroupBody(args []string, modify bool) (map[string]any, error) {
 	maybeSetBoolField(req, "AutoUpdate", autoUpdateSet, autoUpdate)
 	maybeSetBoolField(req, "ServiceLogging", serviceLogSet, serviceLogging)
 	if strings.TrimSpace(hostIPListArg) != "" {
-		ips, err := util.ReadStringListMaybeFile(hostIPListArg)
+		ips, err := inputInvocation(invocation).readStringListMaybeFile(hostIPListArg)
 		if err != nil {
 			return nil, err
 		}

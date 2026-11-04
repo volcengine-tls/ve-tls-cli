@@ -50,6 +50,13 @@ func prepareRunInvocation(args []string, stdout, stderr io.Writer) (*runInvocati
 			return nil, 1, true
 		}
 		rest, flags = tail, merged
+	} else {
+		tail, merged, ok := extractTrailingInvocationControls(rest, flags)
+		if !ok {
+			code := writeInvocationFailure(stdout, stderr, group, rest, errors.New("missing invocation control value"), "usage", "check --timeout", 1)
+			return nil, code, true
+		}
+		rest, flags = tail, merged
 	}
 	if flags.ShowHelp {
 		if currentEdition() == cliEditionVolclog {
@@ -182,6 +189,26 @@ func prepareRunInvocation(args []string, stdout, stderr io.Writer) (*runInvocati
 	ctx.TraceDir = flags.TraceDir
 	ctx.TraceRedact = normalizeTraceRedactValue(flags.TraceRedact)
 	ctx.DryRun = flags.DryRun
+	ctx.NonInteractive = flags.NonInteractive || !stdinIsTerminal()
+	ctx.NonInteractiveExplicit = flags.NonInteractive
+	ctx.AllowWrite, ctx.AllowWriteExplicit = flags.AllowWrite, flags.AllowWrite
+	if flags.ControlConflict {
+		code := writeRunError(ctx, stdout, stderr, group, rest, validationFailure(errors.New("conflicting --timeout values"), "InvalidExecutionControls"), "validation", "use one overall timeout", outputMode, 1)
+		return nil, code, true
+	}
+	if flags.Timeout != "" {
+		duration, err := parseInvocationTimeout(flags.Timeout)
+		if err != nil {
+			code := writeRunError(ctx, stdout, stderr, group, rest, validationFailure(err, "InvalidTimeout"), "validation", "use --timeout 30s", outputMode, 1)
+			return nil, code, true
+		}
+		ctx.Timeout, ctx.TimeoutExplicit = duration, true
+	}
+	if err := validateTraceRedactValue(flags.TraceRedact); err != nil {
+		ctx.TraceDir = ""
+		code := writeRunError(ctx, stdout, stderr, group, rest, validationFailure(err, "InvalidTraceRedaction"), "validation", "trace redaction must remain enabled", outputMode, 1)
+		return nil, code, true
+	}
 	ctx.SetProfileDefaults(config.ProfileDefaults{
 		Region:         projectCfg.Region,
 		Endpoint:       projectCfg.Endpoint,

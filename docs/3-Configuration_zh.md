@@ -145,13 +145,13 @@ volclog configure cred delete shared-creds
 
 未显式选择配置档时，完整的环境 AK/SK（`VOLCENGINE_ACCESS_KEY_ID` 和 `VOLCENGINE_ACCESS_KEY_SECRET`）会选择仅由环境构建的身份。region/endpoint 优先级为：运行时覆盖 > 环境 > 项目默认值；timeout 优先级为：项目默认值 > `60` 秒。环境 AK/SK 不完整时使用所选配置档，region/endpoint 优先级为运行时覆盖 > 配置档 > 项目默认值，timeout 为配置档 > 项目默认值 > `60` 秒。在这条既有路径中，如果 AK 或 SK 缺失，静态客户端可能从环境补齐缺失的 AK/SK 和 token。只有环境 region/endpoint 不会覆盖配置档；缺少必需的 region 或 endpoint 会导致解析失败。
 
-上下文没有 timeout 字段。
+上面的 timeout 优先级针对单次 HTTP 请求。可选的 `--timeout 30s` 或 `context.execution.timeout` 是独立的整次命令时间预算：没有整体默认值，从命令开始计时，不因翻页或分批重置。值须为正的 Go duration。全局与上下文可重复提供等值 duration，不等则冲突。
 
 ### 5.2 动态提供者模式
 
 对于动态提供者模式（SSO、Console Login、RAM Role ARN、OIDC、ECS Role），身份来自提供者，环境 AK/SK 和 token 不会替换它。显式选择配置档时，region/endpoint 优先级为运行时覆盖 > 配置档 > 项目默认值，忽略环境目标；未显式选择时，优先级为运行时覆盖 > 环境 region/endpoint > 配置档 > 项目默认值。
 
-timeout 优先级为：配置档 > 项目默认值 > `60` 秒。没有全局或上下文的 timeout 覆盖。
+单次 HTTP 请求的 timeout 优先级为：配置档 > 项目默认值 > `60` 秒。可选的整次命令预算 `--timeout` / `context.execution.timeout` 与该 HTTP timeout 独立。
 
 ### 5.3 运行时选择器冲突
 
@@ -246,17 +246,22 @@ volclog configure project show
 | `--output-file` | 文件路径 | 无 |
 | `--jmes-filter` | JMESPath 表达式 | 无 |
 | `--trace-dir` | 目录路径 | 无（追踪关闭） |
-| `--trace-redact` | `on`、`off`（及别名） | `on` |
+| `--trace-redact` | `on` 及启用别名 | `on` |
+| `--non-interactive` | 布尔标志 | 非 TTY 时自动启用 |
+| `--allow-write` | 布尔标志 | 关闭 |
+| `--timeout` | 正的 Go duration，如 `30s` | 无整体时限 |
 
 在默认的 `volclog` agent 路径上，`--output table` 会被拒绝；请使用 `--output json` 或 `--output jsonl`。`table` 格式仅由 `volclog-human` 支持，且仅用于特定的快捷方式入口：`project`/`topic`/`metric-topic` 的 list 和 get、`index get`、`log search`。并非每个人类快捷方式都支持 table。
 
-`--trace-redact` 接受 `on`、`true`、`1`、`yes`、`enabled`、`strict`、`default`（均映射为 `on`）以及 `off`、`false`、`0`、`no`、`disabled`（均映射为 `off`）。任何无法识别的值默认为 `on`。
+`--trace-redact` 接受 `on`、`true`、`1`、`yes`、`enabled`、`strict`、`default`，均启用脱敏；`off`、`false`、`0`、`no`、`disabled` 和未知值会校验失败。即使全局设置了 `--trace-dir`，`context.trace=false` 或 `context.trace.enabled=false` 也会关闭追踪。
 
-当前追踪写入始终将结构化的头和查询字段保留为键，将体保留为哈希。`--trace-redact off` 会被接受和规范化，但不会禁用该强制的结构化字段脱敏，也不会输出原始的头、查询或体值。传输 `error_message` 字段仍然是单独的敏感例外：它直接存储传输错误字符串，其中可能包含 URL 和查询值。
+当前追踪写入将结构化的头和查询字段保留为键，将体保留为哈希。传输 `error_message` 字段仍然是单独的敏感例外：它直接存储传输错误字符串，其中可能包含 URL 和查询值。
 
 这些全局标志可以放在命令组之前，或者对于 `raw`、`tool`、`workflow`、`project`、`topic`、`metric-topic`、`index`、`log`、`host-group` 和 `collector`，作为尾部全局标志放在组之后。`--profile` 和 `--secrets-file` 只能作为前导标志，不能用作尾部全局标志。
 
-`login`、`logout`、`sso` 和 `configure sso` 始终将其精确的 JSON 结果形状写入 stdout。`--output jsonl|table` 可能会被解析，但不会改变冻结的 JSON 形状（JSON 被强制）。以下选项在任何认证副作用运行之前被拒绝：非 `stdout` 的 `--output-mode`、`--output-file`、`--jmes-filter`、`--trace-dir` 和 `--secrets-file`。单独的 `--output-dir` 和不带 `--trace-dir` 的 `--trace-redact` 不会转移冻结的结果，因此不会被拒绝。
+`login`、`logout`、`sso` 和 `configure sso` 始终将其精确的 JSON 结果形状写入 stdout。`--output jsonl|table` 可能会被解析，但不会改变冻结的 JSON 形状（JSON 被强制）。以下选项在任何认证副作用运行之前被拒绝：非 `stdout` 的 `--output-mode`、`--output-file`、`--jmes-filter`、`--trace-dir` 和 `--secrets-file`。单独的 `--output-dir` 和不带 `--trace-dir` 的合法 `--trace-redact` 不会转移冻结的结果，因此不会被拒绝。
+
+非 TTY 或显式使用 `--non-interactive` 时，Console Login 使用 device code 授权且不打开浏览器。若替换会话需要确认，会立即返回 `interaction_required`；请使用其他 `--profile` 或交互式终端，没有 `--force` 覆盖。SSO 账号或角色只有一个候选时自动选择；多个候选且未指定时立即失败。失败时事务性 token 会回滚、配置更改不提交；注册缓存可能已经写入。
 
 ## 8. 安全检查、清理与示例
 

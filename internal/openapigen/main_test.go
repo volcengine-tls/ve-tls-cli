@@ -411,7 +411,7 @@ func TestBuildOperationCatalogContextRuntimeEffectsMatchCurrentSelectorAndTraceS
 		t.Fatalf("context field trace malformed: %+v", ctxProps["trace"])
 	}
 	traceRuntimeEffect, _ := traceField["runtime_effect"].(string)
-	for _, want := range []string{"trace directory", "legacy strict/default", "on/off"} {
+	for _, want := range []string{"trace directory", "false or enabled:false", "on/true/1/yes/enabled/strict/default", "rejected"} {
 		if !strings.Contains(traceRuntimeEffect, want) {
 			t.Fatalf("trace runtime_effect missing %q: %q", want, traceRuntimeEffect)
 		}

@@ -1081,7 +1081,7 @@ func defaultToolContextSchema() map[string]any {
 				"description":    "Control request/response tracing for tool execution.",
 				"when_to_use":    "Set this when you need transport traces for debugging, auditing, or acceptance verification.",
 				"default":        false,
-				"runtime_effect": "Enables trace capture, chooses the trace directory, and normalizes legacy strict/default redact inputs to the current on/off setting.",
+				"runtime_effect": "Selects the trace directory; false or enabled:false disables global trace. Redaction stays on; on/true/1/yes/enabled/strict/default are accepted, off and other values are rejected.",
 				"oneOf": []any{
 					map[string]any{
 						"type":        "boolean",
@@ -1098,7 +1098,10 @@ func defaultToolContextSchema() map[string]any {
 						"properties": map[string]any{
 							"enabled": map[string]any{"type": "boolean"},
 							"dir":     map[string]any{"type": "string"},
-							"redact":  map[string]any{"type": "string"},
+							"redact": map[string]any{
+								"type": "string",
+								"enum": defaultToolTraceRedactValues(),
+							},
 						},
 					},
 				},
@@ -1123,12 +1126,29 @@ func defaultToolContextSchema() map[string]any {
 	}
 }
 
+func defaultToolTraceRedactValues() []any {
+	return []any{"on", "true", "1", "yes", "enabled", "strict", "default"}
+}
+
 func defaultToolExecutionSchema() map[string]any {
 	return map[string]any{
 		"type":                 "object",
 		"description":          "Execution controls that must be nested under context.execution in the --context JSON file.",
 		"additionalProperties": false,
 		"properties": map[string]any{
+			"non_interactive": map[string]any{
+				"type":        "boolean",
+				"description": "Disable prompts; false cannot cancel automatic non-TTY mode.",
+			},
+			"allow_write": map[string]any{
+				"type":        "boolean",
+				"description": "CLI write gate, not IAM; reviewed reads including POST log.search are exempt. Omission follows the global flag or defaults false; explicit false conflicts with global true.",
+			},
+			"timeout": map[string]any{
+				"type":        "string",
+				"minLength":   1,
+				"description": "Positive Go duration for the whole invocation from start, e.g. 30s; no overall default. Separate from profile HTTP timeout; equal global values may repeat.",
+			},
 			"projection": map[string]any{
 				"description": "Filter the raw tool result before the CLI envelope is built.",
 				"oneOf": []any{

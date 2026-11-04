@@ -9,6 +9,7 @@ This file refines the quick recovery map in `SKILL.md`; it does not override the
 
 - [Runtime Signals](#runtime-signals)
 - [Contract View And Recovery Precedence](#contract-view-and-recovery-precedence)
+- [Invocation Controls](#invocation-controls)
 - [Dry-Run Scope](#dry-run-scope)
 - [Envelope Filtering](#envelope-filtering)
 - [Search, Histogram, And Analysis](#search-histogram-and-analysis)
@@ -54,6 +55,16 @@ Key rules:
 - `tool exec` applies the declared schema to both flat and sectioned inputs. Sectioned extra top-level keys are rejected; section fields follow `additionalProperties`, whose absence permits extra fields. An operation without a section schema remains passthrough, subject to input and context shape rules. Schema defaults are not injected; human shortcuts retain legacy validation.
 - Interpret `high-risk-retry` as “retrying is high risk,” not as permission to retry automatically.
 - After an ambiguous high-risk result, use a get/describe/list reconciliation action only when the contract names one. If it does not, stop and escalate with the request ID and business error evidence.
+
+## Invocation Controls
+
+- Non-TTY means non-interactive automatically. `--non-interactive` or `context.execution.non_interactive=true` explicitly enables it; `false` cannot cancel non-TTY mode and conflicts with a global `true`.
+- `--timeout 30s` and `context.execution.timeout="30s"` set a positive Go-duration budget for the entire invocation, starting at command entry and shared across pages/batches. There is no overall default; profile `timeout_seconds` remains a separate HTTP request timeout. Equal global/context durations may repeat; unequal ones conflict.
+- TLS writes and unknown raw operations, including unknown GETs, require a CLI write permit. For an already user-authorized action, use `--allow-write`; `tool exec` / `workflow exec` may instead use `context.execution.allow_write=true`, but raw has no context. This does not grant IAM permissions. Global `true` conflicts with explicit context `false`. Reviewed reads such as POST `log.search` and dry-runs are exempt; human write shortcuts are gated too.
+- `--trace-redact` accepts `on`/`true`/`1`/`yes`/`enabled`/`strict`/`default`; `off`/`false`/`0`/`no`/`disabled` and unknown values fail validation. Context `trace=false` or `enabled:false` disables global tracing.
+- Non-interactive `login` uses a device code without opening a browser. If session replacement needs confirmation it returns `interaction_required`; select another `--profile` or an interactive terminal, not `--force`. SSO auto-selects one account/role but fails immediately when multiple candidates need an unspecified choice. The transactional token is rolled back and config changes are not committed; registration cache may already have been written.
+- Darwin/Linux interactive prompts use cancellable polling. Windows consoles without read-deadline support return `interaction_required`, so provide explicit selectors to avoid prompting. Runtime verification of this change has been on Darwin only.
+- Cancellation by SIGINT, SIGTERM, or `RunContext` shares the invocation budget: before send it is `not_sent`, and after send an unresolved outcome remains `unknown`. Keep partial results and follow completeness and reconciliation guidance.
 
 ## Dry-Run Scope
 
@@ -188,6 +199,10 @@ When the command already failed, follow the smallest next action:
 
 ## Known Traps
 
+- `cli-write-gate-is-not-iam`: enable `--allow-write` only for a user-authorized write or unknown raw operation; IAM authorization is separate, and reviewed reads and dry-runs need no flag.
+- `invocation-timeout-is-not-http-timeout`: set the optional whole-invocation Go duration independently of the profile's per-request HTTP timeout; it does not reset between pages or batches.
+- `noninteractive-auth-requires-explicit-selection`: use another profile or interactive terminal for session replacement, and supply the SSO account or role when multiple candidates require a choice.
+- `trace-redaction-cannot-be-disabled`: use `on` or an enabled alias; `off` and unknown values fail validation. To disable tracing, set context `trace=false` or `enabled=false`.
 - `page-all-is-not-compression`: `page.all` accumulates pages and can increase payload size; `merged` does not prove completeness. Check `summary.completeness` and retained data, including on nonzero exit.
 - `jmes-filter-and-projection-have-different-scope`: use `summary.*` or `data.*` under `--jmes-filter`, and raw keys only under `execution.projection`.
 - `jmes-filter-null-is-still-success`: literal `null` means the selected field exists and is null; that is not the same as `filter matched no value`.

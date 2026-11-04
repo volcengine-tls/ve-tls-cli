@@ -63,7 +63,7 @@ For SearchLogs, `ResultStatus=incomplete` and `time_out` report incomplete data,
 
 When the CLI creates new trace paths, it requests `0700` for the directory and `0600` for the JSONL trace file. Existing directories and files may retain their current permissions.
 
-Normal structured request/response trace fields contain only header keys (never values), query keys (never values), and SHA-256 hashes of request and response bodies (never raw bytes). `--trace-redact off` is accepted and normalized but does not disable this forced structured-field redaction and does not emit raw header, query, or body values.
+Normal structured request/response trace fields contain only header keys (never values), query keys (never values), and SHA-256 hashes of request and response bodies (never raw bytes). `--trace-redact` accepts `on`, `true`, `1`, `yes`, `enabled`, `strict`, and `default`, all enabling redaction. `off`, `false`, `0`, `no`, `disabled`, and unknown values fail validation. An explicit `context.trace=false` or `context.trace.enabled=false` disables global tracing.
 
 The `error_message` field stores the transport error string directly, which can include the full request URL and query values. Never put credentials or other secrets in query parameters. Treat trace files as sensitive diagnostic artifacts: keep their permissions restricted and share them only after inspection.
 
@@ -74,6 +74,10 @@ Default `volclog` uses structured error envelopes (`status: failed`, `error` obj
 The `requestId` in the envelope (or `x-tls-requestid` response header) identifies the request for support and troubleshooting. Capture it when reporting issues.
 
 Errors fall into broad categories: local validation (contract shape, missing required fields), authentication (credential resolution, login), transport (network, endpoint, DNS), and TLS service response (status code, service error message). Use `--dry-run` to isolate local validation errors before a network call, and `--trace-dir` to capture the request/response exchange for transport or service errors.
+
+`--timeout 30s` or `context.execution.timeout="30s"` sets an optional positive Go-duration budget for the entire invocation, starting at command entry and shared across pages and batches. It is separate from the profile's per-request `timeout_seconds`, and there is no default overall deadline. SIGINT, SIGTERM, and `RunContext` cancellation propagate through the work. Cancellation before sending is `not_sent`; after sending, a result that cannot be established remains `unknown`. Preserve any partial results and inspect completeness rather than replaying an ambiguous write.
+
+TLS writes and unknown raw operations, including unknown GETs, require `--allow-write` for a user-authorized action; `tool exec` and `workflow exec` may instead use `context.execution.allow_write=true`. Raw does not accept context, and human shortcuts use the same CLI gate. `error.kind=permission` / `WritePermissionRequired` is a CLI gate, not an IAM grant. Reviewed reads, including POST `log.search`, and dry-run plans need no write permission.
 
 ## 7. Thin-client boundaries
 

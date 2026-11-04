@@ -5,11 +5,9 @@ package cli
 import (
 	"errors"
 	"strings"
-
-	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
-func parseTopicListQuery(args []string, allowCursor bool) (map[string]string, error) {
+func parseTopicListQuery(args []string, allowCursor bool, invocation ...*Context) (map[string]string, error) {
 	query := map[string]string{}
 	for len(args) > 0 {
 		switch args[0] {
@@ -80,7 +78,7 @@ func parseTopicListQuery(args []string, allowCursor bool) (map[string]string, er
 			if len(args) < 2 {
 				return nil, errors.New("missing --tags value")
 			}
-			s, err := util.ReadStringMaybeFile(args[1])
+			s, err := inputInvocation(invocation).readStringMaybeFile(args[1])
 			if err != nil {
 				return nil, err
 			}

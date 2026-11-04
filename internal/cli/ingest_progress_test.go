@@ -65,6 +65,7 @@ func ingestTestContext(t *testing.T, rt http.RoundTripper) *Context {
 	client.HTTP = &http.Client{Transport: rt}
 	ctx := newContext(io.Discard, io.Discard, output.FormatJSON, "", "")
 	ctx.client = client
+	ctx.AllowWrite = true // This fixture exercises delivery after an authorized ingest.
 	return ctx
 }
 
@@ -185,6 +186,7 @@ func TestIngestProgressSecondBatchAuthFailureNotSent(t *testing.T) {
 	client.HTTP = &http.Client{Transport: rt}
 	ctx := newContext(io.Discard, io.Discard, output.FormatJSON, "", "")
 	ctx.client = client
+	ctx.AllowWrite = true // This fixture exercises delivery after an authorized ingest.
 	_, err = logIngest(ctx, ingestTestArgs())
 	var failure *ingestFailure
 	var authErr *auth.Error
@@ -286,7 +288,7 @@ func TestWorkflowIngestFailureEnvelopePreservesProgress(t *testing.T) {
 			t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 			input, _ := json.Marshal(map[string]any{"TopicId": "tid", "Input": ingestTestSecret + "\nsecond\nthird\nfourth\nfifth", "BatchMaxCount": 2})
 			var stdout, stderr bytes.Buffer
-			code := Run([]string{"workflow", "exec", "log.ingest", "--input", string(input)}, &stdout, &stderr)
+			code := Run([]string{"--allow-write", "workflow", "exec", "log.ingest", "--input", string(input)}, &stdout, &stderr)
 			wantRequests := int32(2)
 			if mode == "first_http" {
 				wantRequests = 1

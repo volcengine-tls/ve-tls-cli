@@ -52,7 +52,8 @@ func renderRunResult(invocation *runInvocation, stdout, stderr io.Writer, out an
 			return ue.ExitCode
 		}
 		if emitsStructuredEnvelope(group, rest) || defaultAgentErrorProtocol(group, rest) || ctx.Completeness != nil {
-			if strings.TrimSpace(ctx.TraceDir) != "" {
+			classification, _ := classifyError(err, ctx.RequestID, ctx.StatusCode, group)
+			if strings.TrimSpace(ctx.TraceDir) != "" && classification.Kind != "validation" {
 				_ = ctx.initTrace()
 			}
 			env := buildAPIErrorEnvelope(ctx, group, err, outputMode)

@@ -47,7 +47,7 @@ volclog --profile '<profile>' tool describe log.search
 
 ### Create the project and topic
 
-Use `--dry-run` first to validate the request shape locally before sending it. A dry-run is a local validation gate; it does not check remote existence, permissions, or TLS service behavior.
+Use `--dry-run` first to validate the request shape locally before sending it. A dry-run does not require write permission and does not execute the business request. For the following writes, use `--allow-write` only when the user has authorized the intended changes; this CLI gate does not grant IAM permission.
 
 `project.create` requires `ProjectName` and `Region` in the body:
 
@@ -56,7 +56,7 @@ volclog --profile '<profile>' tool exec project.create \
   --input '{"ProjectName":"<project-name>","Region":"<region>","Description":"example project"}' \
   --dry-run
 
-volclog --profile '<profile>' tool exec project.create \
+volclog --profile '<profile>' --allow-write tool exec project.create \
   --input '{"ProjectName":"<project-name>","Region":"<region>","Description":"example project"}'
 ```
 
@@ -67,7 +67,7 @@ volclog --profile '<profile>' tool exec topic.create \
   --input '{"ProjectId":"<project-id>","TopicName":"<topic-name>","ShardCount":<shard-count>,"Ttl":<ttl-days>}' \
   --dry-run
 
-volclog --profile '<profile>' tool exec topic.create \
+volclog --profile '<profile>' --allow-write tool exec topic.create \
   --input '{"ProjectId":"<project-id>","TopicName":"<topic-name>","ShardCount":<shard-count>,"Ttl":<ttl-days>}'
 ```
 
@@ -88,7 +88,7 @@ volclog --profile '<profile>' workflow exec log.ingest \
   --input '{"TopicId":"<topic-id>","Input":"file://sample.log","InputFormat":"lines"}' \
   --context '{"execution":{"dry_run":true}}'
 
-volclog --profile '<profile>' workflow exec log.ingest \
+volclog --profile '<profile>' --allow-write workflow exec log.ingest \
   --input '{"TopicId":"<topic-id>","Input":"file://sample.log","InputFormat":"lines"}'
 ```
 

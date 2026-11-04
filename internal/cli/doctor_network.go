@@ -49,7 +49,7 @@ func runDoctorNetworkChecks(ctx *Context, state *doctorRuntimeState) {
 				port = "443"
 			}
 		}
-		dnsContext, cancelDNS := context.WithTimeout(context.Background(), 2*time.Second)
+		dnsContext, cancelDNS := context.WithTimeout(ctx.ExecutionContext(), 2*time.Second)
 		ips, err := net.DefaultResolver.LookupIPAddr(dnsContext, host)
 		cancelDNS()
 		if err != nil {
@@ -57,7 +57,7 @@ func runDoctorNetworkChecks(ctx *Context, state *doctorRuntimeState) {
 		} else {
 			state.checks = append(state.checks, map[string]any{"name": "online_dns_resolve", "ok": true, "detail": strconv.Itoa(len(ips))})
 			dialer := &net.Dialer{Timeout: 2 * time.Second}
-			conn, err := dialer.DialContext(context.Background(), "tcp", net.JoinHostPort(host, port))
+			conn, err := dialer.DialContext(ctx.ExecutionContext(), "tcp", net.JoinHostPort(host, port))
 			if err != nil {
 				state.checks = append(state.checks, map[string]any{"name": "online_tcp_connect", "ok": false, "detail": err.Error()})
 			} else {
@@ -127,7 +127,7 @@ func runDoctorNetworkChecks(ctx *Context, state *doctorRuntimeState) {
 			detail = clientErr.Error()
 		} else {
 			body, _ := util.MustJSON(map[string]any{})
-			response, err := client.Do(context.Background(), "GET", "/DescribeProjects", map[string]string{
+			response, err := client.Do(ctx.ExecutionContext(), "GET", "/DescribeProjects", map[string]string{
 				"PageSize":   "1",
 				"PageNumber": "1",
 			}, nil, body)
@@ -177,7 +177,7 @@ func runDoctorNetworkChecks(ctx *Context, state *doctorRuntimeState) {
 	// Re-read cached metadata without networking so output reflects that state.
 	if ok && state.isDynamic {
 		if config.IsCachedLoginAuthMode(state.mode) && state.dynamicReader != nil {
-			if status, err := state.dynamicReader.Status(context.Background(), state.profileName); err == nil {
+			if status, err := state.dynamicReader.Status(ctx.ExecutionContext(), state.profileName); err == nil {
 				state.dynamicStatus = status
 				state.credStatus.Present = status.Present
 				state.credPresent = status.Present

@@ -63,7 +63,7 @@ SearchLogs 的 `ResultStatus=incomplete` 和 `time_out` 表示数据不完整，
 
 当 CLI 创建新的追踪路径时，它为目录请求 `0700`、为 JSONL 追踪文件请求 `0600`。已有的目录和文件可能保留其当前权限。
 
-正常的结构化请求/响应追踪字段只包含头键（从不包含值）、查询键（从不包含值）以及请求和响应体的 SHA-256 哈希（从不包含原始字节）。`--trace-redact off` 会被接受和规范化，但不会禁用此强制的结构化字段脱敏，也不会输出原始的头、查询或体值。
+正常的结构化请求/响应追踪字段只包含头键（从不包含值）、查询键（从不包含值）以及请求和响应体的 SHA-256 哈希（从不包含原始字节）。`--trace-redact` 接受 `on`、`true`、`1`、`yes`、`enabled`、`strict` 和 `default`，均启用脱敏；`off`、`false`、`0`、`no`、`disabled` 及未知值会校验失败。显式 `context.trace=false` 或 `context.trace.enabled=false` 会关闭全局追踪。
 
 `error_message` 字段直接存储传输错误字符串，其中可能包含完整的请求 URL 和查询值。永远不要将凭证或其他密钥放在查询参数中。将追踪文件视为敏感的诊断工件：保持其权限受限，仅在检查后再分享。
 
@@ -74,6 +74,10 @@ SearchLogs 的 `ResultStatus=incomplete` 和 `time_out` 表示数据不完整，
 信封中的 `requestId`（或 `x-tls-requestid` 响应头）标识请求，可供支持和排障使用。报告问题时请捕获它。
 
 错误大致分为几类：本地校验（契约形状、缺少必填字段）、认证（凭证解析、登录）、传输（网络、endpoint、DNS）和 TLS 服务响应（状态码、服务错误消息）。用 `--dry-run` 在网络调用前隔离本地校验错误，用 `--trace-dir` 捕获传输或服务错误的请求/响应交互。
+
+`--timeout 30s` 或 `context.execution.timeout="30s"` 可用正 Go duration 设置可选的整次命令预算，从命令开始计时并由所有页面和批次共享。它独立于配置档的单次请求 `timeout_seconds`，没有默认的整体时限。SIGINT、SIGTERM 和 `RunContext` 取消会向工作链传递；发送前取消为 `not_sent`，发送后无法确定结果时仍为 `unknown`。保留已有部分结果并检查完整性，不要重放结果不明的写操作。
+
+TLS 写请求和未知 raw 操作（包括未知 GET）仅在用户已授权时使用 `--allow-write`；`tool exec` 与 `workflow exec` 也可使用 `context.execution.allow_write=true`。raw 不接受 context，human 快捷方式也受同一闸门约束。`error.kind=permission` / `WritePermissionRequired` 是 CLI 闸门，不授予 IAM 权限。已复核的只读操作（包括 POST `log.search`）和 dry-run 计划不需要写入许可。
 
 ## 7. 瘦客户端边界
 

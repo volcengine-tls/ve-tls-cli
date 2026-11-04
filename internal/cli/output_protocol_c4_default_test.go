@@ -81,7 +81,7 @@ func TestC4DefaultRawScalarResultsUseEnvelope(t *testing.T) {
 				_, _ = w.Write([]byte(body))
 			})
 			var stdout, stderr bytes.Buffer
-			code := Run([]string{"raw", "--path", "/Action"}, &stdout, &stderr)
+			code := Run([]string{"--allow-write", "raw", "--path", "/Action"}, &stdout, &stderr)
 			var env map[string]any
 			if code != 0 || requests.Load() != 1 || stderr.Len() != 0 || json.Unmarshal(stdout.Bytes(), &env) != nil || env["status"] != "success" {
 				t.Fatalf("scalar bypassed envelope: exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())

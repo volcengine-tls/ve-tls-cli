@@ -9,6 +9,35 @@ import (
 	"testing"
 )
 
+func TestC6ShortcutDescribeGuidesExplicitPermission(t *testing.T) {
+	for _, tc := range []struct {
+		args   []string
+		permit bool
+	}{
+		{[]string{"project", "create", "--describe"}, true},
+		{[]string{"project", "list", "--describe"}, false},
+		{[]string{"log", "ingest", "--describe"}, true},
+		{[]string{"log", "export", "--describe"}, false},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := Run(tc.args, &stdout, &stderr); code != 0 {
+			t.Fatalf("args=%v exit=%d stderr=%q", tc.args, code, stderr.String())
+		}
+		var result map[string]any
+		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		guide := result["guidance"].(map[string]any)
+		execute := guide["execute"].(string)
+		if strings.Contains(execute, "--allow-write") != tc.permit {
+			t.Fatalf("args=%v execute=%q permit=%v", tc.args, execute, tc.permit)
+		}
+		if filter := guide["filter"].(string); strings.Contains(filter, "--allow-write") != tc.permit {
+			t.Fatalf("args=%v filter=%q permit=%v", tc.args, filter, tc.permit)
+		}
+	}
+}
+
 func TestShortcutDescribeProjectCreate(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"project", "create", "--describe"}, &stdout, &stderr)
@@ -23,7 +52,7 @@ func TestShortcutDescribeProjectCreate(t *testing.T) {
 		`"api_group": "project"`,
 		`"api_action": "CreateProject"`,
 		`"describe": "volclog tool describe project.create"`,
-		`"execute": "volclog tool exec project.create --context file://ctx.json --input file://req.json"`,
+		`"execute": "volclog --allow-write tool exec project.create --context file://ctx.json --input file://req.json"`,
 		`"fallback_discovery": "volclog tool list project"`,
 		`"fallback_api_describe": "volclog tool describe project.create"`,
 		`"--project-name"`,

@@ -35,7 +35,7 @@ func logIngest(ctx *Context, args []string) (any, error) {
 	if err != nil {
 		return nil, validationFailure(err, "InvalidIngestInput")
 	}
-	body, err := util.ReadMaybeFile(cfg.Input)
+	body, err := ctx.readMaybeFile(cfg.Input)
 	if err != nil {
 		return nil, err
 	}

@@ -38,7 +38,7 @@ func isAnalysisQuery(cmd string) bool {
 }
 
 func logExport(ctx *Context, args []string) (any, error) {
-	req, err := parseExportSearchLogsArgs(args)
+	req, err := parseExportSearchLogsArgs(args, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +157,7 @@ func logExport(ctx *Context, args []string) (any, error) {
 }
 
 func logExportAnalysis(ctx *Context, args []string) (any, error) {
-	req, err := parseSearchLogsArgs(args)
+	req, err := parseSearchLogsArgs(args, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -246,15 +246,15 @@ func logExportAnalysis(ctx *Context, args []string) (any, error) {
 	return result.fail("request_failed", callErr, "", "", nil)
 }
 
-func parseSearchLogsArgs(args []string) (map[string]any, error) {
-	return parseSearchLogsArgsWithDefaultLimit(args, searchLogsDefaultLimit)
+func parseSearchLogsArgs(args []string, invocation ...*Context) (map[string]any, error) {
+	return parseSearchLogsArgsWithDefaultLimit(args, searchLogsDefaultLimit, invocation...)
 }
 
-func parseExportSearchLogsArgs(args []string) (map[string]any, error) {
-	return parseSearchLogsArgsWithDefaultLimit(args, exportLogsDefaultLimit)
+func parseExportSearchLogsArgs(args []string, invocation ...*Context) (map[string]any, error) {
+	return parseSearchLogsArgsWithDefaultLimit(args, exportLogsDefaultLimit, invocation...)
 }
 
-func parseSearchLogsArgsWithDefaultLimit(args []string, defaultLimit int) (map[string]any, error) {
+func parseSearchLogsArgsWithDefaultLimit(args []string, defaultLimit int, invocation ...*Context) (map[string]any, error) {
 	var (
 		topicID      string
 		query        string
@@ -385,7 +385,7 @@ func parseSearchLogsArgsWithDefaultLimit(args []string, defaultLimit int) (map[s
 	query = strings.TrimSpace(query)
 	var req map[string]any
 	if strings.TrimSpace(requestArg) != "" {
-		m, err := util.ReadJSONObjectMaybeFile(requestArg)
+		m, err := inputInvocation(invocation).readJSONObjectMaybeFile(requestArg)
 		if err != nil {
 			return nil, err
 		}

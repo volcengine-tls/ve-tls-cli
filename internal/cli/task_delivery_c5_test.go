@@ -13,7 +13,7 @@ func TestC5AcceptedTaskSurvivesDeliveryFailureWithoutReplay(t *testing.T) {
 				w.Header().Set("x-tls-requestid", "req-task")
 				_, _ = w.Write([]byte(`{"TaskId":"task-1","Enabled":true}`))
 			})
-			args := []string{"tool", "exec", "log.create-download-task", "--input", downloadTaskC5Input}
+			args := []string{"--allow-write", "tool", "exec", "log.create-download-task", "--input", downloadTaskC5Input}
 			var stdout, stderr bytes.Buffer
 			var code int
 			var envelope map[string]any

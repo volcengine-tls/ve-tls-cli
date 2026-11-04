@@ -405,6 +405,9 @@ func runConfigureSSOWithFactory(ctx *Context, args []string, factory ssoAdapterF
 		return nil, err
 	}
 	opts.Profile = profile
+	if ctx.NonInteractive {
+		opts.NoBrowser = true
+	}
 	if opts.SSOSession == "" {
 		return nil, errors.New("missing required field: --sso-session")
 	}
@@ -421,7 +424,7 @@ func runConfigureSSOWithFactory(ctx *Context, args []string, factory ssoAdapterF
 	if adapter == nil {
 		return nil, errors.New("sso adapter factory returned nil adapter")
 	}
-	result, err := adapter.runConfigureSSO(context.Background(), opts)
+	result, err := adapter.runConfigureSSO(ctx.ExecutionContext(), opts)
 	if err != nil {
 		return nil, err
 	}
@@ -934,8 +937,8 @@ func newProductionSSOAdapter(ctx *Context) (*ssoAdapter, error) {
 			}
 			return sso.NewBindingService(&sso.BindingServiceConfig{
 				Portal:        portalClient,
-				SelectAccount: newAccountSelector(os.Stdin, ctx.Stderr),
-				SelectRole:    newRoleSelector(os.Stdin, ctx.Stderr),
+				SelectAccount: newInvocationAccountSelector(ctx.ExecutionContext(), ctx.NonInteractive, os.Stdin, ctx.Stderr),
+				SelectRole:    newInvocationRoleSelector(ctx.ExecutionContext(), ctx.NonInteractive, os.Stdin, ctx.Stderr),
 			}), nil
 		},
 		revokerFn: func(region string) (ssoOAuthRevoker, error) {

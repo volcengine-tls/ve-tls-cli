@@ -1,6 +1,9 @@
 package cli
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 type GlobalFlags struct {
 	Profile            string
@@ -19,6 +22,10 @@ type GlobalFlags struct {
 	DryRun             bool
 	ShowHelp           bool
 	ShowVersion        bool
+	NonInteractive     bool
+	AllowWrite         bool
+	Timeout            string
+	ControlConflict    bool
 }
 
 func parseGlobal(args []string) (group string, rest []string, flags GlobalFlags, ok bool) {
@@ -28,6 +35,18 @@ func parseGlobal(args []string) (group string, rest []string, flags GlobalFlags,
 			break
 		}
 		switch a {
+		case "--non-interactive":
+			flags.NonInteractive = true
+			args = args[1:]
+		case "--allow-write":
+			flags.AllowWrite = true
+			args = args[1:]
+		case "--timeout":
+			if !hasGlobalFlagValue(args, 0) {
+				return "", nil, GlobalFlags{}, false
+			}
+			setGlobalTimeout(&flags, args[1])
+			args = args[2:]
 		case "--profile":
 			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
@@ -123,6 +142,16 @@ func extractTrailingGlobals(args []string, flags GlobalFlags, allowDryRun bool) 
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch a {
+		case "--non-interactive":
+			merged.NonInteractive = true
+		case "--allow-write":
+			merged.AllowWrite = true
+		case "--timeout":
+			if !hasGlobalFlagValue(args, i) {
+				return nil, GlobalFlags{}, false
+			}
+			setGlobalTimeout(&merged, args[i+1])
+			i++
 		case "--output":
 			if !hasGlobalFlagValue(args, i) {
 				return nil, GlobalFlags{}, false
@@ -178,6 +207,40 @@ func extractTrailingGlobals(args []string, flags GlobalFlags, allowDryRun bool) 
 		}
 	}
 	return rest, merged, true
+}
+
+func setGlobalTimeout(flags *GlobalFlags, value string) {
+	if flags.Timeout != "" {
+		before, e1 := time.ParseDuration(strings.TrimSpace(flags.Timeout))
+		after, e2 := time.ParseDuration(strings.TrimSpace(value))
+		if e1 != nil || e2 != nil || before != after {
+			flags.ControlConflict = true
+		}
+	}
+	flags.Timeout = value
+}
+
+// Other command groups retain their own option grammar; only these invocation
+// controls are additionally accepted after the command name.
+func extractTrailingInvocationControls(args []string, flags GlobalFlags) ([]string, GlobalFlags, bool) {
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--non-interactive":
+			flags.NonInteractive = true
+		case "--allow-write":
+			flags.AllowWrite = true
+		case "--timeout":
+			if !hasGlobalFlagValue(args, i) {
+				return nil, GlobalFlags{}, false
+			}
+			setGlobalTimeout(&flags, args[i+1])
+			i++
+		default:
+			rest = append(rest, args[i])
+		}
+	}
+	return rest, flags, true
 }
 
 func allowsTrailingGlobalsForGroup(group string) bool {

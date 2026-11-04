@@ -238,3 +238,11 @@ legacy projection; the main, internal, supplemental and policy generator files;
 and these three policy inputs. Both merge-only paths reapply the same policies
 and require already-locked policy inputs to match; refresh after changing them.
 Full source generation likewise applies the policies after all merges.
+
+The policy refresh also projects the current `non_interactive`, `allow_write`,
+and `timeout` execution controls into the shared schema while preserving
+existing controls. `allow_write` is a CLI action gate, not an IAM grant;
+reviewed reads such as POST `log.search` do not require it. The timeout is a
+whole-invocation budget from command start, separate from profile HTTP
+timeouts. Trace redaction accepts only the documented enabled aliases; an
+explicit `context.trace=false` or `enabled:false` disables global tracing.

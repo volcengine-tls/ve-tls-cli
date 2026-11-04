@@ -125,6 +125,9 @@ func runSSOLoginWithFactory(ctx *Context, args []string, factory ssoAdapterFacto
 		return nil, err
 	}
 	opts.Profile = profile
+	if ctx.NonInteractive {
+		opts.NoBrowser = true
+	}
 	if opts.Profile != "" && opts.SSOSession != "" {
 		return nil, errors.New("--profile and --sso-session cannot be combined; use exactly one selector")
 	}
@@ -144,7 +147,7 @@ func runSSOLoginWithFactory(ctx *Context, args []string, factory ssoAdapterFacto
 	if adapter == nil {
 		return nil, errors.New("sso adapter factory returned nil adapter")
 	}
-	result, err := adapter.runSSOLogin(context.Background(), opts)
+	result, err := adapter.runSSOLogin(ctx.ExecutionContext(), opts)
 	if err != nil {
 		return nil, err
 	}
@@ -328,7 +331,7 @@ func runSSOLogoutWithFactory(ctx *Context, args []string, factory ssoAdapterFact
 	if adapter == nil {
 		return nil, errors.New("sso adapter factory returned nil adapter")
 	}
-	result, err := adapter.runSSOLogout(context.Background(), opts)
+	result, err := adapter.runSSOLogout(ctx.ExecutionContext(), opts)
 	if err != nil {
 		return result, err
 	}

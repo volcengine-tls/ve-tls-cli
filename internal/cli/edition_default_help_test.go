@@ -17,7 +17,7 @@ func TestDefaultUsageTextOmitsShortcutGuidance(t *testing.T) {
 		"当前 volclog 只暴露 configure/doctor/skill/upgrade/version/tool/workflow/raw/login/logout/sso",
 		"[--output json|jsonl]",
 		"--output-dir <path>",
-		"--trace-redact <enabled>",
+		"--trace-redact <on>",
 		"输出格式（tool/workflow/raw 默认用 json；需要面向机器的逐行结果时可用 jsonl）",
 		"invalid --jmes-filter 属于 decode；执行成功后 filter matched no value 属于 output_failed，均返回 exit 3",
 	} {

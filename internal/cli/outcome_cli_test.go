@@ -20,11 +20,11 @@ const outcomeCLIIngestInput = `{"TopicId":"test-topic","Input":"one log","InputF
 func outcomeCLIArgs(kind string) []string {
 	switch kind {
 	case "raw":
-		return []string{"raw", "--method", "POST", "--path", "/CreateProject", "--body", `{}`}
+		return []string{"--allow-write", "raw", "--method", "POST", "--path", "/CreateProject", "--body", `{}`}
 	case "tool":
-		return []string{"tool", "exec", "project.create", "--input", outcomeCLICreateInput}
+		return []string{"--allow-write", "tool", "exec", "project.create", "--input", outcomeCLICreateInput}
 	case "workflow":
-		return []string{"workflow", "exec", "log.ingest", "--input", outcomeCLIIngestInput}
+		return []string{"--allow-write", "workflow", "exec", "log.ingest", "--input", outcomeCLIIngestInput}
 	default:
 		panic("unsupported outcome test command")
 	}

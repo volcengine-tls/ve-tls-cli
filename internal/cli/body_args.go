@@ -4,15 +4,13 @@ package cli
 
 import (
 	"strings"
-
-	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
-func readJSONObjectRequestArg(requestArg string) (map[string]any, error) {
+func readJSONObjectRequestArg(requestArg string, invocation ...*Context) (map[string]any, error) {
 	if strings.TrimSpace(requestArg) == "" {
 		return map[string]any{}, nil
 	}
-	return util.ReadJSONObjectMaybeFile(requestArg)
+	return inputInvocation(invocation).readJSONObjectMaybeFile(requestArg)
 }
 
 func maybeSetStringField(dst map[string]any, key string, value string) {

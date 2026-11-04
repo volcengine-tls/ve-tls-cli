@@ -3,7 +3,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
@@ -45,7 +44,7 @@ func executeShortcutOperation(ctx *Context, request shortcutExecutionRequest) (a
 	result, executeErr := execution.NewExecutor(
 		newContextExecutionTransport(ctx),
 		codecs,
-	).Execute(context.Background(), execution.Invocation{
+	).Execute(ctx.ExecutionContext(), execution.Invocation{
 		Operation: operation,
 		Input:     request.Input,
 		Options: execution.Options{

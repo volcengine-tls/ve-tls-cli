@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	appruntime "github.com/volcengine-tls/ve-tls-cli/internal/app/runtime"
 	"github.com/volcengine-tls/ve-tls-cli/internal/config"
@@ -17,22 +18,28 @@ import (
 )
 
 type InvocationOptions struct {
-	Stdout             io.Writer
-	Stderr             io.Writer
-	Format             output.Format
-	OutputExplicit     bool
-	OutputMode         string
-	OutputModeExplicit bool
-	OutputDir          string
-	OutputFile         string
-	Profile            string
-	RuntimeRegion      string
-	RuntimeEndpoint    string
-	GlobalSecretsFile  string
-	Filter             string
-	TraceDir           string
-	TraceRedact        string
-	DryRun             bool
+	Stdout                 io.Writer
+	Stderr                 io.Writer
+	Format                 output.Format
+	OutputExplicit         bool
+	OutputMode             string
+	OutputModeExplicit     bool
+	OutputDir              string
+	OutputFile             string
+	Profile                string
+	RuntimeRegion          string
+	RuntimeEndpoint        string
+	GlobalSecretsFile      string
+	Filter                 string
+	TraceDir               string
+	TraceRedact            string
+	DryRun                 bool
+	NonInteractive         bool
+	NonInteractiveExplicit bool
+	AllowWrite             bool
+	AllowWriteExplicit     bool
+	Timeout                time.Duration
+	TimeoutExplicit        bool
 }
 
 type ResponseState struct {
@@ -84,6 +91,7 @@ type Context struct {
 	configState
 	runtimeState
 	traceState
+	invocationControlState
 
 	apiIOMeta apiIOMeta
 }
@@ -207,11 +215,17 @@ func (c *Context) Client() (*tlsapi.Client, error) {
 }
 
 func (c *Context) DoRaw(method, path string, query map[string]string, header map[string]string, body []byte) (tlsapi.Response, error) {
-	return c.doRaw(context.Background(), method, path, query, header, body)
+	return c.doRaw(c.ExecutionContext(), method, path, query, header, body)
 }
 
 func (c *Context) doRaw(ctx context.Context, method, path string, query map[string]string, header map[string]string, body []byte) (tlsapi.Response, error) {
 	c.beginRequest()
+	if err := c.authorizeBusinessRequest(method, path); err != nil {
+		return tlsapi.Response{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return tlsapi.Response{}, &execution.Failure{Kind: "validation", Stage: "preflight", Outcome: execution.OutcomeNotSent, Cause: err}
+	}
 	client, err := c.Client()
 	if err != nil {
 		var endpointError *url.Error
@@ -477,6 +491,7 @@ func (c *Context) validateDryRunScope(group string, rest []string) error {
 }
 
 func (c *Context) Close() {
+	c.closeExecutionContext()
 	if c.traceW != nil {
 		_ = c.traceW.Close()
 		c.traceW = nil

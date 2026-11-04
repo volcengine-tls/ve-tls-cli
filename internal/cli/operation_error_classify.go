@@ -12,14 +12,14 @@ import (
 // classifyTypedOperationError prioritizes the outermost nonempty kind while
 // keeping the matching code and delivery exit on that same error layer.
 func classifyTypedOperationError(err error, requestID string, statusCode int, group string) (errPayload, int, bool) {
+	var interaction *NonInteractiveInteractionError
+	if !errors.Is(err, ErrSSORollbackFailure) && !errors.Is(err, ErrSSOLogoutPartialFailure) && !errors.Is(err, ErrLogoutPartialFailure) && errors.As(err, &interaction) {
+		return errPayload{Kind: "interaction_required", ErrorCode: "InteractionRequired", Hint: interaction.Hint, RequestID: requestID, StatusCode: statusCode}, 1, true
+	}
 	if frozenAuthClassification(err, group) {
 		return errPayload{}, 0, false
 	}
-	typed, kind := firstTypedOperationError(err)
-	if typed == nil {
-		return errPayload{}, 0, false
-	}
-	if kind == "validation" && execution.ErrorOutcome(err, "") == execution.OutcomeNotSent {
+	if execution.ErrorOutcome(err, "") == execution.OutcomeNotSent {
 		if errors.Is(err, context.Canceled) {
 			return errPayload{RequestID: requestID, StatusCode: statusCode, Kind: "cancelled", ErrorCode: "RequestCancelled", Hint: "the request was cancelled before sending"}, 2, true
 		}
@@ -27,12 +27,19 @@ func classifyTypedOperationError(err error, requestID string, statusCode int, gr
 			return errPayload{RequestID: requestID, StatusCode: statusCode, Kind: "deadline", ErrorCode: "RequestDeadlineExceeded", Hint: "the deadline expired before sending"}, 2, true
 		}
 	}
+	typed, kind := firstTypedOperationError(err)
+	if typed == nil {
+		return errPayload{}, 0, false
+	}
 	payload := errPayload{RequestID: requestID, StatusCode: statusCode, Kind: kind}
 	if coded, ok := typed.(interface{ ErrorCode() string }); ok {
 		payload.ErrorCode = strings.TrimSpace(coded.ErrorCode())
 	}
 	code := 2
 	switch kind {
+	case "permission":
+		code = 1
+		payload.Hint = "inspect with --dry-run; explicitly permit writes using --allow-write or context.execution.allow_write=true"
 	case "validation":
 		code = 1
 		payload.Hint = "check --input and --context fields against the operation contract"

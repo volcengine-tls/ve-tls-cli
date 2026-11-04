@@ -47,7 +47,7 @@ volclog --profile '<profile>' tool describe log.search
 
 ### 创建项目和主题
 
-先用 `--dry-run` 在本地校验请求形状，然后再发送。预执行是本地校验门；它不检查远程是否存在、权限或 TLS 服务行为。
+先用 `--dry-run` 在本地校验请求形状，然后再发送。预执行不需要写入许可，也不会执行业务请求。以下写操作仅在用户已授权这些变更时使用 `--allow-write`；这是 CLI 闸门，不授予 IAM 权限。
 
 `project.create` 在体中要求 `ProjectName` 和 `Region`：
 
@@ -56,7 +56,7 @@ volclog --profile '<profile>' tool exec project.create \
   --input '{"ProjectName":"<project-name>","Region":"<region>","Description":"example project"}' \
   --dry-run
 
-volclog --profile '<profile>' tool exec project.create \
+volclog --profile '<profile>' --allow-write tool exec project.create \
   --input '{"ProjectName":"<project-name>","Region":"<region>","Description":"example project"}'
 ```
 
@@ -67,7 +67,7 @@ volclog --profile '<profile>' tool exec topic.create \
   --input '{"ProjectId":"<project-id>","TopicName":"<topic-name>","ShardCount":<shard-count>,"Ttl":<ttl-days>}' \
   --dry-run
 
-volclog --profile '<profile>' tool exec topic.create \
+volclog --profile '<profile>' --allow-write tool exec topic.create \
   --input '{"ProjectId":"<project-id>","TopicName":"<topic-name>","ShardCount":<shard-count>,"Ttl":<ttl-days>}'
 ```
 
@@ -88,7 +88,7 @@ volclog --profile '<profile>' workflow exec log.ingest \
   --input '{"TopicId":"<topic-id>","Input":"file://sample.log","InputFormat":"lines"}' \
   --context '{"execution":{"dry_run":true}}'
 
-volclog --profile '<profile>' workflow exec log.ingest \
+volclog --profile '<profile>' --allow-write workflow exec log.ingest \
   --input '{"TopicId":"<topic-id>","Input":"file://sample.log","InputFormat":"lines"}'
 ```
 

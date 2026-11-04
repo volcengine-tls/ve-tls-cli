@@ -381,6 +381,7 @@ func newShortcutExecutionCaptureContext(
 	}
 	client.HTTP.Transport = transport
 	ctx := newContext(&bytes.Buffer{}, &bytes.Buffer{}, output.FormatJSON, "", "")
+	ctx.AllowWrite = true // Authorize write cases against this capture transport.
 	ctx.client = client
 	profile := config.Profile{
 		AccessKeyID:     "ak",

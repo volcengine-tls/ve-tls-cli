@@ -53,6 +53,7 @@ func newDoctorTestContext(t *testing.T, cfg config.Config) *Context {
 	ctx := newContext(&bytes.Buffer{}, &bytes.Buffer{}, output.FormatJSON, "", "")
 	ctx.cfg = cfg
 	ctx.cfgPath = cfgPath
+	ctx.AllowWrite = true // Authorize the fixture's synthetic TLS routes; production gating is tested separately.
 	return ctx
 }
 

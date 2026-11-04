@@ -119,7 +119,7 @@ volclog --profile default tool exec project.describe-projects
 Context validation rejects unknown fields, incorrect types, and conflicting aliases before applying the context. Supported legacy forms remain available: `trace` as a boolean, string, or object; `execution.artifact` as a boolean, string, or object; `execution.output`/`output_mode`; `execution.projection` as a string, object, or array; and `execution.page.all`/`page_all` for supported paginated tools.
 
 ```bash
-volclog --profile default tool exec project.create \
+volclog --profile default --allow-write tool exec project.create \
   --input '{"ProjectName":"my-project","Region":"cn-beijing","Description":"example"}'
 
 volclog --profile default tool exec project.create \
@@ -164,6 +164,9 @@ volclog --profile default workflow exec log.export \
 - `execution.dry_run` — skip the network call
 - `execution.artifact` — force file delivery
 - `execution.projection` — project the raw result with a JMESPath expression before the envelope is built
+- `execution.non_interactive` — disable prompts, without cancelling automatic non-TTY mode
+- `execution.allow_write` — permit an authorized CLI write; this is not an IAM grant
+- `execution.timeout` — set a positive Go duration for the whole invocation
 
 `workflow exec` explicitly rejects `execution.page` and `execution.page_all` in context, including `false` values. Pagination semantics are workflow-specific; follow the guidance in `workflow describe` for the workflow you are using.
 
@@ -253,7 +256,15 @@ Malformed JSON-like query values are replaced with `[unparseable query omitted]`
 
 ### 6.3 Write-operation safety
 
-For write operations, run with `--dry-run` first to validate the request locally before sending it to TLS. A dry-run plan reports whether local checks (profile, endpoint, region, body JSON) passed.
+TLS writes and raw requests whose operation is unknown are rejected by default with `error.kind=permission` and `error.code=WritePermissionRequired`; this includes an unknown raw GET and `volclog-human` write shortcuts. For a write already authorized by the user, pass `--allow-write` or set `context.execution.allow_write=true` for `tool exec` / `workflow exec`. This CLI gate does not grant IAM permissions. Reviewed reads, including POST `log.search`, need no write permission. Do not add the flag to every call. A global `--allow-write` conflicts with explicit context `allow_write=false`.
+
+Use `--dry-run` to validate a write locally before sending it. A dry-run is exempt from the write gate and does not execute the business request; it does not prove service acceptance.
+
+### 6.4 Non-interactive execution and total timeout
+
+Without a TTY, non-interactive mode is automatic. `--non-interactive` or `context.execution.non_interactive=true` enables it explicitly; context `false` cannot disable automatic non-TTY mode and conflicts with an explicit global `true`.
+
+`--timeout 30s` or `context.execution.timeout="30s"` sets an optional whole-invocation budget as a positive Go duration. It starts at command invocation and is not reset for each page or batch; there is no overall default. This budget is independent of the profile's per-request `timeout_seconds`. Equal global and context durations are accepted; unequal values conflict. SIGINT, SIGTERM, and `RunContext` cancellation propagate through the same work: before sending, the outcome is `not_sent`; after sending, an uncertain outcome remains `unknown`. Completed partial results remain available under the C3 completeness contract.
 
 For provider-specific login, refresh, and logout behavior, see [Authentication](2-Authentication.md). For profile and runtime precedence, see [Configuration](3-Configuration.md).
 
@@ -297,7 +308,9 @@ volclog --profile default --output json --output-mode file --output-dir ./out \
 
 ### 7.5 Frozen output for interactive auth commands
 
-`login`, `logout`, `sso`, and `configure sso` always emit their exact JSON result shape to stdout. `--output jsonl|table` may parse but does not change the frozen JSON shape (JSON is forced); do not rely on it to change the output. The following are rejected before any auth side effect runs: non-`stdout` `--output-mode`, `--output-file`, `--jmes-filter`, `--trace-dir`, and `--secrets-file`. `--output-dir` alone and `--trace-redact` without `--trace-dir` do not divert the frozen result.
+`login`, `logout`, `sso`, and `configure sso` always emit their exact JSON result shape to stdout. `--output jsonl|table` may parse but does not change the frozen JSON shape (JSON is forced); do not rely on it to change the output. The following are rejected before any auth side effect runs: non-`stdout` `--output-mode`, `--output-file`, `--jmes-filter`, `--trace-dir`, and `--secrets-file`. `--output-dir` alone and a valid `--trace-redact` without `--trace-dir` do not divert the frozen result.
+
+In non-interactive mode, `login` uses a device code without opening a browser. A session replacement requiring confirmation returns `interaction_required`; select another `--profile` or use an interactive terminal. There is no `--force` override. SSO selects a single account or role automatically, but fails immediately when a required choice has multiple candidates and was not supplied. The transactional token is rolled back and configuration changes are not committed on failure; a registration cache may already have been written.
 
 ## 8. Filtering, projection, and envelopes
 
@@ -369,7 +382,7 @@ Each trace event records the event type, and where applicable: the HTTP method a
 
 The `error_message` field stores the transport error string directly. A transport error can include the full request URL and query values. Never put credentials or other secrets in query parameters. Treat trace files as sensitive diagnostic artifacts: keep their permissions restricted and share them only after inspection.
 
-`--trace-redact` accepts `on` (default) and `off`, plus aliases (`true`/`1`/`yes`/`enabled`/`strict`/`default` map to `on`; `false`/`0`/`no`/`disabled` map to `off`). Unrecognized values default to `on`. `--trace-redact off` is accepted and normalized but does not disable the forced structured-field redaction and does not emit raw header, query, or body values.
+`--trace-redact` accepts `on` (default), `true`, `1`, `yes`, `enabled`, `strict`, and `default`; all enable redaction. `off`, `false`, `0`, `no`, `disabled`, and unknown values fail validation. `context.trace=false` or `context.trace.enabled=false` disables even a globally configured trace directory.
 
 ### 9.2 Doctor and Request ID
 
@@ -390,7 +403,7 @@ The `requestId` in the envelope (or `x-tls-requestid` response header) identifie
 volclog-human project list --output table
 volclog-human topic create --describe
 volclog-human index create --print-request-template=required > index_req.json
-volclog-human index create --topic-id 'YOUR_TOPIC_ID' --request file://index_req.json
+volclog-human --allow-write index create --topic-id 'YOUR_TOPIC_ID' --request file://index_req.json
 ```
 
 For the complete human shortcut introduction, see [Human Shortcuts](7-Human-Shortcuts.md). For longer automation-oriented workflows, see the [Practical Guide](5-Practical-Guide.md); for advanced topics, see [Advanced](6-Advanced.md).

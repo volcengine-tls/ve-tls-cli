@@ -61,7 +61,7 @@ volclog-human --profile default collector get --rule-id 'YOUR_RULE_ID'
 
 ### 3.2 创建 Topic 和索引
 
-下面的 shortcut 会真实写入。需要预检查时，先切换到公开契约；索引使用同样方式查看 `index.create`：
+下面的 shortcut 会真实写入，并与 `tool exec` 使用同一 CLI 写入闸门。需要预检查时，先切换到公开契约；索引使用同样方式查看 `index.create`：
 
 ```bash
 volclog-human tool describe topic.create
@@ -70,17 +70,17 @@ volclog-human --profile default --dry-run tool exec topic.create \
   --input '{"ProjectId":"YOUR_PROJECT_ID","TopicName":"YOUR_TOPIC_NAME","Ttl":30,"ShardCount":1}'
 ```
 
-确认请求后，再使用 shortcut：
+对用户已授权的变更，使用带 `--allow-write` 的 shortcut。该标志只许可 CLI 动作，仍需相应 IAM 权限；生成本地请求模板不需要该标志：
 
 ```bash
-volclog-human --profile default topic create \
+volclog-human --profile default --allow-write topic create \
   --project-id 'YOUR_PROJECT_ID' \
   --topic-name 'YOUR_TOPIC_NAME' \
   --ttl 30 \
   --shard-count 1
 
 volclog-human index create --print-request-template=required > index-request.json
-volclog-human --profile default index create \
+volclog-human --profile default --allow-write index create \
   --topic-id 'YOUR_TOPIC_ID' \
   --request file://index-request.json
 ```

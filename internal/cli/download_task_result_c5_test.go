@@ -225,7 +225,7 @@ func TestDownloadTaskRunConsumableNextC5(t *testing.T) {
 			http.Error(w, "unexpected", http.StatusBadRequest)
 		}
 	})
-	code, env := outcomeCLIRun(t, []string{"tool", "exec", "log.create-download-task", "--input", downloadTaskC5Input})
+	code, env := outcomeCLIRun(t, []string{"--allow-write", "tool", "exec", "log.create-download-task", "--input", downloadTaskC5Input})
 	if code != 0 || env["status"] != "success" || requests.Load() != 1 {
 		t.Fatalf("create exit=%d requests=%d env=%#v", code, requests.Load(), env)
 	}
@@ -283,7 +283,7 @@ func TestDownloadTaskRunInvalidIDAndProjectionC5(t *testing.T) {
 			_, requests := outcomeCLIServer(t, func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = w.Write([]byte(tc.response))
 			})
-			args := []string{"tool", "exec", "log.create-download-task", "--input", downloadTaskC5Input}
+			args := []string{"--allow-write", "tool", "exec", "log.create-download-task", "--input", downloadTaskC5Input}
 			if tc.projection {
 				args = append(args, "--context", `{"execution":{"projection":"TaskId"}}`)
 			}
@@ -314,7 +314,7 @@ func TestDownloadTaskRawCreateC5(t *testing.T) {
 		}
 		_, _ = w.Write([]byte(`{"TaskId":"task-1"}`))
 	})
-	code, env := outcomeCLIRun(t, []string{"raw", "--method", "POST", "--path", "/CreateDownloadTask", "--body", `{"TopicId":"topic-1","TaskName":"task-one"}`})
+	code, env := outcomeCLIRun(t, []string{"--allow-write", "raw", "--method", "POST", "--path", "/CreateDownloadTask", "--body", `{"TopicId":"topic-1","TaskName":"task-one"}`})
 	if code != 0 || env["status"] != "success" || requests.Load() != 1 {
 		t.Fatalf("exit=%d requests=%d env=%#v", code, requests.Load(), env)
 	}

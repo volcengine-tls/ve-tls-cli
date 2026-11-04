@@ -119,7 +119,7 @@ volclog --profile default tool exec project.describe-projects
 上下文会在应用前校验未知字段、错误类型和冲突的别名。既有形式继续支持：`trace` 的布尔值、字符串或对象；`execution.artifact` 的布尔值、字符串或对象；`execution.output`/`output_mode`；字符串、对象或数组形式的 `execution.projection`；以及受支持的分页工具的 `execution.page.all`/`page_all`。
 
 ```bash
-volclog --profile default tool exec project.create \
+volclog --profile default --allow-write tool exec project.create \
   --input '{"ProjectName":"my-project","Region":"cn-beijing","Description":"example"}'
 
 volclog --profile default tool exec project.create \
@@ -164,6 +164,9 @@ volclog --profile default workflow exec log.export \
 - `execution.dry_run` — 跳过网络调用
 - `execution.artifact` — 强制文件交付
 - `execution.projection` — 在构建信封之前用 JMESPath 表达式投影原始结果
+- `execution.non_interactive` — 禁止交互提示，不能关闭非 TTY 的自动模式
+- `execution.allow_write` — 允许已授权的 CLI 写操作，不代替 IAM 授权
+- `execution.timeout` — 以正 Go duration 设置整次命令时限
 
 `workflow exec` 会显式拒绝上下文中的 `execution.page` 和 `execution.page_all`，即使值为 `false`。分页语义是工作流专属的；请遵循 `workflow describe` 中针对你所使用工作流的指导。
 
@@ -253,7 +256,15 @@ volclog --profile default raw --method POST --path /CreateProject \
 
 ### 6.3 写操作安全
 
-对于写操作，先用 `--dry-run` 运行以在本地校验请求，然后再发送到 TLS。预执行计划会报告本地检查（配置档、endpoint、region、请求体 JSON）是否通过。
+TLS 写请求和操作身份未知的 raw 请求默认被拒绝，返回 `error.kind=permission`、`error.code=WritePermissionRequired`；未知 raw GET 和 `volclog-human` 写快捷方式也受此限制。仅对用户已授权的写操作使用 `--allow-write`，或为 `tool exec` / `workflow exec` 设置 `context.execution.allow_write=true`。这是 CLI 动作闸门，不授予 IAM 权限。已复核的只读操作（包括 POST `log.search`）不需要写入许可；不要给所有调用都加该标志。全局 `--allow-write` 与上下文显式 `allow_write=false` 冲突。
+
+发送写请求前可用 `--dry-run` 本地校验。预执行免于写入闸门且不执行业务请求，但不能证明服务端会接受请求。
+
+### 6.4 非交互与整次命令超时
+
+非 TTY 时自动启用非交互模式。`--non-interactive` 或 `context.execution.non_interactive=true` 可显式启用；上下文 `false` 不能关闭非 TTY 自动模式，且与显式全局 `true` 冲突。
+
+`--timeout 30s` 或 `context.execution.timeout="30s"` 可用正 Go duration 设置可选的整次命令预算。预算从命令调用开始计时，不因翻页或分批重置，且没有整体默认值；它独立于配置档的单次请求 `timeout_seconds`。全局与上下文提供等值 duration 时可重复，不等则冲突。SIGINT、SIGTERM 和 `RunContext` 取消会向工作链传递：发送前为 `not_sent`，发送后若结果不确定仍为 `unknown`；已完成的部分结果按 C3 完整性合同保留。
 
 关于各认证方式的登录、刷新和登出行为，请参阅 [认证](2-Authentication_zh.md)。关于配置档和运行时优先级，请参阅 [配置](3-Configuration_zh.md)。
 
@@ -297,7 +308,9 @@ volclog --profile default --output json --output-mode file --output-dir ./out \
 
 ### 7.5 交互式认证命令的冻结输出
 
-`login`、`logout`、`sso` 和 `configure sso` 始终将其精确的 JSON 结果形状写入标准输出。`--output jsonl|table` 可能会被解析，但不会改变冻结的 JSON 形状（JSON 被强制）；不要依赖它来改变输出。以下选项在任何认证副作用运行之前被拒绝：非 `stdout` 的 `--output-mode`、`--output-file`、`--jmes-filter`、`--trace-dir` 和 `--secrets-file`。单独的 `--output-dir` 和不带 `--trace-dir` 的 `--trace-redact` 不会转移冻结的结果。
+`login`、`logout`、`sso` 和 `configure sso` 始终将其精确的 JSON 结果形状写入标准输出。`--output jsonl|table` 可能会被解析，但不会改变冻结的 JSON 形状（JSON 被强制）；不要依赖它来改变输出。以下选项在任何认证副作用运行之前被拒绝：非 `stdout` 的 `--output-mode`、`--output-file`、`--jmes-filter`、`--trace-dir` 和 `--secrets-file`。单独的 `--output-dir` 和不带 `--trace-dir` 的合法 `--trace-redact` 不会转移冻结的结果。
+
+非交互模式下，`login` 使用 device code 且不打开浏览器。若替换会话需要确认，立即返回 `interaction_required`；请使用其他 `--profile` 或交互式终端，没有 `--force` 覆盖。SSO 账号或角色只有一个候选时自动选择，多个候选且未指定所需选择时立即失败；失败时事务性 token 回滚、配置更改不提交，注册缓存可能已写入。
 
 ## 8. 过滤、投影与信封
 
@@ -369,7 +382,7 @@ volclog --profile default --output-dir ./out --jmes-filter 'data' \
 
 `error_message` 字段直接存储传输错误字符串。传输错误可能包含完整的请求 URL 和查询值。永远不要将凭证或其他密钥放在查询参数中。将追踪文件视为敏感的诊断工件：保持其权限受限，仅在检查后再分享。
 
-`--trace-redact` 接受 `on`（默认）和 `off`，以及别名（`true`/`1`/`yes`/`enabled`/`strict`/`default` 映射为 `on`；`false`/`0`/`no`/`disabled` 映射为 `off`）。无法识别的值默认为 `on`。`--trace-redact off` 会被接受和规范化，但不会禁用强制的结构化字段脱敏，也不会输出原始的头、查询或体值。
+`--trace-redact` 接受 `on`（默认）、`true`、`1`、`yes`、`enabled`、`strict` 和 `default`，均启用脱敏；`off`、`false`、`0`、`no`、`disabled` 和未知值会校验失败。`context.trace=false` 或 `context.trace.enabled=false` 会关闭全局配置的追踪目录。
 
 ### 9.2 Doctor 与 Request ID
 
@@ -390,7 +403,7 @@ volclog --profile default doctor --online
 volclog-human project list --output table
 volclog-human topic create --describe
 volclog-human index create --print-request-template=required > index_req.json
-volclog-human index create --topic-id 'YOUR_TOPIC_ID' --request file://index_req.json
+volclog-human --allow-write index create --topic-id 'YOUR_TOPIC_ID' --request file://index_req.json
 ```
 
 Human shortcut 的完整上手方式见 [Human Shortcuts](7-Human-Shortcuts_zh.md)。对于更长的自动化工作流，请参阅 [实用指南](5-Practical-Guide_zh.md)；对于高级主题，请参阅 [进阶](6-Advanced_zh.md)。

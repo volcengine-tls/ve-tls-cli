@@ -475,7 +475,7 @@ func toolSpecificUsageNotes(operation contract.Operation) []any {
 			"The selected profile must have endpoint and region configured. The explicit --region and --endpoint overrides in the commands below keep the target environment unambiguous.",
 			"Preflight: run volclog --profile <profile> --region <region> --endpoint <tls-endpoint> tool exec shard.describe --input '{\"TopicId\":\"<topic-id>\"}' --page-all; select a non-final readwrite shard whose next shard is contiguous and readwrite.",
 			"Plan without mutation: run volclog --profile <profile> --region <region> --endpoint <tls-endpoint> --dry-run tool exec shard.merge --input '{\"TopicId\":\"<topic-id>\",\"ShardId\":0}' after replacing the placeholders and ShardId.",
-			"Execute once after reviewing the plan: run volclog --profile <profile> --region <region> --endpoint <tls-endpoint> tool exec shard.merge --input '{\"TopicId\":\"<topic-id>\",\"ShardId\":0}'.",
+			"Execute once after reviewing the plan: run volclog --profile <profile> --region <region> --endpoint <tls-endpoint> --allow-write tool exec shard.merge --input '{\"TopicId\":\"<topic-id>\",\"ShardId\":0}'.",
 			"Dry-run validates the declared schema and request plan, including non-negative integer ShardId; TopicId UUID syntax and shard mergeability require service-side validation.",
 			"On success, read status first and then the resulting shard list from data.Shards. If the result is ambiguous, preserve error.requestId and run shard.describe again; do not retry shard.merge automatically.",
 		}
@@ -933,6 +933,14 @@ func compactToolContextSchema(schema map[string]any) map[string]any {
 	if len(props) == 0 {
 		return out
 	}
+	compactEffects := map[string]string{
+		"profile":         "Explicit profile ignores credential and target environment values; conflicting --profile fails.",
+		"secrets_file":    "Resolve selectors first; load supported VOLCENGINE_* values only if selected.",
+		"region":          "Override region ahead of defaults; conflicting --region fails. Endpoint is independent.",
+		"endpoint":        "Override endpoint ahead of defaults; conflicting --endpoint fails. Never derived from region.",
+		"contract_digest": "Soft check warns on mismatch; execution continues.",
+		"execution":       "Controls are nested under context.execution.",
+	}
 	compactProps := make(map[string]any, len(props))
 	for name, raw := range props {
 		field, _ := raw.(map[string]any)
@@ -949,6 +957,12 @@ func compactToolContextSchema(schema map[string]any) map[string]any {
 		}
 		if name != "profile" && name != "trace" {
 			delete(compactField, "default")
+		}
+		if effect, ok := compactEffects[name]; ok {
+			compactField["runtime_effect"] = effect
+		}
+		if name == "profile" && compactField["discover_values"] != nil {
+			compactField["discover_values"] = "Run volclog configure list; omit for the active profile."
 		}
 		compactProps[name] = compactField
 	}
@@ -986,6 +1000,22 @@ func compactToolExecutionSchema(schema map[string]any) map[string]any {
 	modeDescription := toolAnyToString(modeField["description"])
 	if modeDescription != "" && modeDescription == toolAnyToString(outputMode["description"]) {
 		modeField["description"] = "Same as execution.output_mode."
+	}
+	compactDescriptions := map[string]string{
+		"projection":      "JMES string, {jmes}, or nested arrays; validate all, use first non-empty.",
+		"artifact":        "File output: boolean, path, or {path,dir}; aliases must agree.",
+		"output_mode":     "Empty is unset; stdout or file/artifact. Case-insensitive; trim whitespace. Aliases must agree.",
+		"output":          "Non-empty mode/path/dir must agree with artifact and output_mode aliases.",
+		"page":            "Auto-pagination when supported; page_all must agree.",
+		"page_all":        "Alias for page.all; both must agree.",
+		"non_interactive": "Disable prompts; false cannot cancel non-TTY mode.",
+		"allow_write":     "CLI gate, not IAM; reviewed reads incl. POST log.search are exempt. Omission inherits global or false; false conflicts with global true.",
+		"timeout":         "Positive Go duration from invocation start; no overall default. Separate from profile HTTP timeout; equal global values may repeat.",
+	}
+	for name, description := range compactDescriptions {
+		if field, ok := compactProps[name].(map[string]any); ok {
+			field["description"] = description
+		}
 	}
 	out["properties"] = compactProps
 	return out
@@ -1170,7 +1200,7 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 			"description":    "Trace configuration for request/response diagnostics.",
 			"when_to_use":    "Set this when you need troubleshooting artifacts or transport traces.",
 			"default":        false,
-			"runtime_effect": "Runtime enables trace capture, chooses the trace directory, and normalizes legacy strict/default redact inputs to the current on/off setting.",
+			"runtime_effect": "Selects the trace directory; false or enabled:false disables global trace. Redaction stays on; on/true/1/yes/enabled/strict/default are accepted, off and other values are rejected.",
 		},
 		"contract_digest": {
 			"type":           "string",
@@ -1203,7 +1233,10 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 					"properties": map[string]any{
 						"enabled": map[string]any{"type": "boolean"},
 						"dir":     map[string]any{"type": "string"},
-						"redact":  map[string]any{"type": "string"},
+						"redact": map[string]any{
+							"type": "string",
+							"enum": []any{"on", "true", "1", "yes", "enabled", "strict", "default"},
+						},
 					},
 				},
 			}
@@ -1212,6 +1245,10 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 			for _, raw := range forms {
 				if form, ok := raw.(map[string]any); ok && form["type"] == "object" {
 					form["additionalProperties"] = false
+					props, _ := form["properties"].(map[string]any)
+					if redact, ok := props["redact"].(map[string]any); ok {
+						redact["enum"] = []any{"on", "true", "1", "yes", "enabled", "strict", "default"}
+					}
 				}
 			}
 		}

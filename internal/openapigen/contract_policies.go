@@ -190,11 +190,44 @@ func applyContractPolicies(catalog contract.Catalog, policies, usage, docs map[s
 			return contract.Catalog{}, fmt.Errorf("unknown usage constraint operation IDs: %v", unknownUsage)
 		}
 	}
-	context, err := contract.ExpandContextSchema(catalog.ContextSchema, catalog.ExecutionSchema)
+	// The checked-in bootstrap catalog can predate the current control fields.
+	// Preserve its other controls while refreshing the shared execution schema.
+	execution := contract.JSONSchema(cloneToolSchemaMap(map[string]any(catalog.ExecutionSchema)))
+	executionProps, ok := execution["properties"].(map[string]any)
+	if !ok {
+		return contract.Catalog{}, errors.New("execution schema properties are missing")
+	}
+	defaultExecutionProps := defaultToolExecutionSchema()["properties"].(map[string]any)
+	for _, name := range []string{"non_interactive", "allow_write", "timeout"} {
+		executionProps[name] = cloneToolSchemaValue(defaultExecutionProps[name])
+	}
+	context, err := contract.ExpandContextSchema(catalog.ContextSchema, execution)
 	if err != nil {
 		return contract.Catalog{}, fmt.Errorf("expand operation catalog context: %w", err)
 	}
-	return contract.NewCatalog(catalog.ContractVersion, context, catalog.ExecutionSchema, operations)
+	contextProps, ok := context["properties"].(map[string]any)
+	if !ok {
+		return contract.Catalog{}, errors.New("context schema properties are missing")
+	}
+	trace, _ := contextProps["trace"].(map[string]any)
+	defaultContextProps := defaultToolContextSchema()["properties"].(map[string]any)
+	defaultTrace := defaultContextProps["trace"].(map[string]any)
+	if trace != nil {
+		trace["runtime_effect"] = defaultTrace["runtime_effect"]
+		forms, _ := trace["oneOf"].([]any)
+		for _, raw := range forms {
+			form, _ := raw.(map[string]any)
+			if form["type"] != "object" {
+				continue
+			}
+			props, _ := form["properties"].(map[string]any)
+			redact, _ := props["redact"].(map[string]any)
+			if redact != nil {
+				redact["enum"] = defaultToolTraceRedactValues()
+			}
+		}
+	}
+	return contract.NewCatalog(catalog.ContractVersion, context, execution, operations)
 }
 
 func policyInputPaths(root string, paths []string) (string, string, string, error) {

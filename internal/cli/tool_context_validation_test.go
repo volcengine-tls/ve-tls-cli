@@ -106,7 +106,7 @@ func TestToolContextValidationAcceptsLegacyFormsAndAliases(t *testing.T) {
 		{"empty fields", `{"profile":" ","secrets_file":"","region":"","endpoint":"","contract_digest":"","trace":"","execution":{"artifact":"","output_mode":"","output":{"mode":"","path":"","dir":""},"projection":""}}`, false, "", "", false, ""},
 		{"boolean trace and artifact", `{"trace":false,"execution":{"artifact":false,"output_mode":" StDoUt "}}`, false, "", "", false, ""},
 		{"string artifact and equivalent aliases", `{"trace":"dir","execution":{"artifact":" result.json ","output_mode":" FILE ","output":{"mode":"Artifact","path":"result.json"},"page":{"all":true},"page_all":true,"projection":["",{"jmes":" name "}]}}`, true, "result.json", "", true, "name"},
-		{"object artifact and output dir", `{"trace":{"enabled":true,"dir":"dir","redact":"safe"},"execution":{"artifact":{"path":"result.json","dir":"out"},"output_mode":"artifact","output":{"mode":"file","path":"","dir":"out"},"page":{"all":false},"page_all":false,"projection":["",["first","second"]]}}`, true, "result.json", "out", false, "first"},
+		{"object artifact and output dir", `{"trace":{"enabled":true,"dir":"dir","redact":"strict"},"execution":{"artifact":{"path":"result.json","dir":"out"},"output_mode":"artifact","output":{"mode":"file","path":"","dir":"out"},"page":{"all":false},"page_all":false,"projection":["",["first","second"]]}}`, true, "result.json", "out", false, "first"},
 		{"output dir without output mode", `{"execution":{"output_mode":"artifact","output":{"dir":"out"}}}`, true, "", "out", false, ""},
 		{"output file without other alias", `{"execution":{"output":{"mode":"file","path":"file","dir":"out"}}}`, true, "file", "out", false, ""},
 		{"empty nested objects", `{"trace":{},"execution":{"artifact":{},"output":{},"page":{},"projection":{}}}`, true, "", "", false, ""},
@@ -298,7 +298,7 @@ func TestToolAndWorkflowExecValidContextRunsAndDryRuns(t *testing.T) {
 	for _, tt := range tests {
 		for _, dryRun := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/dry_run=%t", tt.name, dryRun), func(t *testing.T) {
-				contextJSON, err := json.Marshal(map[string]any{"region": "cn-beijing", "endpoint": contextServer.URL, "execution": map[string]any{"dry_run": dryRun}})
+				contextJSON, err := json.Marshal(map[string]any{"region": "cn-beijing", "endpoint": contextServer.URL, "execution": map[string]any{"dry_run": dryRun, "allow_write": true}})
 				if err != nil {
 					t.Fatal(err)
 				}

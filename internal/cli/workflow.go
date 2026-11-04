@@ -225,14 +225,17 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 
 	cfg := toolExecContext{Execution: map[string]any{}}
 	if strings.TrimSpace(contextArg) != "" {
-		cfg, err = loadToolExecContext(contextArg)
+		cfg, err = loadToolExecContext(contextArg, ctx)
 		if err != nil {
 			return nil, err
 		}
 	}
+	if err := ctx.applyExecutionControls(cfg); err != nil {
+		return nil, err
+	}
 	input := map[string]any{}
 	if strings.TrimSpace(inputArg) != "" {
-		input, err = readToolJSONObjectFlag("--input", inputArg)
+		input, err = readToolJSONObjectFlag("--input", inputArg, ctx)
 		if err != nil {
 			return nil, err
 		}

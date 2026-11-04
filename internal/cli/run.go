@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
@@ -14,7 +17,12 @@ import (
 // and the real SSO adapter. Tests that need to inject fakes call
 // runWithLoginAdapterFactory directly.
 func Run(args []string, stdout, stderr io.Writer) int {
-	return runWithLoginAdapterFactory(args, stdout, stderr, newProductionLoginAdapter, newProductionSSOAdapter)
+	return RunContext(context.Background(), args, stdout, stderr)
+}
+
+// RunContext runs one invocation under the supplied cancellation context.
+func RunContext(parent context.Context, args []string, stdout, stderr io.Writer) int {
+	return runWithLoginAdapterFactoryContext(parent, args, stdout, stderr, newProductionLoginAdapter, newProductionSSOAdapter)
 }
 
 // runWithLoginAdapterFactory contains the full Run pipeline. The factory
@@ -23,13 +31,28 @@ func Run(args []string, stdout, stderr io.Writer) int {
 // pass fake factories for a single invocation so no process-level mutable state
 // is shared.
 func runWithLoginAdapterFactory(args []string, stdout, stderr io.Writer, factory loginAdapterFactory, ssoFactory ssoAdapterFactory) int {
+	return runWithLoginAdapterFactoryContext(context.Background(), args, stdout, stderr, factory, ssoFactory)
+}
+
+func runWithLoginAdapterFactoryContext(parent context.Context, args []string, stdout, stderr io.Writer, factory loginAdapterFactory, ssoFactory ssoAdapterFactory) int {
+	startedAt := time.Now()
 	invocation, exitCode, done := prepareRunInvocation(args, stdout, stderr)
 	if done {
 		return exitCode
 	}
+	invocation.ctx.initializeExecutionContext(parent, startedAt)
 	defer invocation.ctx.Close()
+	if invocation.ctx.TimeoutExplicit {
+		invocation.ctx.setExecutionTimeout(invocation.ctx.Timeout)
+	}
 
+	if exitCode, done = cancelBeforeRunStep(invocation, stdout, stderr); done {
+		return exitCode
+	}
 	if exitCode, done = preflightRunInvocation(invocation, stdout, stderr); done {
+		return exitCode
+	}
+	if exitCode, done = cancelBeforeRunStep(invocation, stdout, stderr); done {
 		return exitCode
 	}
 	out, dispatchExitCode, err, done := dispatchRunInvocation(invocation, stdout, stderr, factory, ssoFactory)
@@ -37,6 +60,19 @@ func runWithLoginAdapterFactory(args []string, stdout, stderr io.Writer, factory
 		return dispatchExitCode
 	}
 	return renderRunResult(invocation, stdout, stderr, out, dispatchExitCode, err)
+}
+
+func cancelBeforeRunStep(invocation *runInvocation, stdout, stderr io.Writer) (int, bool) {
+	err := invocation.ctx.ExecutionContext().Err()
+	if err == nil {
+		return 0, false
+	}
+	kind := "cancelled"
+	if errors.Is(err, context.DeadlineExceeded) {
+		kind = "deadline"
+	}
+	failure := &execution.Failure{Kind: "validation", Code: "InvalidRequest", Stage: "preflight", Outcome: execution.OutcomeNotSent, Cause: err}
+	return writeRunError(invocation.ctx, stdout, stderr, invocation.group, invocation.rest, failure, kind, "the invocation ended before sending", invocation.outputMode, 2), true
 }
 
 func knownFileDeliveryFormat(group string, rest []string, format output.Format) output.Format {
@@ -290,9 +326,9 @@ func usageText() string {
 	var b strings.Builder
 	b.WriteString("Usage:\n")
 	if currentEdition() == cliEditionVolclog {
-		b.WriteString("  volclog [--profile <name>] [--region <region>] [--endpoint <url>] [--output json|jsonl] [--output-mode stdout|file] [--output-dir <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact <enabled>] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
+		b.WriteString("  volclog [--profile <name>] [--region <region>] [--endpoint <url>] [--output json|jsonl] [--output-mode stdout|file] [--output-dir <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact <on>] [--secrets-file <path>] [--timeout <duration>] [--non-interactive] [--allow-write] [--dry-run] <group> <command> [args]\n\n")
 	} else {
-		b.WriteString("  volclog [--profile <name>] [--region <region>] [--endpoint <url>] [--output json|jsonl|table] [--output-mode stdout|file] [--output-dir <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact <enabled>] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
+		b.WriteString("  volclog [--profile <name>] [--region <region>] [--endpoint <url>] [--output json|jsonl|table] [--output-mode stdout|file] [--output-dir <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact <on>] [--secrets-file <path>] [--timeout <duration>] [--non-interactive] [--allow-write] [--dry-run] <group> <command> [args]\n\n")
 	}
 	b.WriteString("主入口（Agent / 自动化优先）:\n")
 	if currentEdition() == cliEditionVolclog {

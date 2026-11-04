@@ -18,7 +18,7 @@ import (
 func TestClosedStdoutReportsConfirmedWrite(t *testing.T) {
 	const helperEnv = "VOLCLOG_TEST_CLOSED_STDOUT_HELPER"
 	if os.Getenv(helperEnv) == "1" {
-		os.Args = []string{"volclog", "tool", "exec", "project.create", "--input", `{"ProjectName":"test","Region":"cn-beijing"}`}
+		os.Args = []string{"volclog", "--allow-write", "tool", "exec", "project.create", "--input", `{"ProjectName":"test","Region":"cn-beijing"}`}
 		main()
 		return
 	}

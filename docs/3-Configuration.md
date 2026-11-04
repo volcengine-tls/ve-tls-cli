@@ -145,13 +145,13 @@ With a non-empty explicit profile selector, the profile must exist. Its inline o
 
 Without an explicit profile, a complete environment AK/SK pair (`VOLCENGINE_ACCESS_KEY_ID` and `VOLCENGINE_ACCESS_KEY_SECRET`) selects an environment-only identity. Region/endpoint precedence is: runtime override > environment > project default; timeout is project default > `60` seconds. If the environment pair is incomplete, the selected profile is used, with region/endpoint precedence runtime override > profile > project default and timeout profile > project default > `60` seconds. In this legacy path, the static client can fill missing AK/SK and token from the environment when a key is missing. Environment region/endpoint alone do not override the profile. Missing required region or endpoint fails resolution.
 
-Context has no timeout field.
+The timeout precedence above is for each HTTP request. An optional `--timeout 30s` or `context.execution.timeout` sets a separate whole-invocation budget; it has no overall default, starts when the command begins, and is not reset between pages or batches. Use a positive Go duration. Equal global and context durations may be repeated; different values conflict.
 
 ### 5.2 Dynamic provider mode
 
 For dynamic provider modes (SSO, Console Login, RAM Role ARN, OIDC, ECS Role), identity comes from the provider; environment AK/SK and token do not replace it. With an explicit profile, region/endpoint precedence is runtime override > profile > project default, ignoring environment targets. Without an explicit profile, it is runtime override > environment region/endpoint > profile > project default.
 
-Timeout precedence is: profile > project default > `60` seconds. There is no global or context timeout override.
+Per-request HTTP timeout precedence is: profile > project default > `60` seconds. The optional whole-invocation `--timeout` / `context.execution.timeout` budget is independent of that HTTP timeout.
 
 ### 5.3 Runtime selector conflicts
 
@@ -246,17 +246,22 @@ Output and trace are controlled by global flags. Detailed execution semantics be
 | `--output-file` | file path | none |
 | `--jmes-filter` | JMESPath expression | none |
 | `--trace-dir` | directory path | none (tracing off) |
-| `--trace-redact` | `on`, `off` (and aliases) | `on` |
+| `--trace-redact` | `on` and enabled aliases | `on` |
+| `--non-interactive` | boolean flag | Automatically enabled without a TTY |
+| `--allow-write` | boolean flag | Disabled |
+| `--timeout` | Positive Go duration, e.g. `30s` | No overall deadline |
 
 On the default `volclog` agent path, `--output table` is rejected; use `--output json` or `--output jsonl`. The `table` format is supported only by `volclog-human` and only for specific shortcut surfaces: `project`/`topic`/`metric-topic` list and get, `index get`, and `log search`. Not every human shortcut supports table.
 
-`--trace-redact` accepts `on`, `true`, `1`, `yes`, `enabled`, `strict`, `default` (all map to `on`) and `off`, `false`, `0`, `no`, `disabled` (all map to `off`). Any unrecognized value defaults to `on`.
+`--trace-redact` accepts `on`, `true`, `1`, `yes`, `enabled`, `strict`, and `default`; all enable redaction. `off`, `false`, `0`, `no`, `disabled`, and unknown values fail validation. `context.trace=false` or `context.trace.enabled=false` disables tracing even when a global `--trace-dir` is set.
 
-Current trace writing always keeps structured header and query fields to keys and bodies to hashes. `--trace-redact off` is accepted and normalized but does not disable that forced structured-field redaction and does not emit raw header, query, or body values. The transport `error_message` field remains the separate sensitive exception: it stores the transport error string directly, which can include a URL and query values.
+Current trace writing keeps structured header and query fields to keys and bodies to hashes. The transport `error_message` field remains a separate sensitive exception: it stores the transport error string directly, which can include a URL and query values.
 
 These global flags can be placed before the command group or, for `raw`, `tool`, `workflow`, `project`, `topic`, `metric-topic`, `index`, `log`, `host-group`, and `collector`, after the group as trailing globals. `--profile` and `--secrets-file` are leading-only and cannot be used as trailing globals.
 
-`login`, `logout`, `sso`, and `configure sso` always emit their exact JSON result shape to stdout. `--output jsonl|table` may parse but does not change the frozen JSON shape (JSON is forced). The following are rejected before any auth side effect runs: non-`stdout` `--output-mode`, `--output-file`, `--jmes-filter`, `--trace-dir`, and `--secrets-file`. `--output-dir` alone and `--trace-redact` without `--trace-dir` do not divert the frozen result and are not rejected.
+`login`, `logout`, `sso`, and `configure sso` always emit their exact JSON result shape to stdout. `--output jsonl|table` may parse but does not change the frozen JSON shape (JSON is forced). The following are rejected before any auth side effect runs: non-`stdout` `--output-mode`, `--output-file`, `--jmes-filter`, `--trace-dir`, and `--secrets-file`. `--output-dir` alone and a valid `--trace-redact` without `--trace-dir` do not divert the frozen result and are not rejected.
+
+Without a TTY, or with `--non-interactive`, Console Login uses device-code authorization without opening a browser. If replacing a session needs confirmation, it returns `interaction_required`; use another `--profile` or an interactive terminal. There is no `--force` override. SSO automatically selects a single account or role, but fails immediately when several candidates require a selection and none was supplied. On that failure, the transactional token is rolled back and configuration changes are not committed; a registration cache may already have been written.
 
 ## 8. Safe inspection, cleanup, and examples
 

@@ -30,6 +30,8 @@ Treat this file as the dominant generic operating model for `volclog`, not as an
 - A non-empty explicit profile must exist. Its static credentials and token cannot be replaced or filled from the environment; incomplete static AK/SK fails. Dynamic identities remain provider-backed. Without an explicit profile, the existing environment precedence applies.
 - Global `--region`/`--endpoint` and context `region`/`endpoint` override profile, applicable environment, and project defaults. Different non-empty global and context values for the same field fail validation.
 - Context validation rejects unknown fields, wrong types, and conflicting aliases before applying the context. Legacy trace boolean/string/object and execution artifact/output/projection forms remain supported; page controls are for supported tools, not workflows.
+- Non-TTY runs are automatically non-interactive; `--non-interactive` or `context.execution.non_interactive=true` also enables the mode. Context `false` cannot turn off automatic non-TTY mode and conflicts with global `true`.
+- `--timeout 30s` or `context.execution.timeout="30s"` supplies an optional positive Go-duration budget from invocation start, shared across pages and batches. It is separate from profile `timeout_seconds`; equal global/context durations are accepted, different ones conflict.
 - A global flag that needs a separate value will not consume a following `--flag`; prefix a relative path beginning with `--` with `./`.
 - Never read, print, export, or persist AK/SK or token values in prompts, memory, request artifacts, or skill content.
 
@@ -84,7 +86,12 @@ Discover -> Describe -> Exec -> Read Result
 - Do not pipe `volclog` output into `jq` or `grep` just to rediscover schema or field paths.
 - Read the full JSON envelope first; use `--jmes-filter` only when you already know the envelope path you want.
 - Prefer `--dry-run` before any write or destructive change, but only on `raw`, `tool exec`, or `workflow exec`.
+- TLS writes and unknown raw operations, including unknown GETs, fail with `permission` / `WritePermissionRequired` unless the CLI write gate is enabled. Only for a user-authorized write, use `--allow-write`; `tool exec` / `workflow exec` can instead use `context.execution.allow_write=true`, but raw has no context. This is not an IAM grant. Reviewed reads such as POST `log.search` and dry-runs do not need it; human shortcuts use the same gate. Global `true` conflicts with explicit context `false`.
 - Treat `--dry-run` as contract or plan validation, not proof that the business query is correct.
+- Trace redaction accepts only `on`/`true`/`1`/`yes`/`enabled`/`strict`/`default`; `off`/`false`/`0`/`no`/`disabled` and unknown values fail. `context.trace=false` or `enabled:false` disables a global trace directory.
+- In non-interactive login, use the device-code flow without a browser. Session replacement requiring confirmation returns `interaction_required`: use another `--profile` or an interactive terminal; there is no `--force`. SSO selects a single candidate automatically but fails without the required choice when multiple candidates exist; the transactional token is rolled back and config changes are not committed, though registration cache may already exist.
+- Darwin/Linux interactive prompts use cancellable polling. A Windows console without read-deadline support returns `interaction_required`; provide explicit selectors to avoid the prompt. Runtime verification of this behavior has been on Darwin only.
+- SIGINT, SIGTERM, and `RunContext` cancellation propagate. Before send the outcome is `not_sent`; after send an uncertain result remains `unknown`. Preserve completed partial results and reconcile ambiguous writes before any retry.
 - A dry-run `request_preview` masks known sensitive keys recursively, including sensitive `Contents`/`LogTags` key/value entries; malformed bodies are omitted and `redacted_fields` may list paths. This affects only the preview, not the wire request or body hash. Ordinary body strings are not guaranteed to be recognized as secrets.
 - Malformed JSON-like query values use `[unparseable query omitted]`; displayed endpoints omit user information, query, and fragment.
 - `summary.remoteOutcome` distinguishes `not_sent`, `unknown`, `accepted`, `success`, `failed`, and `partial`; `summary.deliveryOutcome` is independently `success` or `failed`. Download-task creation reports `accepted`, not completion; inspect `summary.async` and the task-specific `summary.asyncTasks` on a later status query. The CLI does not wait automatically; see [references/sops.md](references/sops.md) for the single-call next steps.
@@ -105,6 +112,7 @@ Use this table as the default first response after a failed envelope only after 
 | --- | --- |
 | `error.kind=validation` | Go back to `describe` and fix shape or selector problems first. |
 | `error.kind=auth` or `401` | Re-check runtime selector, then credentials, then endpoint or region override. |
+| `permission` / `WritePermissionRequired` | For a user-authorized write or unknown raw operation, enable the CLI write gate; keep IAM checks separate. Do not add permission to reviewed reads or dry-runs. |
 | `403 Forbidden` | Re-check tenant or profile alignment before widening the permission search. |
 | `error.kind=usage` | Re-run `tool list` or `workflow list`; do not invent aliases. |
 | `error.kind=unsupported_feature` | Read `error.hint`, then remove the unsupported flag or switch to the named surface; non-LogApp Topic resolution should switch to `app.resolve-resources`. |

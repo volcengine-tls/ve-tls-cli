@@ -1532,7 +1532,7 @@ func TestToolDescribeContextRuntimeEffectsMatchCurrentSelectorAndTraceSemantics(
 		t.Fatalf("expected trace field map, got %#v", ctxProps["trace"])
 	}
 	traceRuntimeEffect := asStringOrEmpty(traceField["runtime_effect"])
-	for _, want := range []string{"trace directory", "legacy strict/default", "on/off"} {
+	for _, want := range []string{"trace directory", "false or enabled:false", "on/true/1/yes/enabled/strict/default", "rejected"} {
 		if !strings.Contains(traceRuntimeEffect, want) {
 			t.Fatalf("expected trace runtime_effect to mention %q, got %#v", want, traceField["runtime_effect"])
 		}

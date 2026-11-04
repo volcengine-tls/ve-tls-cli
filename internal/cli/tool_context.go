@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 type toolExecContext struct {
@@ -28,8 +26,8 @@ type toolExecutionOptions struct {
 	PageAll      bool
 }
 
-func readToolJSONObjectFlag(name string, value string) (map[string]any, error) {
-	raw, err := readToolJSONValueFlag(name, value)
+func readToolJSONObjectFlag(name string, value string, invocation ...*Context) (map[string]any, error) {
+	raw, err := readToolJSONValueFlag(name, value, invocation...)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +38,7 @@ func readToolJSONObjectFlag(name string, value string) (map[string]any, error) {
 	return object, nil
 }
 
-func readToolJSONValueFlag(name string, value string) (any, error) {
+func readToolJSONValueFlag(name string, value string, invocation ...*Context) (any, error) {
 	if strings.TrimSpace(value) == "" {
 		return nil, errors.New("missing " + name + " value")
 	}
@@ -48,11 +46,11 @@ func readToolJSONValueFlag(name string, value string) (any, error) {
 	if trimmed != "-" && !strings.HasPrefix(trimmed, "file://") && !strings.HasPrefix(trimmed, "{") {
 		return nil, errors.New(name + " must use file://, -, or inline JSON object")
 	}
-	return util.ReadJSONValueMaybeFile(trimmed)
+	return inputInvocation(invocation).readJSONValueMaybeFile(trimmed)
 }
 
-func loadToolExecContext(value string) (toolExecContext, error) {
-	valueJSON, err := readToolJSONValueFlag("--context", value)
+func loadToolExecContext(value string, invocation ...*Context) (toolExecContext, error) {
+	valueJSON, err := readToolJSONValueFlag("--context", value, invocation...)
 	if err != nil {
 		return toolExecContext{}, err
 	}
@@ -89,6 +87,9 @@ func loadToolExecContext(value string) (toolExecContext, error) {
 }
 
 func applyToolExecContext(ctx *Context, cfg toolExecContext) error {
+	if err := ctx.applyExecutionControls(cfg); err != nil {
+		return err
+	}
 	resolved, err := resolveRuntimeSelectors(runtimeSelectorSet{
 		GlobalProfile:      ctx.Profile,
 		GlobalSecretsFile:  ctx.GlobalSecretsFile,
@@ -213,6 +214,10 @@ func resolveToolProjection(v any) string {
 func applyToolTraceConfig(ctx *Context, trace any) {
 	switch value := trace.(type) {
 	case bool:
+		if !value {
+			ctx.TraceDir = ""
+			return
+		}
 		if value && strings.TrimSpace(ctx.TraceDir) == "" {
 			ctx.TraceDir = filepath.Join(os.TempDir(), "volclog-tool-trace")
 		}
@@ -226,6 +231,7 @@ func applyToolTraceConfig(ctx *Context, trace any) {
 			enabled = flag
 		}
 		if !enabled {
+			ctx.TraceDir = ""
 			return
 		}
 		if dir, ok := value["dir"].(string); ok && strings.TrimSpace(dir) != "" {

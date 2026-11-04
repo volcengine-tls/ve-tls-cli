@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
-	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 func runMetricTopic(ctx *Context, args []string) (any, error) {
@@ -38,7 +37,7 @@ func runMetricTopic(ctx *Context, args []string) (any, error) {
 
 func metricTopicList(ctx *Context, args []string) (any, error) {
 	args, all := extractBoolFlag(args, "--all")
-	query, err := parseTopicListQuery(args, false)
+	query, err := parseTopicListQuery(args, false, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +187,7 @@ func metricTopicCreate(ctx *Context, args []string) (any, error) {
 
 	var req map[string]any
 	if strings.TrimSpace(requestArg) != "" {
-		m, err := util.ReadJSONObjectMaybeFile(requestArg)
+		m, err := ctx.readJSONObjectMaybeFile(requestArg)
 		if err != nil {
 			return nil, err
 		}
@@ -218,7 +217,7 @@ func metricTopicCreate(ctx *Context, args []string) (any, error) {
 		req["MaxSplitShard"] = maxSplitShard
 	}
 	if strings.TrimSpace(tagsArg) != "" {
-		a, err := util.ReadJSONArrayMaybeFile(tagsArg)
+		a, err := ctx.readJSONArrayMaybeFile(tagsArg)
 		if err != nil {
 			return nil, err
 		}
@@ -330,7 +329,7 @@ func metricTopicModify(ctx *Context, args []string) (any, error) {
 
 	var req map[string]any
 	if strings.TrimSpace(requestArg) != "" {
-		m, err := util.ReadJSONObjectMaybeFile(requestArg)
+		m, err := ctx.readJSONObjectMaybeFile(requestArg)
 		if err != nil {
 			return nil, err
 		}
@@ -404,7 +403,7 @@ func metricTopicDelete(ctx *Context, args []string) (any, error) {
 }
 
 func metricTopicSearch(ctx *Context, args []string) (any, error) {
-	req, err := parseSearchLogsArgs(args)
+	req, err := parseSearchLogsArgs(args, ctx)
 	if err != nil {
 		return nil, err
 	}

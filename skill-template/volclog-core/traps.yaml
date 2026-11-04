@@ -1,4 +1,20 @@
 traps:
+  - trap: cli-write-gate-is-not-iam
+    symptom: a TLS write or unknown raw GET returns permission and WritePermissionRequired
+    why: the CLI requires explicit write permission for writes and unknown raw operations; this is separate from IAM
+    fix: only for a user-authorized action use --allow-write; tool/workflow may instead use context.execution.allow_write=true, but raw has no context; reviewed reads and dry-runs need no flag
+  - trap: invocation-timeout-is-not-http-timeout
+    symptom: a multi-page or multi-batch call exhausts its timeout even though an individual HTTP request is fast
+    why: --timeout and context.execution.timeout bound the whole invocation from its start and do not reset per page or batch
+    fix: choose a positive Go duration for the overall task and separately configure the profile HTTP timeout; preserve partial or unknown outcomes
+  - trap: noninteractive-auth-requires-explicit-selection
+    symptom: login returns interaction_required or SSO cannot choose among multiple accounts or roles
+    why: non-TTY runs cannot prompt and there is no force override for session replacement
+    fix: use another profile or an interactive terminal for replacement; provide the required SSO choice when multiple candidates exist
+  - trap: trace-redaction-cannot-be-disabled
+    symptom: trace-redact off or an unknown redaction value fails validation
+    why: on and its enabled aliases are the only accepted values
+    fix: use on or a supported enabled alias; to disable tracing set context.trace=false or enabled=false
   - trap: page-all-is-not-compression
     symptom: payload gets larger after enabling page.all
     why: page.all increases completeness and payload size

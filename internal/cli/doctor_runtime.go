@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"os"
 	"strings"
@@ -104,7 +103,7 @@ func collectDoctorRuntimeState(ctx *Context) (*doctorRuntimeState, error) {
 		credStatus = config.CredentialStatus{Mode: mode, Source: "profile"}
 		if reader, readerErr := dynamicAuthStatusReader(mode, cfgPath, profileName, cfg, ctx.authFactory); readerErr == nil && reader != nil {
 			dynamicReader = reader
-			if status, statusErr := reader.Status(context.Background(), profileName); statusErr == nil {
+			if status, statusErr := reader.Status(ctx.ExecutionContext(), profileName); statusErr == nil {
 				dynamicStatus = status
 				credStatus.Present = status.Present
 			}

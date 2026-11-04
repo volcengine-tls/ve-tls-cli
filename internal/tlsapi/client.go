@@ -220,6 +220,11 @@ func validateCreds(creds base.Credentials) error {
 }
 
 func (c *Client) Do(ctx context.Context, method, path string, query map[string]string, header map[string]string, body []byte) (Response, error) {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return Response{}, requestFailure("build_request", "not_sent", err)
+		}
+	}
 	u, err := url.Parse(c.Endpoint + path)
 	if err != nil {
 		return Response{}, requestFailure("build_request", "not_sent", err)
@@ -256,6 +261,9 @@ func (c *Client) Do(ctx context.Context, method, path string, query map[string]s
 
 	req, err = c.Sign(ctx, req)
 	if err != nil {
+		return Response{}, requestFailure("sign", "not_sent", err)
+	}
+	if err := ctx.Err(); err != nil {
 		return Response{}, requestFailure("sign", "not_sent", err)
 	}
 
