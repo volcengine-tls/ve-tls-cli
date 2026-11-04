@@ -78,6 +78,7 @@ type DryRunPlan struct {
 	Checks          []PreflightCheck      `json:"checks"`
 	Valid           bool                  `json:"valid"`
 	RequestPreview  map[string]any        `json:"request_preview"`
+	RedactedFields  []string              `json:"redacted_fields,omitempty"`
 	PageAll         *DryRunPaginationPlan `json:"page_all,omitempty"`
 }
 

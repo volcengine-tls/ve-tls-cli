@@ -29,7 +29,7 @@ VOLCLOG_CONFIG=/path/to/config.json volclog configure list
 
 一个配置档存储一个身份及其 TLS 运行时配置。业务命令按以下顺序选择配置档：
 
-1. 命令行上显式传入的 `--profile NAME`；
+1. 显式传入的 `--profile NAME` 或 `context.profile`；
 2. 配置文件中的 `current_profile`；
 3. 名为 `default` 的配置档。
 
@@ -89,7 +89,7 @@ volclog configure set --profile NAME \
 
 ### 3.2 提供 `--mode`（显式补丁路径）
 
-当提供 `--mode` 时，`configure set` 加载现有配置档并**仅补丁显式提供的标志**。未提及的字段保持不变。校验只覆盖所选模式的身份必填项；TLS Region 和 Endpoint 可以之后通过 runtime-only patch、环境或单次命令参数提供。
+当提供 `--mode` 时，`configure set` 加载现有配置档并**仅补丁显式提供的标志**。未提及的字段保持不变。校验只覆盖所选模式的身份必填项；TLS Region 和 Endpoint 可以之后通过 runtime-only patch 或单次命令覆盖提供。只有未显式选择配置档时才使用环境目标，详见下文。
 
 `configure set` 不接受 `--mode sso` 和 `--mode console-login`；这两种模式使用 [认证](2-Authentication_zh.md) 中描述的专用 `login` 和 `configure sso` 流程。
 
@@ -137,25 +137,25 @@ volclog configure cred delete shared-creds
 
 ## 5. 运行时优先级
 
-运行时值的解析方式取决于所选配置档使用的是静态 AK/SK 还是动态提供者。全局 `--region` 和 `--endpoint` 是仅作用于单条命令的显式覆盖，永不落盘。`context.region` 和 `context.endpoint` 仅可通过 `tool`/`workflow` 上下文使用，是项目配置之前的回退值。Endpoint 永远不会从 Region 推导。
+运行时值取决于是否显式选择配置档，以及该配置档使用静态 AK/SK 还是动态提供者。全局 `--region`、`--endpoint` 和 `tool`/`workflow` 中的 `context.region`、`context.endpoint` 都是单次命令的运行时覆盖，不会落盘。同一字段的全局标志与上下文值均非空时必须相同，否则校验失败。Endpoint 永远不会从 Region 推导。
 
 ### 5.1 静态模式
 
-在静态模式（`mode: ak`）下，当存在完整的环境 AK/SK 集合（`VOLCENGINE_ACCESS_KEY_ID` 和 `VOLCENGINE_ACCESS_KEY_SECRET`）时，静态解析会从环境值构建身份并**完全绕过所选配置档**。region/endpoint 优先级为：显式 CLI > 环境 > 上下文默认值 > 项目默认值。timeout 优先级为：项目默认值 > `60` 秒。如果环境和回退值都未提供所需的 region/endpoint，解析将失败。
+显式选择非空配置档时，该配置档必须存在。身份使用配置档的内联或引用的 AK/SK 和配置档 token；环境凭证不能替换或补齐它们。缺少 AK/SK 会在请求前失败。region/endpoint 优先级为：运行时覆盖 > 配置档 > 项目默认值。timeout 优先级为：配置档 > 项目默认值 > `60` 秒。
 
-没有完整的环境 AK/SK 集合时，使用所选配置档。region/endpoint 优先级为：显式 CLI > 配置档 > 上下文默认值 > 项目默认值。只有 Region/Endpoint 环境变量而没有完整环境 AK/SK 时，不改变这条旧静态路径。timeout 优先级为：配置档 > 项目默认值 > `60` 秒。
+未显式选择配置档时，完整的环境 AK/SK（`VOLCENGINE_ACCESS_KEY_ID` 和 `VOLCENGINE_ACCESS_KEY_SECRET`）会选择仅由环境构建的身份。region/endpoint 优先级为：运行时覆盖 > 环境 > 项目默认值；timeout 优先级为：项目默认值 > `60` 秒。环境 AK/SK 不完整时使用所选配置档，region/endpoint 优先级为运行时覆盖 > 配置档 > 项目默认值，timeout 为配置档 > 项目默认值 > `60` 秒。在这条既有路径中，如果 AK 或 SK 缺失，静态客户端可能从环境补齐缺失的 AK/SK 和 token。只有环境 region/endpoint 不会覆盖配置档；缺少必需的 region 或 endpoint 会导致解析失败。
 
 上下文没有 timeout 字段。
 
 ### 5.2 动态提供者模式
 
-对于动态提供者模式（SSO、Console Login、RAM Role ARN、OIDC、ECS Role），环境 AK/SK 会被有意忽略。region/endpoint 优先级为：显式 CLI > 环境 region/endpoint > 配置档 > 上下文默认值 > 项目默认值。
+对于动态提供者模式（SSO、Console Login、RAM Role ARN、OIDC、ECS Role），身份来自提供者，环境 AK/SK 和 token 不会替换它。显式选择配置档时，region/endpoint 优先级为运行时覆盖 > 配置档 > 项目默认值，忽略环境目标；未显式选择时，优先级为运行时覆盖 > 环境 region/endpoint > 配置档 > 项目默认值。
 
 timeout 优先级为：配置档 > 项目默认值 > `60` 秒。没有全局或上下文的 timeout 覆盖。
 
 ### 5.3 运行时选择器冲突
 
-显式选择器是可选的。如果没有选择器，则应用正常的配置档选择（`--profile` → `current_profile` → `default`）或静态环境解析。
+显式选择器是可选的。如果没有选择器，配置档依次回退到 `current_profile` 和 `default`，同时遵循上述静态环境解析规则。
 
 冲突规则如下：
 
@@ -212,7 +212,7 @@ volclog tool exec project.describe-projects
 
 项目配置（当前工作目录中的 `.volclog/cli.config.json`）提供非敏感的运行时默认值。项目配置仅在当前工作目录中应用。
 
-当显式传入时，`--output`、`--output-mode` 和 `--trace-redact` 全局标志优先于其对应的项目默认值。其他全局标志不会覆盖项目默认值。
+当显式传入时，`--output`、`--output-mode` 和 `--trace-redact` 全局标志优先于其对应的项目默认值。运行时 region 和 endpoint 覆盖也优先于对应的项目默认值。
 
 当前运行时实际消费的字段如下：
 
@@ -221,8 +221,8 @@ volclog tool exec project.describe-projects
 | `output` | `--output` 的默认值 | 未传入 `--output` 时使用 |
 | `output_mode` | `--output-mode` 的默认值 | 未传入 `--output-mode` 时使用 |
 | `trace_redact` | `--trace-redact` 的默认值 | 未传入 `--trace-redact` 时使用 |
-| `region` | region 的回退默认值 | 配置档（和上下文默认值）没有 region 时使用 |
-| `endpoint` | endpoint 的回退默认值 | 配置档（和上下文默认值）没有 endpoint 时使用 |
+| `region` | region 的回退默认值 | 适用的运行时覆盖、环境值或配置档值均未提供 region 时使用 |
+| `endpoint` | endpoint 的回退默认值 | 适用的运行时覆盖、环境值或配置档值均未提供 endpoint 时使用 |
 | `timeout_seconds` | timeout 的回退默认值 | 配置档没有 timeout 时使用 |
 
 `region` 和 `endpoint` 可能存在于项目配置文件中并作为回退默认值被消费，但 `configure project set` 不暴露设置它们的标志。`output_dir` 和 `hints_file` 可被 `configure project set` 接受并存储在文件中，但当前运行时不会应用它们。它们可以被设置和查看，但对今天的命令执行没有影响。

@@ -78,11 +78,14 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 	if err := execution.ValidateInput(operation, input); err != nil {
 		return nil, err
 	}
+	options := resolveToolExecutionOptions(ctxCfg)
+	compiledProjection, err := output.Compile(options.Projection)
+	if err != nil {
+		return nil, fmt.Errorf("invalid execution.projection: %w", err)
+	}
 	if err := applyToolExecContext(ctx, ctxCfg); err != nil {
 		return nil, err
 	}
-
-	options := resolveToolExecutionOptions(ctxCfg)
 	if strings.TrimSpace(options.OutputDir) != "" {
 		ctx.OutputDir = strings.TrimSpace(options.OutputDir)
 	}
@@ -98,15 +101,12 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 		if strings.TrimSpace(options.ArtifactPath) != "" {
 			ctx.OutputFile = strings.TrimSpace(options.ArtifactPath)
 		}
+	}
+	if ctx.OutputMode == "file" {
 		if err := preflightOutputFilePath(ctx.OutputFile, ctx.OutputDir, "tool", output.FormatJSON); err != nil {
 			return nil, err
 		}
 	}
-	compiledProjection, err := output.Compile(options.Projection)
-	if err != nil {
-		return nil, fmt.Errorf("invalid execution.projection: %w", err)
-	}
-
 	runtime := execution.RuntimeView{}
 	if options.DryRun {
 		runtime = buildToolExecutionRuntimeView(ctx)

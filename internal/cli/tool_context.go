@@ -29,6 +29,18 @@ type toolExecutionOptions struct {
 }
 
 func readToolJSONObjectFlag(name string, value string) (map[string]any, error) {
+	raw, err := readToolJSONValueFlag(name, value)
+	if err != nil {
+		return nil, err
+	}
+	object, ok := raw.(map[string]any)
+	if !ok {
+		return nil, errors.New("json must be object")
+	}
+	return object, nil
+}
+
+func readToolJSONValueFlag(name string, value string) (any, error) {
 	if strings.TrimSpace(value) == "" {
 		return nil, errors.New("missing " + name + " value")
 	}
@@ -36,12 +48,19 @@ func readToolJSONObjectFlag(name string, value string) (map[string]any, error) {
 	if trimmed != "-" && !strings.HasPrefix(trimmed, "file://") && !strings.HasPrefix(trimmed, "{") {
 		return nil, errors.New(name + " must use file://, -, or inline JSON object")
 	}
-	return util.ReadJSONObjectMaybeFile(trimmed)
+	return util.ReadJSONValueMaybeFile(trimmed)
 }
 
 func loadToolExecContext(value string) (toolExecContext, error) {
-	raw, err := readToolJSONObjectFlag("--context", value)
+	valueJSON, err := readToolJSONValueFlag("--context", value)
 	if err != nil {
+		return toolExecContext{}, err
+	}
+	raw, ok := valueJSON.(map[string]any)
+	if !ok {
+		return toolExecContext{}, &toolContextValidationError{Path: "$", Reason: "must be an object"}
+	}
+	if err := validateToolExecContext(raw); err != nil {
 		return toolExecContext{}, err
 	}
 	ctx := toolExecContext{}
@@ -79,18 +98,33 @@ func applyToolExecContext(ctx *Context, cfg toolExecContext) error {
 	if err != nil {
 		return err
 	}
-	ctx.Profile = resolved.Profile
+	region := strings.TrimSpace(cfg.Region)
+	endpoint := strings.TrimSpace(cfg.Endpoint)
+	if region != "" && strings.TrimSpace(ctx.RuntimeRegion) != "" && region != strings.TrimSpace(ctx.RuntimeRegion) {
+		return &toolContextValidationError{Path: "$.region", Reason: "conflicts with global --region"}
+	}
+	if endpoint != "" && strings.TrimSpace(ctx.RuntimeEndpoint) != "" && endpoint != strings.TrimSpace(ctx.RuntimeEndpoint) {
+		return &toolContextValidationError{Path: "$.endpoint", Reason: "conflicts with global --endpoint"}
+	}
+	invalidate := ctx.Profile != resolved.Profile
 	if strings.TrimSpace(resolved.SecretsFile) != "" {
 		if err := loadSecretsFile(resolved.SecretsFile); err != nil {
 			return err
 		}
 		ctx.forceStaticAuth = true
+		invalidate = true
 	}
-	if strings.TrimSpace(cfg.Region) != "" {
-		ctx.defaults.Region = strings.TrimSpace(cfg.Region)
+	ctx.Profile = resolved.Profile
+	if region != "" && ctx.RuntimeRegion != region {
+		ctx.RuntimeRegion = region
+		invalidate = true
 	}
-	if strings.TrimSpace(cfg.Endpoint) != "" {
-		ctx.defaults.Endpoint = strings.TrimSpace(cfg.Endpoint)
+	if endpoint != "" && ctx.RuntimeEndpoint != endpoint {
+		ctx.RuntimeEndpoint = endpoint
+		invalidate = true
+	}
+	if invalidate {
+		ctx.invalidateProfileCache()
 	}
 	applyToolTraceConfig(ctx, cfg.Trace)
 	return nil
@@ -133,10 +167,10 @@ func resolveToolExecutionOptions(cfg toolExecContext) toolExecutionOptions {
 				out.Artifact = true
 			}
 		}
-		if dir, ok := outputCfg["dir"].(string); ok {
+		if dir, ok := outputCfg["dir"].(string); ok && strings.TrimSpace(dir) != "" {
 			out.OutputDir = strings.TrimSpace(dir)
 		}
-		if path, ok := outputCfg["path"].(string); ok {
+		if path, ok := outputCfg["path"].(string); ok && strings.TrimSpace(path) != "" {
 			out.ArtifactPath = strings.TrimSpace(path)
 		}
 	}

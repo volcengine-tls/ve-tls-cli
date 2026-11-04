@@ -1003,21 +1003,22 @@ func defaultToolContextSchema() map[string]any {
 	execSchema := defaultToolExecutionSchema()
 	execProps, _ := execSchema["properties"].(map[string]any)
 	return map[string]any{
-		"type": "object",
+		"type":                 "object",
+		"additionalProperties": false,
 		"properties": map[string]any{
 			"region": map[string]any{
 				"type":           "string",
 				"description":    "Override the TLS region for this tool execution.",
 				"when_to_use":    "Set this when the target resource is not in your configured default region.",
 				"default":        "Use the configured default region or environment when omitted.",
-				"runtime_effect": "Writes ctx.defaults.Region before the request is built.",
+				"runtime_effect": "Sets the runtime region ahead of profile and environment defaults; a different global --region is a conflict.",
 			},
 			"profile": map[string]any{
 				"type":           "string",
 				"description":    "Select the named local profile to use for this tool execution.",
 				"when_to_use":    "Set this when you want tool exec to read credentials and defaults from a specific saved profile.",
 				"default":        "Use the active CLI profile when omitted.",
-				"runtime_effect": "Loads credentials and defaults from the selected profile. If global --profile is also set, conflicting selectors fail fast instead of silently overriding each other.",
+				"runtime_effect": "An explicit profile ignores credential and default target environment values. A different global --profile is a conflict.",
 			},
 			"secrets_file": map[string]any{
 				"type":           "string",
@@ -1031,7 +1032,7 @@ func defaultToolContextSchema() map[string]any {
 				"description":    "Override the TLS API endpoint for this tool execution.",
 				"when_to_use":    "Set this when you need to call a custom endpoint, private endpoint, or a non-default region endpoint.",
 				"default":        "Use the configured endpoint for the selected region/profile.",
-				"runtime_effect": "Writes ctx.defaults.Endpoint before the request is built.",
+				"runtime_effect": "Sets the runtime endpoint ahead of profile and environment defaults; a different global --endpoint is a conflict.",
 			},
 			"trace": map[string]any{
 				"description":    "Control request/response tracing for tool execution.",
@@ -1048,8 +1049,9 @@ func defaultToolContextSchema() map[string]any {
 						"description": "String form sets the trace directory directly.",
 					},
 					map[string]any{
-						"type":        "object",
-						"description": "Object form enables tracing and lets you control directory and redaction behavior.",
+						"type":                 "object",
+						"description":          "Object form enables tracing and lets you control directory and redaction behavior.",
+						"additionalProperties": false,
 						"properties": map[string]any{
 							"enabled": map[string]any{"type": "boolean"},
 							"dir":     map[string]any{"type": "string"},
@@ -1066,12 +1068,13 @@ func defaultToolContextSchema() map[string]any {
 				"runtime_effect": "Compared advisory-only during tool exec; mismatch adds a warning but does not block execution.",
 			},
 			"execution": map[string]any{
-				"type":           "object",
-				"description":    "Nested execution controls for tool exec.",
-				"when_to_use":    "Set this when you need dry-run, projection, artifact output, or page.all behavior.",
-				"default":        map[string]any{},
-				"runtime_effect": "The tool runtime reads this nested object from context.execution; do not pass execution as a separate file.",
-				"properties":     execProps,
+				"type":                 "object",
+				"description":          "Nested execution controls for tool exec.",
+				"when_to_use":          "Set this when you need dry-run, projection, artifact output, or page.all behavior.",
+				"default":              map[string]any{},
+				"runtime_effect":       "The tool runtime reads this nested object from context.execution; do not pass execution as a separate file.",
+				"properties":           execProps,
+				"additionalProperties": false,
 			},
 		},
 	}
@@ -1079,8 +1082,9 @@ func defaultToolContextSchema() map[string]any {
 
 func defaultToolExecutionSchema() map[string]any {
 	return map[string]any{
-		"type":        "object",
-		"description": "Execution controls that must be nested under context.execution in the --context JSON file.",
+		"type":                 "object",
+		"description":          "Execution controls that must be nested under context.execution in the --context JSON file.",
+		"additionalProperties": false,
 		"properties": map[string]any{
 			"projection": map[string]any{
 				"description": "Filter the raw tool result before the CLI envelope is built.",
@@ -1091,21 +1095,20 @@ func defaultToolExecutionSchema() map[string]any {
 					},
 					map[string]any{
 						"type":        "array",
-						"description": "Array form; the runtime uses the first non-empty expression.",
-						"items":       map[string]any{"type": "string"},
+						"description": "Array form; the runtime validates every item recursively and uses the first non-empty expression.",
+						"items": map[string]any{"oneOf": []any{
+							map[string]any{"type": "string"},
+							defaultToolProjectionObjectSchema(),
+							map[string]any{"type": "array", "description": "Legacy nested arrays use the same recursive projection validation."},
+						}},
 					},
-					map[string]any{
-						"type":        "object",
-						"description": "Object form with an explicit jmes field.",
-						"properties": map[string]any{
-							"jmes": map[string]any{"type": "string"},
-						},
-					},
+					defaultToolProjectionObjectSchema(),
 				},
 			},
 			"page": map[string]any{
-				"type":        "object",
-				"description": "Pagination execution controls.",
+				"type":                 "object",
+				"description":          "Pagination execution controls. If page_all is also set, both values must agree.",
+				"additionalProperties": false,
 				"properties": map[string]any{
 					"all": map[string]any{
 						"type":        "boolean",
@@ -1115,10 +1118,10 @@ func defaultToolExecutionSchema() map[string]any {
 			},
 			"page_all": map[string]any{
 				"type":        "boolean",
-				"description": "Compatibility alias for page.all. Prefer the nested page.all form in new context files.",
+				"description": "Compatibility alias for page.all; both values must agree when specified together. Prefer the nested form in new context files.",
 			},
 			"artifact": map[string]any{
-				"description": "Write tool output to a file-oriented artifact flow instead of stdout-only output.",
+				"description": "Write tool output to a file-oriented artifact flow; output_mode and output.mode must specify the same output intent when present.",
 				"oneOf": []any{
 					map[string]any{
 						"type":        "boolean",
@@ -1126,15 +1129,28 @@ func defaultToolExecutionSchema() map[string]any {
 					},
 					map[string]any{
 						"type":        "string",
-						"description": "String form enables artifact mode and uses the string as the output path.",
+						"description": "A non-empty string enables artifact mode and specifies the output path; an empty string is unspecified.",
 					},
 					map[string]any{
-						"type":        "object",
-						"description": "Object form enables artifact mode with an explicit path field.",
+						"type":                 "object",
+						"description":          "Object form enables artifact mode with optional path and dir fields; non-empty aliases must agree.",
+						"additionalProperties": false,
 						"properties": map[string]any{
 							"path": map[string]any{"type": "string"},
+							"dir":  map[string]any{"type": "string"},
 						},
 					},
+				},
+			},
+			"output_mode": defaultToolOutputModeSchema(),
+			"output": map[string]any{
+				"type":                 "object",
+				"description":          "Output aliases; non-empty mode, path, and dir must agree with corresponding artifact or output_mode settings.",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"mode": defaultToolOutputModeSchema(),
+					"path": map[string]any{"type": "string"},
+					"dir":  map[string]any{"type": "string"},
 				},
 			},
 			"dry_run": map[string]any{
@@ -1142,6 +1158,22 @@ func defaultToolExecutionSchema() map[string]any {
 				"description": "Validate and render the request without issuing a mutating remote call.",
 			},
 		},
+	}
+}
+
+func defaultToolProjectionObjectSchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"description":          "Object form with an explicit jmes field.",
+		"additionalProperties": false,
+		"properties":           map[string]any{"jmes": map[string]any{"type": "string"}},
+	}
+}
+
+func defaultToolOutputModeSchema() map[string]any {
+	return map[string]any{
+		"type":        "string",
+		"description": "An empty string is unspecified; stdout, file, or artifact select output. Values are case-insensitive and surrounding whitespace is ignored. file and artifact both select artifact output; conflicting aliases are rejected.",
 	}
 }
 

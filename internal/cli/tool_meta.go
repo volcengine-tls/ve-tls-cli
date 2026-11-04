@@ -910,11 +910,21 @@ func compactToolContextSchema(schema map[string]any) map[string]any {
 	compactProps := make(map[string]any, len(props))
 	for name, raw := range props {
 		field, _ := raw.(map[string]any)
+		var compactField map[string]any
 		if normalizeToken(name) == "execution" {
-			compactProps[name] = compactToolExecutionContextFieldSchema(field)
-			continue
+			compactField = compactToolExecutionContextFieldSchema(field)
+		} else {
+			compactField = compactToolDocFieldSchema(field)
 		}
-		compactProps[name] = compactToolDocFieldSchema(field)
+		// The runtime effect covers the field guidance in compact view.
+		delete(compactField, "when_to_use")
+		if strings.TrimSpace(toolAnyToString(compactField["runtime_effect"])) != "" {
+			delete(compactField, "description")
+		}
+		if name != "profile" && name != "trace" {
+			delete(compactField, "default")
+		}
+		compactProps[name] = compactField
 	}
 	out["properties"] = compactProps
 	return out
@@ -940,6 +950,16 @@ func compactToolExecutionSchema(schema map[string]any) map[string]any {
 	for name, raw := range props {
 		field, _ := raw.(map[string]any)
 		compactProps[name] = compactToolExecutionFieldSchema(field)
+	}
+	// Both names accept the same normalized mode; keep the nested field and
+	// refer to the single full explanation on execution.output_mode.
+	outputMode, _ := compactProps["output_mode"].(map[string]any)
+	outputField, _ := compactProps["output"].(map[string]any)
+	outputProps, _ := outputField["properties"].(map[string]any)
+	modeField, _ := outputProps["mode"].(map[string]any)
+	modeDescription := toolAnyToString(modeField["description"])
+	if modeDescription != "" && modeDescription == toolAnyToString(outputMode["description"]) {
+		modeField["description"] = "Same as execution.output_mode."
 	}
 	out["properties"] = compactProps
 	return out
@@ -1080,6 +1100,7 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 	if strings.TrimSpace(strings.ToLower(toolAnyToString(ctx["type"]))) == "" {
 		ctx["type"] = "object"
 	}
+	ctx["additionalProperties"] = false
 	props := ensureToolSchemaProperties(ctx)
 	execProps, _ := executionSchema["properties"].(map[string]any)
 	executionDescription := "Execution controls for dry-run, projection, artifact export, and pagination."
@@ -1093,7 +1114,7 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 			"when_to_use":     "Set this when you need a non-default account/profile or want to switch tenant/environment without changing input.",
 			"default":         "active CLI profile",
 			"discover_values": "Run `volclog configure list` to inspect saved profile names; omit profile to use the active CLI profile.",
-			"runtime_effect":  "Runtime loads credentials and defaults from the selected profile. If global --profile is also set, conflicting selectors fail fast instead of silently overriding each other.",
+			"runtime_effect":  "An explicit profile ignores credential and default target environment values. A different global --profile is a conflict.",
 		},
 		"secrets_file": {
 			"type":           "string",
@@ -1107,14 +1128,14 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 			"description":    "Target region for the TLS OpenAPI endpoint.",
 			"when_to_use":    "Set this to choose a region explicitly or override defaults.",
 			"default":        "resolved from profile or environment",
-			"runtime_effect": "Runtime uses this value as the request signing region. Endpoint remains independently explicit.",
+			"runtime_effect": "Sets the runtime signing region ahead of profile and environment defaults; a different global --region is a conflict. Endpoint remains independently explicit.",
 		},
 		"endpoint": {
 			"type":           "string",
 			"description":    "Explicit TLS OpenAPI endpoint URL.",
 			"when_to_use":    "Set this to choose the TLS service address explicitly.",
 			"default":        "resolved from explicit runtime configuration",
-			"runtime_effect": "Runtime sends requests to this endpoint; it is never derived from region.",
+			"runtime_effect": "Sets the runtime endpoint ahead of profile and environment defaults; a different global --endpoint is a conflict. The endpoint is never derived from region.",
 		},
 		"trace": {
 			"description":    "Trace configuration for request/response diagnostics.",
@@ -1130,12 +1151,13 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 			"runtime_effect": "Runtime compares digest in soft mode and emits advisory mismatch warnings only.",
 		},
 		"execution": {
-			"type":           "object",
-			"properties":     execProps,
-			"description":    executionDescription,
-			"when_to_use":    "Set this to change execution behavior without altering business request payload.",
-			"default":        map[string]any{},
-			"runtime_effect": "Runtime reads execution controls from context.execution; do not pass execution as a separate file.",
+			"type":                 "object",
+			"properties":           execProps,
+			"additionalProperties": false,
+			"description":          executionDescription,
+			"when_to_use":          "Set this to change execution behavior without altering business request payload.",
+			"default":              map[string]any{},
+			"runtime_effect":       "Runtime reads execution controls from context.execution; do not pass execution as a separate file.",
 		},
 	}
 	for key, doc := range contextDocs {
@@ -1147,13 +1169,21 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 				map[string]any{"type": "boolean"},
 				map[string]any{"type": "string"},
 				map[string]any{
-					"type": "object",
+					"type":                 "object",
+					"additionalProperties": false,
 					"properties": map[string]any{
 						"enabled": map[string]any{"type": "boolean"},
 						"dir":     map[string]any{"type": "string"},
 						"redact":  map[string]any{"type": "string"},
 					},
 				},
+			}
+		}
+		if forms, ok := traceField["oneOf"].([]any); ok {
+			for _, raw := range forms {
+				if form, ok := raw.(map[string]any); ok && form["type"] == "object" {
+					form["additionalProperties"] = false
+				}
 			}
 		}
 	}
@@ -1165,15 +1195,16 @@ func enrichToolExecutionSchema(base map[string]any, supportsAll bool) map[string
 	if strings.TrimSpace(strings.ToLower(toolAnyToString(exec["type"]))) == "" {
 		exec["type"] = "object"
 	}
+	exec["additionalProperties"] = false
 	props := ensureToolSchemaProperties(exec)
 	executionDocs := map[string]string{
 		"dry_run":    "When true, runtime validates and builds request envelope but does not call remote API.",
-		"projection": "Projection filter for response payload; supports string, string array, or {\"jmes\": \"...\"}.",
-		"artifact":   "Artifact export control; supports boolean, output path string, or object with path.",
+		"projection": "Projection filter for response payload; supports string, object with jmes, or recursively nested arrays. Every array item is validated, and the first non-empty expression is used.",
+		"artifact":   "Artifact export control; supports boolean, output path string, or object with path and dir. Output aliases must agree.",
 	}
 	if supportsAll {
-		executionDocs["page"] = "Pagination execution controls. page.all requests auto-pagination for supported actions."
-		executionDocs["page_all"] = "Compatibility alias for page.all. Prefer page.all in new context files, but runtime still accepts page_all."
+		executionDocs["page"] = "Pagination execution controls. page.all requests auto-pagination for supported actions; page_all must agree when both are specified."
+		executionDocs["page_all"] = "Compatibility alias for page.all; both values must agree when specified together. Prefer page.all in new context files."
 	} else {
 		delete(props, "page")
 		delete(props, "page_all")

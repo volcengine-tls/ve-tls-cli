@@ -173,18 +173,19 @@ func TestEmptyAndAKModeUseUnchangedEffectiveProfile(t *testing.T) {
 		})
 	}
 
-	// Environment AK/SK must still override the static profile, exactly as before.
+	// With no explicit selector, environment AK/SK still override the current profile.
 	t.Run("env_override", func(t *testing.T) {
 		t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "env-ak")
 		t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "env-sk")
 		t.Setenv("VOLCENGINE_REGION", "cn-shanghai")
 		t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-shanghai.volces.com")
-		ctx := newTestContext(t, cfg, "/tmp/test-config.json")
-		ctx.Profile = "empty"
+		envCfg := cfg
+		envCfg.CurrentProfile = "empty"
+		ctx := newTestContext(t, envCfg, "/tmp/test-config.json")
 		if err := ctx.ResolveProfile(); err != nil {
 			t.Fatalf("ResolveProfile: %v", err)
 		}
-		want, err := config.EffectiveProfile(cfg, "empty", config.ProfileDefaults{})
+		want, err := config.EffectiveProfile(envCfg, "", config.ProfileDefaults{})
 		if err != nil {
 			t.Fatalf("EffectiveProfile: %v", err)
 		}
@@ -476,9 +477,8 @@ func TestDynamicModeUsesExplicitCurrentDefaultProfileOrder(t *testing.T) {
 	})
 }
 
-// TestDynamicModeResolvesTLSRuntimeSettings proves the fixed precedence for
-// dynamic modes: VOLCENGINE_REGION/ENDPOINT > profile > project defaults >
-// timeout default 60s.
+// TestDynamicModeResolvesTLSRuntimeSettings covers implicit environment
+// overrides and profile/project fallback for dynamic modes.
 func TestDynamicModeResolvesTLSRuntimeSettings(t *testing.T) {
 	clearAuthTestEnv(t)
 
@@ -486,7 +486,8 @@ func TestDynamicModeResolvesTLSRuntimeSettings(t *testing.T) {
 		t.Setenv("VOLCENGINE_REGION", "env-region")
 		t.Setenv("VOLCENGINE_ENDPOINT", "https://env-endpoint.example.com")
 		cfg := config.Config{
-			Version: 1,
+			Version:        1,
+			CurrentProfile: "dyn",
 			Profiles: map[string]config.Profile{
 				"dyn": {
 					Mode:     config.AuthModeSSO,
@@ -496,7 +497,6 @@ func TestDynamicModeResolvesTLSRuntimeSettings(t *testing.T) {
 			},
 		}
 		ctx := newTestContext(t, cfg, "/tmp/test-config.json")
-		ctx.Profile = "dyn"
 		if err := ctx.ResolveProfile(); err != nil {
 			t.Fatalf("ResolveProfile: %v", err)
 		}

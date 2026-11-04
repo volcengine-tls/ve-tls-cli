@@ -107,6 +107,11 @@ func runDoctorNetworkChecks(ctx *Context, state *doctorRuntimeState) {
 				Profile:     resolvedProfile,
 				Factory:     ctx.authFactory,
 			})
+		} else if state.credSource == "profile_cred_ref_missing" {
+			clientErr = errors.New("profile credential reference is unavailable")
+		} else if !state.credPresent {
+			// Do not let the static client fill an incomplete profile from env.
+			clientErr = errors.New("missing access key id or secret access key")
 		} else {
 			client, clientErr = tlsapi.New(
 				state.endpoint,

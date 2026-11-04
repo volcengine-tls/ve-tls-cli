@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"time"
@@ -64,6 +65,7 @@ func collectDoctorRuntimeState(ctx *Context) (*doctorRuntimeState, error) {
 	}
 
 	profileName := strings.TrimSpace(ctx.Profile)
+	explicitProfile := profileName != ""
 	profileSource := "flag"
 	if profileName == "" {
 		profileName = strings.TrimSpace(cfg.CurrentProfile)
@@ -76,12 +78,17 @@ func collectDoctorRuntimeState(ctx *Context) (*doctorRuntimeState, error) {
 
 	envRegion := strings.TrimSpace(os.Getenv("VOLCENGINE_REGION"))
 	envEndpoint := strings.TrimSpace(os.Getenv("VOLCENGINE_ENDPOINT"))
+	if explicitProfile {
+		envRegion, envEndpoint = "", ""
+	}
 	runtimeRegion := strings.TrimSpace(ctx.RuntimeRegion)
 	runtimeEndpoint := strings.TrimSpace(ctx.RuntimeEndpoint)
 
 	var profile config.Profile
 	if resolved, ok := cfg.GetProfile(profileName); ok {
 		profile = resolved
+	} else if explicitProfile {
+		return nil, errors.New("profile not found: " + profileName)
 	}
 	mode, _ := config.NormalizeAuthMode(profile.Mode)
 	isDynamic := config.IsProviderAuthMode(mode)
@@ -104,7 +111,7 @@ func collectDoctorRuntimeState(ctx *Context) (*doctorRuntimeState, error) {
 		}
 	} else {
 		credStatus = config.ResolveProfileCredentialStatus(cfg, profile)
-		if envCredStatus := config.ResolveEnvCredentialStatus(); envCredStatus.Present {
+		if envCredStatus := config.ResolveEnvCredentialStatus(); envCredStatus.Present && !explicitProfile {
 			credStatus = envCredStatus
 			staticUsesEnvIdentity = true
 		}

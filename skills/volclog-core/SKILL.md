@@ -27,6 +27,9 @@ Treat this file as the dominant generic operating model for `volclog`, not as an
 - Run `volclog configure list` only when local profile discovery is actually relevant.
 - Use `region` only when the contract or task explicitly requires an override. Do not infer it from endpoint or domain.
 - `--profile`/`context.profile` and `--secrets-file`/`context.secrets_file` are runtime selectors, not business input fields.
+- A non-empty explicit profile must exist. Its static credentials and token cannot be replaced or filled from the environment; incomplete static AK/SK fails. Dynamic identities remain provider-backed. Without an explicit profile, the existing environment precedence applies.
+- Global `--region`/`--endpoint` and context `region`/`endpoint` override profile, applicable environment, and project defaults. Different non-empty global and context values for the same field fail validation.
+- Context validation rejects unknown fields, wrong types, and conflicting aliases before applying the context. Legacy trace boolean/string/object and execution artifact/output/page/projection forms remain supported.
 - Never read, print, export, or persist AK/SK or token values in prompts, memory, request artifacts, or skill content.
 
 ## Canonical Agent Loop
@@ -36,7 +39,7 @@ Discover -> Describe -> Exec -> Read Result
 1. Resolve runtime selectors.
    - decide whether this run is using profile, secrets file, or environment credentials
    - if local profile discovery matters, run `volclog configure list`
-   - keep the chosen selector explicit in the command or context
+   - specify the chosen profile or secrets-file selector in the command or context; leave profile unset when using environment credentials
 2. Discover the callable surface.
    - `volclog tool list`
    - `volclog tool list <group>`
@@ -79,6 +82,7 @@ Discover -> Describe -> Exec -> Read Result
 - Read the full JSON envelope first; use `--jmes-filter` only when you already know the envelope path you want.
 - Prefer `--dry-run` before any write or destructive change, but only on `raw`, `tool exec`, or `workflow exec`.
 - Treat `--dry-run` as contract or plan validation, not proof that the business query is correct.
+- A dry-run `request_preview` masks known sensitive keys recursively, including sensitive `Contents`/`LogTags` key/value entries; malformed bodies are omitted and `redacted_fields` may list paths. This affects only the preview, not the wire request or body hash. Ordinary body strings are not guaranteed to be recognized as secrets.
 - If fields are uniquely named, prefer flat JSON input before manual nesting.
 
 ## Error Recovery Quick Map

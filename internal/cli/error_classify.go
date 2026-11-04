@@ -13,6 +13,15 @@ import (
 
 func classifyError(err error, requestID string, statusCode int, group string) (errPayload, int) {
 	msg := strings.TrimSpace(err.Error())
+	var contextValidation *toolContextValidationError
+	if errors.As(err, &contextValidation) {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "validation",
+			Hint:       "check --context fields and runtime selector conflicts",
+		}, 1
+	}
 	var unsupported *unsupportedFeatureError
 	if errors.As(err, &unsupported) {
 		return errPayload{

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "contract_version": "v1",
   "digest_algorithm": "sha256/go-json-v1",
-  "catalog_digest": "b124bdd54c4c253fc65646cb3adde1003ea5705ea681d5f9d2f699fd9c6f9254",
+  "catalog_digest": "17d3fb8f2500ddbab074b3e2e6f4cb721d062ba45e13502e75b372e33d0a14ab",
   "operation_count": 165,
   "generation_mode": "bootstrap",
   "inputs": [
@@ -39,7 +39,7 @@
     {
       "name": "generator_main",
       "path": "internal/openapigen/main.go",
-      "sha256": "ab78f2cea7ad0f2bb297fbac55ce8ce2d93b1062f0e9b38c3e5ad615cc7871c1"
+      "sha256": "6d48d82bb6180172d0ff2811b7647ebb4646bdea1f2c3afea9905072bf2c11b2"
     },
     {
       "name": "generator_source_operations",

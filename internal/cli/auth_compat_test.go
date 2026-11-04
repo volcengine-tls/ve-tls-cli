@@ -506,10 +506,9 @@ func TestAllAuthModesPreserveIdentityAndFallbackContract(t *testing.T) {
 				t.Setenv("VOLCENGINE_REGION", "cn-beijing")
 				server, sigCh, count := newContractSignatureServer(t, "ENV-AK-"+tc.name, "ENV-SK-"+tc.name, "")
 				t.Setenv("VOLCENGINE_ENDPOINT", server.URL)
-				cfg := config.Config{Version: 1, Profiles: map[string]config.Profile{"w": tc.profile}}
+				cfg := config.Config{Version: 1, CurrentProfile: "w", Profiles: map[string]config.Profile{"w": tc.profile}}
 				factory := &fakeAuthFactory{}
 				ctx := newTestContext(t, cfg, "/tmp/test-config.json")
-				ctx.Profile = "w"
 				ctx.authFactory = factory
 
 				if _, err := ctx.DoRaw("GET", "/DescribeProjects", nil, nil, nil); err != nil {

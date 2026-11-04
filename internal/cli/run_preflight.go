@@ -41,7 +41,8 @@ func preflightRunInvocation(invocation *runInvocation, stdout, stderr io.Writer)
 	if err := ctx.validateDryRunScope(group, rest); err != nil {
 		return writeRunError(ctx, stdout, stderr, group, rest, err, "usage", "invalid --dry-run scope", outputMode, 1), true
 	}
-	if outputMode == "file" {
+	// Tool/workflow exec validates its context before creating output paths.
+	if outputMode == "file" && !defersSecretsResolutionToCommand(group, rest) {
 		if err := preflightOutputFilePath(flags.OutputFile, ctx.OutputDir, group, knownFileDeliveryFormat(group, rest, invocation.format)); err != nil {
 			return writeRunError(ctx, stdout, stderr, group, rest, err, "filesystem", "provide a writable --output-dir or check the local file path and permissions", outputMode, 2), true
 		}

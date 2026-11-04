@@ -170,6 +170,144 @@ func TestResolverStaticEnvironmentCredentials(t *testing.T) {
 	}
 }
 
+func TestResolverExplicitStaticCredentialsIgnoreEnvironment(t *testing.T) {
+	env := map[string]string{
+		"VOLCENGINE_ACCESS_KEY_ID":     "env-ak",
+		"VOLCENGINE_ACCESS_KEY_SECRET": "env-sk",
+		"VOLCENGINE_TOKEN":             "env-token",
+		"VOLCENGINE_REGION":            "env-region",
+		"VOLCENGINE_ENDPOINT":          "env-endpoint",
+	}
+	tests := []struct {
+		name      string
+		profile   config.Profile
+		creds     map[string]config.Credential
+		wantAK    string
+		wantSK    string
+		wantToken string
+		wantErr   string
+	}{
+		{
+			name:    "inline with token",
+			profile: config.Profile{AccessKeyID: "profile-ak", SecretAccessKey: "profile-sk", SecurityToken: "profile-token"},
+			wantAK:  "profile-ak", wantSK: "profile-sk", wantToken: "profile-token",
+		},
+		{
+			name:    "inline without token",
+			profile: config.Profile{AccessKeyID: "profile-ak", SecretAccessKey: "profile-sk"},
+			wantAK:  "profile-ak", wantSK: "profile-sk",
+		},
+		{
+			name:    "credential reference",
+			profile: config.Profile{CredRef: "ref", SecurityToken: "profile-token"},
+			creds:   map[string]config.Credential{"ref": {AccessKeyID: "ref-ak", SecretAccessKey: "ref-sk"}},
+			wantAK:  "ref-ak", wantSK: "ref-sk", wantToken: "profile-token",
+		},
+		{
+			name:    "credential reference fills inline secret",
+			profile: config.Profile{AccessKeyID: "inline-ak", CredRef: "ref"},
+			creds:   map[string]config.Credential{"ref": {AccessKeyID: "ref-ak", SecretAccessKey: "ref-sk"}},
+			wantAK:  "inline-ak", wantSK: "ref-sk",
+		},
+		{name: "missing both", wantErr: "missing access key id or secret access key"},
+		{name: "missing access key", profile: config.Profile{SecretAccessKey: "profile-sk"}, wantErr: "missing access key id or secret access key"},
+		{name: "missing secret key", profile: config.Profile{AccessKeyID: "profile-ak"}, wantErr: "missing access key id or secret access key"},
+		{name: "missing reference", profile: config.Profile{CredRef: "missing"}, wantErr: "credential not found: missing"},
+		{
+			name:    "incomplete reference",
+			profile: config.Profile{CredRef: "ref"},
+			creds:   map[string]config.Credential{"ref": {AccessKeyID: "ref-ak"}},
+			wantErr: "missing access key id or secret access key",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			profile := tc.profile
+			profile.Region, profile.Endpoint = "profile-region", "profile-endpoint"
+			cfg := config.Config{Profiles: map[string]config.Profile{"selected": profile}, Creds: tc.creds}
+			got, err := (Resolver{LookupEnv: mapEnv(env)}).Resolve(ResolveRequest{Config: cfg, ExplicitProfile: " selected "})
+			if tc.wantErr != "" {
+				if err == nil || err.Error() != tc.wantErr {
+					t.Fatalf("Resolve error=%v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			if got.ProfileName != "selected" || got.Dynamic ||
+				got.Profile.AccessKeyID != tc.wantAK || got.Profile.SecretAccessKey != tc.wantSK ||
+				got.Profile.SecurityToken != tc.wantToken || got.Profile.Region != "profile-region" ||
+				got.Profile.Endpoint != "profile-endpoint" {
+				t.Fatal("explicit static profile did not retain its credentials or target")
+			}
+		})
+	}
+}
+
+func TestResolverExplicitProfileMissingWithCompleteEnvironment(t *testing.T) {
+	cfg := config.Config{Profiles: map[string]config.Profile{"selected": staticProfile("selected")}}
+	env := map[string]string{"VOLCENGINE_ACCESS_KEY_ID": "env-ak", "VOLCENGINE_ACCESS_KEY_SECRET": "env-sk"}
+	_, err := (Resolver{LookupEnv: mapEnv(env)}).Resolve(ResolveRequest{Config: cfg, ExplicitProfile: " typo "})
+	if err == nil || err.Error() != "profile not found: typo" {
+		t.Fatalf("Resolve error=%v, want profile not found", err)
+	}
+}
+
+func TestResolverExplicitProfileTargetPrecedence(t *testing.T) {
+	env := map[string]string{
+		"VOLCENGINE_ACCESS_KEY_ID": "env-ak", "VOLCENGINE_ACCESS_KEY_SECRET": "env-sk",
+		"VOLCENGINE_REGION": "env-region", "VOLCENGINE_ENDPOINT": "env-endpoint",
+	}
+	tests := []struct {
+		name            string
+		profile         config.Profile
+		runtimeRegion   string
+		runtimeEndpoint string
+		wantRegion      string
+		wantEndpoint    string
+	}{
+		{name: "static profile", profile: staticProfile("profile"), wantRegion: "region", wantEndpoint: "endpoint"},
+		{name: "static runtime flags", profile: staticProfile("profile"), runtimeRegion: "flag-region", runtimeEndpoint: "flag-endpoint", wantRegion: "flag-region", wantEndpoint: "flag-endpoint"},
+		{name: "dynamic profile", profile: config.Profile{Mode: config.AuthModeSSO, Region: "profile-region", Endpoint: "profile-endpoint"}, wantRegion: "profile-region", wantEndpoint: "profile-endpoint"},
+		{name: "dynamic runtime flags", profile: config.Profile{Mode: config.AuthModeSSO, Region: "profile-region", Endpoint: "profile-endpoint"}, runtimeRegion: "flag-region", runtimeEndpoint: "flag-endpoint", wantRegion: "flag-region", wantEndpoint: "flag-endpoint"},
+		{name: "dynamic defaults", profile: config.Profile{Mode: config.AuthModeSSO}, wantRegion: "project-region", wantEndpoint: "project-endpoint"},
+		{name: "static defaults", profile: config.Profile{AccessKeyID: "profile-ak", SecretAccessKey: "profile-sk"}, wantRegion: "project-region", wantEndpoint: "project-endpoint"},
+		{name: "runtime and profile mix", profile: config.Profile{Mode: config.AuthModeSSO, Region: "profile-region", Endpoint: "profile-endpoint"}, runtimeRegion: "flag-region", wantRegion: "flag-region", wantEndpoint: "profile-endpoint"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := (Resolver{LookupEnv: mapEnv(env)}).Resolve(ResolveRequest{
+				Config:          config.Config{Profiles: map[string]config.Profile{"selected": tc.profile}},
+				ExplicitProfile: "selected", RuntimeRegion: tc.runtimeRegion, RuntimeEndpoint: tc.runtimeEndpoint,
+				Defaults: config.ProfileDefaults{Region: "project-region", Endpoint: "project-endpoint"},
+			})
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			if got.Profile.Region != tc.wantRegion || got.Profile.Endpoint != tc.wantEndpoint {
+				t.Fatalf("target=(%q, %q), want (%q, %q)", got.Profile.Region, got.Profile.Endpoint, tc.wantRegion, tc.wantEndpoint)
+			}
+		})
+	}
+}
+
+func TestResolverWhitespaceProfileRetainsEnvironmentCompatibility(t *testing.T) {
+	cfg := config.Config{CurrentProfile: "selected", Profiles: map[string]config.Profile{"selected": staticProfile("profile")}}
+	env := map[string]string{
+		"VOLCENGINE_ACCESS_KEY_ID": "env-ak", "VOLCENGINE_ACCESS_KEY_SECRET": "env-sk",
+		"VOLCENGINE_REGION": "env-region", "VOLCENGINE_ENDPOINT": "env-endpoint",
+	}
+	got, err := (Resolver{LookupEnv: mapEnv(env)}).Resolve(ResolveRequest{Config: cfg, ExplicitProfile: "  "})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got.Profile.AccessKeyID != "env-ak" || got.Profile.SecretAccessKey != "env-sk" ||
+		got.Profile.Region != "env-region" || got.Profile.Endpoint != "env-endpoint" {
+		t.Fatal("blank selector changed implicit environment precedence")
+	}
+}
+
 func TestResolverRuntimeSettingPrecedence(t *testing.T) {
 	cfg := config.Config{Profiles: map[string]config.Profile{
 		"default": {
@@ -408,13 +546,13 @@ func TestResolverDynamicIgnoresEnvironmentCredentials(t *testing.T) {
 		got.Profile.SecurityToken != "" {
 		t.Fatalf("dynamic profile credentials changed: %+v", got.Profile)
 	}
-	if got.Profile.Region != "env-region" || got.Profile.Endpoint != "env-endpoint" {
+	if got.Profile.Region != "profile-region" || got.Profile.Endpoint != "profile-endpoint" {
 		t.Fatalf("dynamic runtime settings=%+v", got.Profile)
 	}
 }
 
 func TestResolverForceStaticUsesEnvironmentCredentials(t *testing.T) {
-	cfg := config.Config{Profiles: map[string]config.Profile{
+	cfg := config.Config{CurrentProfile: "dynamic", Profiles: map[string]config.Profile{
 		"dynamic": {
 			Mode:         config.AuthModeConsoleLogin,
 			Region:       "profile-region",
@@ -428,9 +566,8 @@ func TestResolverForceStaticUsesEnvironmentCredentials(t *testing.T) {
 		"VOLCENGINE_TOKEN":             "file-token",
 	}
 	got, err := (Resolver{LookupEnv: mapEnv(env)}).Resolve(ResolveRequest{
-		Config:          cfg,
-		ExplicitProfile: "dynamic",
-		ForceStatic:     true,
+		Config:      cfg,
+		ForceStatic: true,
 		Defaults: config.ProfileDefaults{
 			Region:   "project-region",
 			Endpoint: "project-endpoint",

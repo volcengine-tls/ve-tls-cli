@@ -112,6 +112,8 @@ volclog --profile default tool exec project.describe-projects
 
 `--input` supplies the request body. It accepts `file://<path>`, `-` (stdin), or an inline JSON object (must start with `{`). `--context` supplies runtime and execution controls using the same sources.
 
+Context validation rejects unknown fields, incorrect types, and conflicting aliases before applying the context. Supported legacy forms remain available: `trace` as a boolean, string, or object; `execution.artifact` as a boolean, string, or object; `execution.output`/`output_mode`; `execution.page.all`/`page_all`; and `execution.projection` as a string, object, or array.
+
 ```bash
 volclog --profile default tool exec project.create \
   --input '{"ProjectName":"my-project","Region":"cn-beijing","Description":"example"}'
@@ -219,6 +221,8 @@ volclog --profile default raw --method POST --path /CreateProject \
 
 An explicit identity selector is optional. With none, normal profile selection or static environment resolution applies.
 
+A non-empty `--profile` or `context.profile` must name an existing profile. Its static AK/SK and token are never replaced or filled by environment credentials; missing static AK/SK fails before a request. Dynamic identity remains provider-backed. Without an explicit profile, the existing environment precedence remains in effect.
+
 The identity selectors are: global `--profile`, global `--secrets-file`, `context.profile`, and `context.secrets_file`. The conflict rules are:
 
 - Any profile selector (global `--profile` or `context.profile`) combined with any secrets-file selector (global `--secrets-file` or `context.secrets_file`) conflicts.
@@ -227,11 +231,13 @@ The identity selectors are: global `--profile`, global `--secrets-file`, `contex
 
 A conflict fails with `conflicting runtime selectors` (or `conflicting profile selectors` when two different profile names are supplied).
 
-Global `--region` and `--endpoint` flags provide explicit one-command overrides and are never persisted. `context.region` and `context.endpoint` remain fallback defaults available only through `tool`/`workflow` context. The full region/endpoint/timeout precedence is detailed in [Configuration](3-Configuration.md).
+Global `--region` and `--endpoint` flags and `context.region`/`context.endpoint` are one-command runtime overrides. They take precedence over applicable profile, environment, and project defaults and are never persisted. When a global flag and context provide different non-empty values for the same field, validation fails. The full region/endpoint/timeout precedence is detailed in [Configuration](3-Configuration.md).
 
 ### 6.2 `--dry-run` and context dry-run
 
 `--dry-run` is a global flag that works for `raw`, `tool exec`, and `workflow exec`. For `tool exec` and `workflow exec`, `execution.dry_run` in the `--context` JSON has the same effect. `--dry-run` is rejected for other groups.
+
+When a dry-run plan includes `request_preview`, it recursively masks values under known sensitive keys such as password, secret, token, access key, and credential; it also masks a `Contents`/`LogTags` `Value` when the corresponding `Key` is sensitive. An unparseable body is omitted from the preview, and `redacted_fields` may list masked paths. This changes only the preview: the wire request and `body_sha256` are unchanged. Ordinary body strings are not guaranteed to be identified as secrets.
 
 ### 6.3 Write-operation safety
 

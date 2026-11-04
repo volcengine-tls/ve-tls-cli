@@ -29,7 +29,7 @@ The project config must never contain credentials. If any of `access_key_id`, `s
 
 A profile stores one identity together with its TLS runtime configuration. Business commands select a profile in this order:
 
-1. The `--profile NAME` explicitly passed on the command;
+1. The explicitly supplied `--profile NAME` or `context.profile`;
 2. The `current_profile` in the configuration file;
 3. The profile named `default`.
 
@@ -89,7 +89,7 @@ Because omitted flags are treated as empty, re-running `configure set` without `
 
 ### 3.2 Supplying `--mode` (explicit patch path)
 
-When `--mode` is supplied, `configure set` loads the existing profile and **patches only the flags explicitly provided**. Fields you do not mention are left untouched. Validation covers the selected mode's identity requirements; TLS region and endpoint may be supplied later through the runtime-only patch, environment, or per-command flags.
+When `--mode` is supplied, `configure set` loads the existing profile and **patches only the flags explicitly provided**. Fields you do not mention are left untouched. Validation covers the selected mode's identity requirements; TLS region and endpoint may be supplied later through the runtime-only patch or per-command overrides. Environment targets are used only when no profile is explicitly selected, as described below.
 
 `--mode sso` and `--mode console-login` are not accepted by `configure set`; those modes use the dedicated `login` and `configure sso` flows described in [Authentication](2-Authentication.md).
 
@@ -137,25 +137,25 @@ volclog configure cred delete shared-creds
 
 ## 5. Runtime precedence
 
-Runtime values are resolved differently depending on whether the selected profile uses static AK/SK or a dynamic provider. Global `--region` and `--endpoint` are explicit one-command overrides and are never persisted. `context.region` and `context.endpoint` are only available through `tool`/`workflow` context and act as fallbacks ahead of project configuration. Endpoint is never derived from region.
+Runtime values depend on whether a profile is explicitly selected and whether it uses static AK/SK or a dynamic provider. Global `--region` and `--endpoint`, and `context.region` and `context.endpoint` for `tool`/`workflow`, are one-command runtime overrides and are never persisted. For either field, a non-empty global flag and context value must match or validation fails. Endpoint is never derived from region.
 
 ### 5.1 Static mode
 
-In static mode (`mode: ak`), when a complete set of environment AK/SK is present (`VOLCENGINE_ACCESS_KEY_ID` and `VOLCENGINE_ACCESS_KEY_SECRET`), static resolution constructs the identity from the environment values and **bypasses the selected profile entirely**. Region/endpoint precedence is: explicit CLI > environment > context default > project default. Timeout precedence is: project default > `60` seconds. If neither environment nor a fallback supplies the required region/endpoint, resolution fails.
+With a non-empty explicit profile selector, the profile must exist. Its inline or referenced AK/SK and its token are used; environment credentials cannot replace or fill them. Missing AK/SK fails before a request. Region/endpoint precedence is: runtime override > profile > project default. Timeout precedence is: profile > project default > `60` seconds.
 
-Without a complete environment AK/SK set, the selected profile is used. Region/endpoint precedence is: explicit CLI > profile > context default > project default. Region/endpoint environment variables alone do not alter this legacy path. Timeout precedence is: profile > project default > `60` seconds.
+Without an explicit profile, a complete environment AK/SK pair (`VOLCENGINE_ACCESS_KEY_ID` and `VOLCENGINE_ACCESS_KEY_SECRET`) selects an environment-only identity. Region/endpoint precedence is: runtime override > environment > project default; timeout is project default > `60` seconds. If the environment pair is incomplete, the selected profile is used, with region/endpoint precedence runtime override > profile > project default and timeout profile > project default > `60` seconds. In this legacy path, the static client can fill missing AK/SK and token from the environment when a key is missing. Environment region/endpoint alone do not override the profile. Missing required region or endpoint fails resolution.
 
 Context has no timeout field.
 
 ### 5.2 Dynamic provider mode
 
-For dynamic provider modes (SSO, Console Login, RAM Role ARN, OIDC, ECS Role), environment AK/SK are intentionally ignored. Region/endpoint precedence is: explicit CLI > environment region/endpoint > profile > context default > project default.
+For dynamic provider modes (SSO, Console Login, RAM Role ARN, OIDC, ECS Role), identity comes from the provider; environment AK/SK and token do not replace it. With an explicit profile, region/endpoint precedence is runtime override > profile > project default, ignoring environment targets. Without an explicit profile, it is runtime override > environment region/endpoint > profile > project default.
 
 Timeout precedence is: profile > project default > `60` seconds. There is no global or context timeout override.
 
 ### 5.3 Runtime selector conflicts
 
-An explicit selector is optional. With none, normal profile selection (`--profile` → `current_profile` → `default`) or static environment resolution applies.
+An explicit selector is optional. With none, profile selection falls back to `current_profile` then `default`, subject to static environment resolution above.
 
 The conflict rules are:
 
@@ -212,7 +212,7 @@ volclog tool exec project.describe-projects
 
 The project config (`.volclog/cli.config.json` in the current working directory) provides non-secret runtime defaults. The project config applies only in the current working directory.
 
-The `--output`, `--output-mode`, and `--trace-redact` global flags override their corresponding project defaults when explicitly passed. Other global flags do not override project defaults.
+The `--output`, `--output-mode`, and `--trace-redact` global flags override their corresponding project defaults when explicitly passed. Runtime region and endpoint overrides also take precedence over their project defaults.
 
 The fields currently consumed by the runtime are:
 
@@ -221,8 +221,8 @@ The fields currently consumed by the runtime are:
 | `output` | Default for `--output` | Used when `--output` is not passed |
 | `output_mode` | Default for `--output-mode` | Used when `--output-mode` is not passed |
 | `trace_redact` | Default for `--trace-redact` | Used when `--trace-redact` is not passed |
-| `region` | Fallback default for region | Used when the profile (and context default) has no region |
-| `endpoint` | Fallback default for endpoint | Used when the profile (and context default) has no endpoint |
+| `region` | Fallback default for region | Used when no applicable runtime override, environment value, or profile value supplies region |
+| `endpoint` | Fallback default for endpoint | Used when no applicable runtime override, environment value, or profile value supplies endpoint |
 | `timeout_seconds` | Fallback default for timeout | Used when the profile has no timeout |
 
 `region` and `endpoint` may be present in the project config file and are consumed as fallback defaults, but `configure project set` does not expose flags to set them. `output_dir` and `hints_file` are accepted by `configure project set` and stored in the file, but the current runtime does not apply them. They can be set and inspected, but they have no effect on command execution today.

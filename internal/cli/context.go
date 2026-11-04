@@ -261,7 +261,7 @@ func (c *Context) Do(method, path string, query map[string]string, header map[st
 	}
 	if c.DryRun {
 		plan := c.buildDryRunPlan(method, path, query, header, body, originalRequestPreview(previewBody, body, specialHandled), meta.RequestFormat, specialHandled)
-		c.tracePlan(method, path, query, header, body, plan)
+		c.tracePlan(method, plan["path"].(string), query, header, body, plan)
 		return plan, nil
 	}
 	resp, err := c.DoRaw(method, path, query, header, body)
@@ -276,6 +276,7 @@ func (c *Context) Do(method, path string, query map[string]string, header map[st
 
 func (c *Context) buildDryRunPlan(method, path string, query map[string]string, header map[string]string, body []byte, previewBody []byte, previewFormat requestFormat, specialHandled bool) map[string]any {
 	checks := make([]map[string]any, 0, 4)
+	var redactedFields []string
 	valid := true
 	if err := c.ResolveProfile(); err != nil {
 		checks = append(checks, map[string]any{
@@ -285,10 +286,15 @@ func (c *Context) buildDryRunPlan(method, path string, query map[string]string, 
 		})
 		valid = false
 	} else {
+		endpoint := strings.TrimSpace(c.profile.Endpoint)
+		endpointPreview, changed := execution.RedactPreviewURL(endpoint)
+		if changed {
+			redactedFields = append(redactedFields, "checks.endpoint.detail")
+		}
 		checks = append(checks, map[string]any{
 			"name":   "endpoint",
-			"ok":     strings.TrimSpace(c.profile.Endpoint) != "",
-			"detail": strings.TrimSpace(c.profile.Endpoint),
+			"ok":     endpoint != "",
+			"detail": endpointPreview,
 		})
 		if strings.TrimSpace(c.profile.Endpoint) == "" {
 			valid = false
@@ -331,17 +337,25 @@ func (c *Context) buildDryRunPlan(method, path string, query map[string]string, 
 	}
 	sort.Strings(queryKeys)
 	headers := redactedHeaderKeys(header)
+	pathPreview, pathFields := execution.RedactPreviewPath(strings.TrimSpace(path))
+	redactedFields = append(redactedFields, pathFields...)
 	plan := map[string]any{
 		"type":             "plan",
 		"method":           strings.ToUpper(strings.TrimSpace(method)),
-		"path":             strings.TrimSpace(path),
+		"path":             pathPreview,
 		"query_keys":       queryKeys,
 		"headers_redacted": headers,
 		"body_sha256":      sha256Hex(body),
 		"checks":           checks,
 		"valid":            valid,
 	}
-	plan["request_preview"] = buildDryRunRequestPreview(query, previewBody, previewFormat, specialHandled)
+	preview, previewFields := execution.RedactRequestPreview(buildDryRunRequestPreview(query, previewBody, previewFormat, specialHandled))
+	plan["request_preview"] = preview
+	redactedFields = append(redactedFields, previewFields...)
+	if len(redactedFields) > 0 {
+		sort.Strings(redactedFields)
+		plan["redacted_fields"] = redactedFields
+	}
 	return plan
 }
 
@@ -373,13 +387,13 @@ func decodeDryRunPreviewBody(body []byte, format requestFormat) (any, bool) {
 	if normalizeRequestFormat(format) == requestFormatJSONL {
 		rows, err := parseJSONLObjects(trimmed)
 		if err != nil {
-			return string(trimmed), true
+			return execution.UnparseableBodyPreview, true
 		}
 		return rows, true
 	}
 	v, err := util.UnmarshalJSON(trimmed)
 	if err != nil {
-		return string(trimmed), true
+		return execution.UnparseableBodyPreview, true
 	}
 	return v, true
 }

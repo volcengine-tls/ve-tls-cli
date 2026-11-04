@@ -114,15 +114,20 @@ func (e *Executor) executeOne(ctx context.Context, operation contract.Operation,
 
 func buildDryRunPlan(invocation Invocation, preview, encoded Request) *DryRunPlan {
 	checks := make([]PreflightCheck, 0, len(invocation.Runtime.Checks)+3)
+	var redactedFields []string
 	checks = append(checks, invocation.Runtime.Checks...)
 	if !failedCheck(checks, "profile") {
 		endpoint := strings.TrimSpace(invocation.Runtime.Endpoint)
 		region := strings.TrimSpace(invocation.Runtime.Region)
+		endpointPreview, changed := RedactPreviewURL(endpoint)
+		if changed {
+			redactedFields = append(redactedFields, "checks.endpoint.detail")
+		}
 		checks = append(checks,
 			PreflightCheck{
 				Name:   "endpoint",
 				OK:     endpoint != "",
-				Detail: &endpoint,
+				Detail: &endpointPreview,
 			},
 			PreflightCheck{
 				Name:   "region",
@@ -145,10 +150,12 @@ func buildDryRunPlan(invocation Invocation, preview, encoded Request) *DryRunPla
 		}
 	}
 	sum := sha256.Sum256(encoded.Body)
+	pathPreview, pathFields := RedactPreviewPath(strings.TrimSpace(encoded.Path))
+	redactedFields = append(redactedFields, pathFields...)
 	plan := &DryRunPlan{
 		Type:            "plan",
 		Method:          strings.ToUpper(strings.TrimSpace(encoded.Method)),
-		Path:            strings.TrimSpace(encoded.Path),
+		Path:            pathPreview,
 		QueryKeys:       sortedQueryKeys(encoded.Query, encoded.QueryMulti),
 		HeadersRedacted: redactedHeaderKeys(encoded.Header),
 		BodySHA256:      hex.EncodeToString(sum[:]),
@@ -164,6 +171,9 @@ func buildDryRunPlan(invocation Invocation, preview, encoded Request) *DryRunPla
 	if invocation.Operation.Wire.Codec != contract.CodecJSON {
 		plan.RequestPreview["body_source"] = "input_before_special_io"
 	}
+	plan.RequestPreview, plan.RedactedFields = RedactRequestPreview(plan.RequestPreview)
+	plan.RedactedFields = append(plan.RedactedFields, redactedFields...)
+	sort.Strings(plan.RedactedFields)
 	if invocation.Options.PageAll {
 		plan.PageAll = &DryRunPaginationPlan{
 			Requested: true,
@@ -227,7 +237,7 @@ func previewBody(request Request) (any, bool) {
 			}
 			var row any
 			if jsonx.Unmarshal([]byte(line), &row) != nil {
-				return trimmed, true
+				return UnparseableBodyPreview, true
 			}
 			rows = append(rows, row)
 		}
@@ -237,7 +247,7 @@ func previewBody(request Request) (any, bool) {
 		if jsonx.Unmarshal(request.Body, &value) == nil {
 			return value, true
 		}
-		return trimmed, true
+		return UnparseableBodyPreview, true
 	}
 }
 

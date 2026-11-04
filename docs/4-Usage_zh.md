@@ -112,6 +112,8 @@ volclog --profile default tool exec project.describe-projects
 
 `--input` 提供请求体。它接受 `file://<path>`、`-`（标准输入）或内联 JSON 对象（必须以 `{` 开头）。`--context` 使用相同的来源提供运行时和执行控制。
 
+上下文会在应用前校验未知字段、错误类型和冲突的别名。既有形式继续支持：`trace` 的布尔值、字符串或对象；`execution.artifact` 的布尔值、字符串或对象；`execution.output`/`output_mode`；`execution.page.all`/`page_all`；以及字符串、对象或数组形式的 `execution.projection`。
+
 ```bash
 volclog --profile default tool exec project.create \
   --input '{"ProjectName":"my-project","Region":"cn-beijing","Description":"example"}'
@@ -219,6 +221,8 @@ volclog --profile default raw --method POST --path /CreateProject \
 
 显式身份选择器是可选的。如果没有选择器，则应用正常的配置档选择或静态环境解析。
 
+非空 `--profile` 或 `context.profile` 必须指向已存在的配置档。配置档的静态 AK/SK 和 token 不会被环境凭证替换或补齐；静态 AK/SK 不完整会在请求前失败。动态身份仍由提供者获取。未显式选择配置档时保留原有环境优先级。
+
 身份选择器是：全局 `--profile`、全局 `--secrets-file`、`context.profile` 和 `context.secrets_file`。冲突规则如下：
 
 - 任何配置档选择器（全局 `--profile` 或 `context.profile`）与任何密钥文件选择器（全局 `--secrets-file` 或 `context.secrets_file`）组合都会冲突。
@@ -227,11 +231,13 @@ volclog --profile default raw --method POST --path /CreateProject \
 
 冲突会失败并报错 `conflicting runtime selectors`（当提供两个不同的配置档名称时为 `conflicting profile selectors`）。
 
-全局 `--region` 和 `--endpoint` 是只影响单条命令且永不落盘的显式覆盖。`context.region` 和 `context.endpoint` 仍是仅可通过 `tool`/`workflow` 上下文使用的回退默认值。完整的 region/endpoint/timeout 优先级在 [配置](3-Configuration_zh.md) 中有详细说明。
+全局 `--region`、`--endpoint` 和 `context.region`、`context.endpoint` 都是单次命令的运行时覆盖，优先于适用的配置档、环境和项目默认值，且不会落盘。同一字段的全局标志与上下文值均非空但不同时，校验失败。完整的 region/endpoint/timeout 优先级见 [配置](3-Configuration_zh.md)。
 
 ### 6.2 `--dry-run` 与上下文预执行
 
 `--dry-run` 是一个全局标志，适用于 `raw`、`tool exec` 和 `workflow exec`。对于 `tool exec` 和 `workflow exec`，`--context` JSON 中的 `execution.dry_run` 具有相同效果。`--dry-run` 对其他组是被拒绝的。
+
+预执行计划包含 `request_preview` 时，会递归掩码 password、secret、token、access key、credential 等已知敏感键的值；对于 `Contents`/`LogTags` 的 `Key`/`Value`，敏感 `Key` 对应的 `Value` 也会被掩码。无法解析的请求体不会原样显示，可选的 `redacted_fields` 会列出被掩码的路径。这只改变预览，不改变实际发送的请求或 `body_sha256`。普通请求体字符串中的秘密不保证被识别。
 
 ### 6.3 写操作安全
 

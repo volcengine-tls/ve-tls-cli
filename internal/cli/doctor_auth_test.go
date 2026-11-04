@@ -157,7 +157,8 @@ func TestDoctorStaticRuntimeMatchesEffectiveProfileEnvContract(t *testing.T) {
 			}
 
 			cfg := config.Config{
-				Version: 1,
+				Version:        1,
+				CurrentProfile: "static",
 				Profiles: map[string]config.Profile{
 					"static": {
 						Mode:            config.AuthModeAK,
@@ -169,7 +170,6 @@ func TestDoctorStaticRuntimeMatchesEffectiveProfileEnvContract(t *testing.T) {
 				},
 			}
 			ctx := newDoctorTestContext(t, cfg)
-			ctx.Profile = "static"
 			ctx.RuntimeRegion = tc.runtimeRegion
 			ctx.RuntimeEndpoint = tc.runtimeEP
 
@@ -196,7 +196,8 @@ func TestDoctorStaticCompleteEnvCredentialsDoNotFallBackToProfileRuntime(t *test
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "ENV-SK")
 
 	cfg := config.Config{
-		Version: 1,
+		Version:        1,
+		CurrentProfile: "static",
 		Profiles: map[string]config.Profile{
 			"static": {
 				Mode:            config.AuthModeAK,
@@ -209,7 +210,6 @@ func TestDoctorStaticCompleteEnvCredentialsDoNotFallBackToProfileRuntime(t *test
 		},
 	}
 	ctx := newDoctorTestContext(t, cfg)
-	ctx.Profile = "static"
 
 	out, code, err := runDoctor(ctx, nil)
 	if err != nil {
@@ -227,6 +227,100 @@ func TestDoctorStaticCompleteEnvCredentialsDoNotFallBackToProfileRuntime(t *test
 	}
 	if timeout := result["timeout"].(map[string]any); timeout["seconds"] != 60 || timeout["source"] != "default" {
 		t.Fatalf("timeout fell back to static profile unexpectedly: %v", timeout)
+	}
+}
+
+func TestDoctorExplicitProfileIgnoresEnvironment(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		profile     config.Profile
+		wantSource  string
+		wantPresent bool
+	}{
+		{name: "static", profile: config.Profile{AccessKeyID: "profile-ak", SecretAccessKey: "profile-sk"}, wantSource: "profile_inline", wantPresent: true},
+		{name: "incomplete static", profile: config.Profile{AccessKeyID: "profile-ak"}, wantSource: "profile_missing"},
+		{name: "dynamic", profile: config.Profile{Mode: config.AuthModeSSO}, wantSource: "profile"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clearAuthTestEnv(t)
+			t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "env-ak")
+			t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "env-sk")
+			t.Setenv("VOLCENGINE_TOKEN", "env-token")
+			t.Setenv("VOLCENGINE_REGION", "env-region")
+			t.Setenv("VOLCENGINE_ENDPOINT", "https://env.example.invalid")
+			profile := tc.profile
+			profile.Region = "cn-beijing"
+			profile.Endpoint = "https://profile.example.invalid"
+			cfg := config.Config{Profiles: map[string]config.Profile{"selected": profile}}
+			ctx := newDoctorTestContext(t, cfg)
+			ctx.Profile = "selected"
+
+			out, _, err := runDoctor(ctx, nil)
+			if err != nil {
+				t.Fatalf("runDoctor: %v", err)
+			}
+			result := out.(map[string]any)
+			credentials := result["credentials"].(map[string]any)
+			if credentials["source"] != tc.wantSource || credentials["present"] != tc.wantPresent || credentials["token"] != false {
+				t.Fatalf("credentials status=%v, want source=%q present=%v token=false", credentials, tc.wantSource, tc.wantPresent)
+			}
+			region := result["region"].(map[string]any)
+			endpoint := result["endpoint"].(map[string]any)
+			if region["value"] != "cn-beijing" || region["source"] != "profile" ||
+				endpoint["value"] != "https://profile.example.invalid" || endpoint["source"] != "profile" {
+				t.Fatalf("target region=%v endpoint=%v", region, endpoint)
+			}
+		})
+	}
+}
+
+func TestDoctorOnlineExplicitProfileSignsWithoutEnvironmentFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		profileName string
+		profile     config.Profile
+		wantCalls   int
+	}{
+		{name: "complete", profileName: "selected", profile: config.Profile{AccessKeyID: "profile-ak", SecretAccessKey: "profile-sk", SecurityToken: "profile-token"}, wantCalls: 1},
+		{name: "incomplete", profileName: "selected", profile: config.Profile{AccessKeyID: "profile-ak"}},
+		{name: "missing credential reference", profileName: "selected", profile: config.Profile{AccessKeyID: "profile-ak", SecretAccessKey: "profile-sk", CredRef: "missing"}},
+		{name: "missing", profileName: "typo", profile: config.Profile{AccessKeyID: "profile-ak", SecretAccessKey: "profile-sk"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clearAuthTestEnv(t)
+			t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "env-ak")
+			t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "env-sk")
+			t.Setenv("VOLCENGINE_TOKEN", "env-token")
+			t.Setenv("VOLCENGINE_REGION", "env-region")
+			t.Setenv("VOLCENGINE_ENDPOINT", "https://env.example.invalid")
+			// A proxy setting skips doctor DNS/TCP checks; the fake transport
+			// handles the only request without using the network.
+			t.Setenv("HTTPS_PROXY", "http://proxy.example.invalid")
+			profile := tc.profile
+			profile.Region = "cn-beijing"
+			profile.Endpoint = "https://profile.example.invalid"
+			cfg := config.Config{Profiles: map[string]config.Profile{"selected": profile}}
+			ctx := newDoctorTestContext(t, cfg)
+			ctx.Profile = tc.profileName
+			transport := &explicitProfileTransport{
+				wantHost:   "profile.example.invalid",
+				identities: []explicitProfileSigningIdentity{{"profile-ak", "profile-sk", "profile-token"}},
+			}
+			originalTransport := http.DefaultTransport
+			http.DefaultTransport = transport
+			t.Cleanup(func() { http.DefaultTransport = originalTransport })
+
+			_, code, err := runDoctor(ctx, []string{"--online"})
+			if tc.wantCalls == 1 && (err != nil || code != 0) {
+				t.Fatalf("runDoctor exit=%d error=%v", code, err)
+			}
+			if tc.wantCalls == 0 && err == nil && code == 0 {
+				t.Fatal("runDoctor unexpectedly succeeded without a usable explicit profile")
+			}
+			if transport.calls != tc.wantCalls || transport.err != nil {
+				t.Fatalf("requests=%d, want %d; signature/target error=%v", transport.calls, tc.wantCalls, transport.err)
+			}
+		})
 	}
 }
 
@@ -452,7 +546,8 @@ func TestDoctorOnlineDynamicUsesResolvedEnvEndpointAndRegion(t *testing.T) {
 	t.Setenv("VOLCENGINE_REGION", "cn-shanghai")
 
 	cfg := config.Config{
-		Version: 1,
+		Version:        1,
+		CurrentProfile: "sso",
 		Profiles: map[string]config.Profile{
 			"sso": {
 				Mode: config.AuthModeSSO,
@@ -461,7 +556,6 @@ func TestDoctorOnlineDynamicUsesResolvedEnvEndpointAndRegion(t *testing.T) {
 		},
 	}
 	ctx := newDoctorTestContext(t, cfg)
-	ctx.Profile = "sso"
 
 	provider := &fakeProvider{value: auth.Value{
 		AccessKeyID:     "AKLTresolved",

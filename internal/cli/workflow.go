@@ -239,11 +239,14 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 	if err := validateWorkflowExecInput(spec, input); err != nil {
 		return nil, err
 	}
+	options := resolveToolExecutionOptions(cfg)
+	compiledProjection, err := output.Compile(options.Projection)
+	if err != nil {
+		return nil, fmt.Errorf("invalid execution.projection: %w", err)
+	}
 	if err := applyToolExecContext(ctx, cfg); err != nil {
 		return nil, err
 	}
-
-	options := resolveToolExecutionOptions(cfg)
 	if strings.TrimSpace(options.OutputDir) != "" {
 		ctx.OutputDir = strings.TrimSpace(options.OutputDir)
 	}
@@ -255,15 +258,12 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 		if strings.TrimSpace(options.ArtifactPath) != "" {
 			ctx.OutputFile = strings.TrimSpace(options.ArtifactPath)
 		}
+	}
+	if ctx.OutputMode == "file" {
 		if err := preflightOutputFilePath(ctx.OutputFile, ctx.OutputDir, "workflow", output.FormatJSON); err != nil {
 			return nil, err
 		}
 	}
-	compiledProjection, err := output.Compile(options.Projection)
-	if err != nil {
-		return nil, fmt.Errorf("invalid execution.projection: %w", err)
-	}
-
 	workflowArgs, cleanup, err := workflowExecArgs(spec, input)
 	if err != nil {
 		return nil, err
