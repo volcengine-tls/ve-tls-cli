@@ -66,7 +66,19 @@ func (c toolExecutionCodec) Decode(
 	operation contract.Operation,
 	response execution.Response,
 	state any,
-) (any, error) {
+) (data any, err error) {
+	defer func() {
+		if err == nil {
+			return
+		}
+		if _, ok := isHTTPError(err); ok {
+			return
+		}
+		if typed, _ := firstTypedOperationError(err); typed != nil {
+			return
+		}
+		err = &execution.Failure{Kind: "protocol", Code: "InvalidResponse", Stage: "decode", Outcome: execution.OutcomeUnknown, Message: "response does not match the operation protocol", Cause: err}
+	}()
 	var specialState *specialIOState
 	if state != nil {
 		var ok bool

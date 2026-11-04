@@ -34,6 +34,10 @@ func applyToolExecutionResult(ctx *Context, result execution.Result) {
 	}
 	ctx.RequestID = strings.TrimSpace(result.RequestID)
 	ctx.StatusCode = result.StatusCode
+	ctx.RemoteOutcome = result.RemoteOutcome
+	if ctx.RemoteOutcome == "" {
+		ctx.RemoteOutcome = execution.OutcomeNotSent
+	}
 	ctx.PaginationMeta = nil
 	if result.Pagination == nil || !result.Pagination.Merged || result.Pagination.PageCount <= 0 {
 		return
@@ -52,6 +56,9 @@ func applyToolExecutionResult(ctx *Context, result execution.Result) {
 func adaptToolExecutionError(err error) error {
 	if err == nil {
 		return nil
+	}
+	if typed, _ := firstTypedOperationError(err); typed != nil {
+		return err
 	}
 	var source *execution.HTTPError
 	if !errors.As(err, &source) || source == nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -41,6 +42,9 @@ type ResponseState struct {
 	StatusCode     int
 	Action         string
 	PaginationMeta map[string]any
+	RemoteOutcome  string
+	TargetSnapshot map[string]any
+	Progress       map[string]any
 }
 
 type configState struct {
@@ -139,6 +143,7 @@ func (c *Context) ResolveProfile() error {
 	c.resolution = resolution
 	c.profile = resolution.Profile
 	c.profileResolved = true
+	c.captureTargetSnapshot()
 	return nil
 }
 
@@ -156,6 +161,7 @@ func (c *Context) invalidateProfileCache() {
 	c.profile = config.Profile{}
 	c.resolution = appruntime.Resolution{}
 	c.client = nil
+	c.TargetSnapshot = nil
 }
 
 func (c *Context) Client() (*tlsapi.Client, error) {
@@ -203,9 +209,14 @@ func (c *Context) DoRaw(method, path string, query map[string]string, header map
 }
 
 func (c *Context) doRaw(ctx context.Context, method, path string, query map[string]string, header map[string]string, body []byte) (tlsapi.Response, error) {
+	c.beginRequest()
 	client, err := c.Client()
 	if err != nil {
-		return tlsapi.Response{}, err
+		var endpointError *url.Error
+		if errors.As(err, &endpointError) {
+			return tlsapi.Response{}, &execution.Failure{Kind: "config", Code: "InvalidEndpoint", Outcome: execution.OutcomeNotSent, Stage: "resolve_client", Message: "invalid TLS endpoint configuration", Cause: err}
+		}
+		return tlsapi.Response{}, &execution.Failure{Outcome: execution.OutcomeNotSent, Stage: "resolve_client", Cause: err}
 	}
 	transport := appruntime.NewTracingTransport(
 		appruntime.NewTransport(func() (*tlsapi.Client, error) {
@@ -220,9 +231,6 @@ func (c *Context) doRaw(ctx context.Context, method, path string, query map[stri
 		Header: header,
 		Body:   body,
 	})
-	if err != nil {
-		return tlsapi.Response{}, err
-	}
 	resp := tlsapi.Response{
 		StatusCode: response.StatusCode,
 		Header:     response.Header,
@@ -230,10 +238,18 @@ func (c *Context) doRaw(ctx context.Context, method, path string, query map[stri
 	}
 	c.RequestID = resp.Header.Get("x-tls-requestid")
 	c.StatusCode = resp.StatusCode
-	return resp, nil
+	if err != nil {
+		c.RemoteOutcome = execution.ErrorOutcome(err, execution.OutcomeUnknown)
+	} else if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		c.RemoteOutcome = execution.OutcomeSuccess
+	} else {
+		c.RemoteOutcome = execution.OutcomeFailed
+	}
+	return resp, err
 }
 
 func (c *Context) Do(method, path string, query map[string]string, header map[string]string, body []byte) (any, error) {
+	c.beginRequest()
 	meta := c.apiIOMeta
 	if meta.Method == "" {
 		meta.Method = method
@@ -253,7 +269,7 @@ func (c *Context) Do(method, path string, query map[string]string, header map[st
 	previewBody := append([]byte(nil), body...)
 	adaptedHeader, adaptedBody, state, specialHandled, err := prepareSpecialIORequest(meta, header, body)
 	if err != nil {
-		return nil, err
+		return nil, &execution.Failure{Kind: "validation", Code: "InvalidRequest", Stage: "encode", Outcome: execution.OutcomeNotSent, Cause: err}
 	}
 	if specialHandled {
 		header = adaptedHeader
@@ -269,9 +285,10 @@ func (c *Context) Do(method, path string, query map[string]string, header map[st
 		return nil, err
 	}
 	if out, handled, err := decodeSpecialIOResponse(meta, state, resp); handled {
-		return out, err
+		return c.recordDecodedResult(out, err)
 	}
-	return decodeResponse(resp)
+	out, err := decodeResponse(resp)
+	return c.recordDecodedResult(out, err)
 }
 
 func (c *Context) buildDryRunPlan(method, path string, query map[string]string, header map[string]string, body []byte, previewBody []byte, previewFormat requestFormat, specialHandled bool) map[string]any {

@@ -42,8 +42,8 @@ func TestRawJMESFilterNilResultReturnsEnvelopeError(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected error object, got %#v", out["error"])
 	}
-	if errObj["kind"] != "decode" {
-		t.Fatalf("expected decode error kind, got %#v", errObj)
+	if errObj["kind"] != "output_failed" {
+		t.Fatalf("expected output_failed error kind, got %#v", errObj)
 	}
 	if !strings.Contains(asStringOrEmpty(errObj["message"]), "matched no value") {
 		t.Fatalf("expected matched no value message, got %#v", errObj["message"])
@@ -110,8 +110,8 @@ func TestToolExecProjectionNilResultReturnsEnvelopeError(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected error object, got %#v", out["error"])
 	}
-	if errObj["kind"] != "decode" {
-		t.Fatalf("expected decode error kind, got %#v", errObj)
+	if errObj["kind"] != "output_failed" {
+		t.Fatalf("expected output_failed error kind, got %#v", errObj)
 	}
 	if !strings.Contains(asStringOrEmpty(errObj["message"]), "matched no value") {
 		t.Fatalf("expected matched no value message, got %#v", errObj["message"])

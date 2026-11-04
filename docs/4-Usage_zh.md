@@ -239,6 +239,8 @@ volclog --profile default raw --method POST --path /CreateProject \
 
 预执行计划包含 `request_preview` 时，会递归掩码 password、secret、token、access key、credential 等已知敏感键的值；对于 `Contents`/`LogTags` 的 `Key`/`Value`，敏感 `Key` 对应的 `Value` 也会被掩码。无法解析的请求体不会原样显示，可选的 `redacted_fields` 会列出被掩码的路径。这只改变预览，不改变实际发送的请求或 `body_sha256`。普通请求体字符串中的秘密不保证被识别。
 
+无法解析的类 JSON 查询值会替换为 `[unparseable query omitted]`；显示的 endpoint 会移除用户信息、查询参数和片段。
+
 ### 6.3 写操作安全
 
 对于写操作，先用 `--dry-run` 运行以在本地校验请求，然后再发送到 TLS。预执行计划会报告本地检查（配置档、endpoint、region、请求体 JSON）是否通过。
@@ -329,11 +331,17 @@ volclog --profile default --output-dir ./out --jmes-filter 'data' \
 
 ### 8.5 信封字段与错误输出
 
-成功信封：`status`、`action`、`requestId`、`summary`（`outputMode`、`deliveryMode`、`dryRun`、`itemCount`、`totalBytes`、可选的 `pagination`/`tracePath`）、`artifacts`、`data`、`error`（`null`）。
+成功信封：`status`、`action`、`requestId`、`summary`（`outputMode`、`deliveryMode`、`remoteOutcome`、`deliveryOutcome`、`dryRun`、`itemCount`、`totalBytes`、可选的 `pagination`/`tracePath`）、`artifacts`、`data`、`error`（`null`）。
 
-错误信封：`status`（`failed`）、`action`、`requestId`、`summary`、`artifacts`（空）、`data`（`null`）、`error`（`source`、`code`、`message`、`requestId`、`statusCode`、`kind`、`hint`、可选的 `details`）。
+错误信封：`status`（`failed`）、`action`、`requestId`、`summary`、`artifacts`（空）、`data`（通常为 `null`，批量写入失败时包含进度）、`error`（`source`、`code`、`message`、`requestId`、`statusCode`、`kind`、`hint`、可选的 `details`）。
 
 结构化错误信封由 `raw`、所有 `tool` 命令（包括 `list`/`describe`）、所有 `workflow` 命令（包括 `list`/`describe`）以及人类快捷方式信封组（`project`、`topic`、`metric-topic`、`index`、`log`）使用。其他非信封组以扁平 JSON 写入标准错误，字段顺序如下：`errorCode`、`errorMessage`、`requestId`、`statusCode`、`kind`、`hint`。
+
+`summary.remoteOutcome` 表示业务操作状态：`not_sent`（未发送）、`unknown`（结果未知）、`success`（成功）、`failed`（失败）或 `partial`（部分完成）。`accepted` 为将来有明确异步契约的操作保留。`summary.deliveryOutcome`（`success` 或 `failed`）独立表示结果交付状态。遇到 `output_failed` 应修复交付问题，不要重跑原写操作；遇到 `result_unknown` 应先对账，再决定是否写入。本次 CLI 改动不新增重试；既有 `http.Client`/`Transport` 策略及自定义 transport 的行为仍然适用。
+
+批量写入出现 `partial_failure` 时，检查 `summary.progress` 或 `data.progress` 中的 `confirmedBatches`、`confirmedLogs`、`confirmedLogOffset`（从零开始的排他偏移）、`currentBatch`（有当前批次时从 1 开始）、`currentBatchOutcome` 和 `lastConfirmedRequestId`。只有收到确认成功的响应才增加计数；HTTP 200 后读取失败或响应不符合协议时结果为 `unknown`，不能把未知批次当作可自动续传的安全断点。当前 `requestId` 和 `statusCode` 只对应当前尝试，不沿用先前确认批次的值。
+
+标准 catalog JSON 响应路径要求 HTTP 200，非空响应体必须是有效 JSON；空响应以及特殊 codec、`raw`、protobuf 路径保留既有 2xx/text/empty/PB 兼容合同。错误可使用 `not_found`、`conflict`、`throttled`、`protocol` 和类型化 `validation` 等 kind。退出码 1、2、3 保持既有含义；暂时性错误本身不代表重试安全。标准输出交付失败时，CLI 返回非零并尽力向标准错误输出结构化报告；损坏的标准输出无法保证包含 JSON。
 
 ## 9. 追踪与诊断
 

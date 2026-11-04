@@ -219,7 +219,7 @@ func validateCreds(creds base.Credentials) error {
 func (c *Client) Do(ctx context.Context, method, path string, query map[string]string, header map[string]string, body []byte) (Response, error) {
 	u, err := url.Parse(c.Endpoint + path)
 	if err != nil {
-		return Response{}, err
+		return Response{}, requestFailure("build_request", "not_sent", err)
 	}
 	q := u.Query()
 	for k, v := range query {
@@ -235,7 +235,7 @@ func (c *Client) Do(ctx context.Context, method, path string, query map[string]s
 	}
 	req, err := http.NewRequestWithContext(ctx, method, u.String(), r)
 	if err != nil {
-		return Response{}, err
+		return Response{}, requestFailure("build_request", "not_sent", err)
 	}
 	req.Host = u.Host
 
@@ -253,28 +253,69 @@ func (c *Client) Do(ctx context.Context, method, path string, query map[string]s
 
 	req, err = c.Sign(ctx, req)
 	if err != nil {
-		return Response{}, err
+		return Response{}, requestFailure("sign", "not_sent", err)
 	}
 
 	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return Response{}, err
+	var result Response
+	var readErr error
+	if resp != nil {
+		// For a response accompanied by an error, net/http has already closed
+		// the body (the redirect-error case). Retain whatever remains readable.
+		result, readErr = readResponse(resp, err == nil)
 	}
-	defer resp.Body.Close()
+	if err != nil {
+		return result, requestFailure("transport", "unknown", err)
+	}
+	if readErr != nil {
+		return result, requestFailure("read_response", "unknown", readErr)
+	}
+	return result, nil
+}
+
+// readResponse preserves response metadata and any bytes read before a body or
+// gzip decoding error. If gzip initialization fails, Body contains the raw
+// bytes consumed while trying to read its header.
+func readResponse(resp *http.Response, closeBody bool) (Response, error) {
+	result := Response{StatusCode: resp.StatusCode, Header: resp.Header}
+	if resp.Body == nil {
+		return result, nil
+	}
+	if closeBody {
+		defer resp.Body.Close()
+	}
 	var reader io.Reader = resp.Body
 	if strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
-		zr, err := gzip.NewReader(resp.Body)
+		var header bytes.Buffer
+		captured := &gzipHeaderReader{reader: resp.Body, header: &header}
+		zr, err := gzip.NewReader(captured)
+		captured.header = nil
 		if err != nil {
-			return Response{}, err
+			result.Body = header.Bytes()
+			return result, err
 		}
 		defer zr.Close()
 		reader = zr
 	}
 	b, err := io.ReadAll(reader)
+	result.Body = b
 	if err != nil {
-		return Response{}, err
+		return result, err
 	}
-	return Response{StatusCode: resp.StatusCode, Header: resp.Header, Body: b}, nil
+	return result, nil
+}
+
+type gzipHeaderReader struct {
+	reader io.Reader
+	header *bytes.Buffer
+}
+
+func (r *gzipHeaderReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if r.header != nil && n > 0 {
+		_, _ = r.header.Write(p[:n])
+	}
+	return n, err
 }
 
 func resolveSigningCredentials(region string, service string, ak string, sk string, token string) (base.Credentials, error) {

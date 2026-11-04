@@ -16,6 +16,7 @@ import (
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth"
 	"github.com/volcengine-tls/ve-tls-cli/internal/config"
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
+	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
 )
 
 // fakeAuthFactory records calls and returns configurable providers/errors so
@@ -801,21 +802,37 @@ func TestDynamicProviderRetrieveFailureNeverFallsBackToEnvironmentAK(t *testing.
 			},
 		},
 	}
-	retrieveErr := errSentinel("sso token expired")
+	const canary = "provider-sensitive-canary"
+	retrieveErr := errSentinel("sso token expired: " + canary)
 	factory := &fakeAuthFactory{ssoProvider: &fakeProvider{err: retrieveErr}}
 	ctx := newTestContext(t, cfg, "/tmp/test-config.json")
 	ctx.Profile = "dyn"
 	ctx.authFactory = factory
 
-	_, err := ctx.DoRaw("GET", "/", nil, nil, nil)
+	response, err := ctx.DoRaw("GET", "/", nil, nil, nil)
 	if err == nil {
 		t.Fatalf("expected DoRaw to fail when provider Retrieve errors")
 	}
-	if !strings.Contains(err.Error(), "sso token expired") {
-		t.Fatalf("expected Retrieve error, got %v", err)
+	if !errors.Is(err, retrieveErr) {
+		t.Fatalf("expected wrapped Retrieve error, got %v", err)
 	}
-	if requestCount != 0 {
-		t.Fatalf("expected no HTTP requests after Retrieve failure, got %d", requestCount)
+	var dynamicErr interface{ AuthMode() string }
+	if !errors.As(err, &dynamicErr) || dynamicErr.AuthMode() != config.AuthModeSSO {
+		t.Fatalf("missing dynamic auth mode: %v", err)
+	}
+	var requestErr *tlsapi.RequestError
+	var evidence interface {
+		FailureStage() string
+		RemoteOutcome() string
+	}
+	if !errors.As(err, &requestErr) || !errors.As(err, &evidence) || evidence.FailureStage() != "sign" || evidence.RemoteOutcome() != "not_sent" {
+		t.Fatalf("request failure evidence=%v", err)
+	}
+	if strings.Contains(err.Error(), canary) || strings.Contains(err.Error(), retrieveErr.Error()) {
+		t.Fatalf("public error exposes provider cause: %q", err.Error())
+	}
+	if requestCount != 0 || response.StatusCode != 0 || ctx.StatusCode != 0 {
+		t.Fatalf("HTTP requests=%d response status=%d context status=%d, want 0/0/0", requestCount, response.StatusCode, ctx.StatusCode)
 	}
 	if factory.ssoCalls != 1 {
 		t.Fatalf("expected factory to be called once, got %d", factory.ssoCalls)

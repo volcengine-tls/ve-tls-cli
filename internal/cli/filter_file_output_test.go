@@ -258,7 +258,7 @@ func TestFilteredFileOutputMissDoesNotCreateOrOverwrite(t *testing.T) {
 			"--output-mode", "file", "--output-dir", outDir, "--jmes-filter", "data.missing_field",
 			"raw", "--method", "GET", "--path", "/DescribeProjects",
 		}, &stdout, &stderr)
-		assertFilterFileError(t, code, stdout.String(), stderr.String(), 3, "decode", "matched no value")
+		assertFilterFileError(t, code, stdout.String(), stderr.String(), 3, "output_failed", "matched no value")
 		assertFilterFileDirEmpty(t, outDir)
 	})
 	for _, workflow := range []bool{false, true} {
@@ -278,7 +278,7 @@ func TestFilteredFileOutputMissDoesNotCreateOrOverwrite(t *testing.T) {
 				args = append(args, filterFileCommand(workflow, ctxFile)...)
 				var stdout, stderr bytes.Buffer
 				code := Run(args, &stdout, &stderr)
-				assertFilterFileError(t, code, stdout.String(), stderr.String(), 3, "decode", "matched no value")
+				assertFilterFileError(t, code, stdout.String(), stderr.String(), 3, "output_failed", "matched no value")
 				raw, err := os.ReadFile(target)
 				if exists {
 					if err != nil || string(raw) != original {

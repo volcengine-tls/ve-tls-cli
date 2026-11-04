@@ -10,6 +10,7 @@ import (
 	tlssdk "github.com/volcengine/volc-sdk-golang/service/tls"
 	tlspb "github.com/volcengine/volc-sdk-golang/service/tls/pb"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
@@ -127,7 +128,7 @@ func decodeSpecialIOResponseForProfile(profile specialIOProfile, meta apiIOMeta,
 
 	if isTrueValue(headerValue(resp.Header, "x-tls-is-kafka-records")) {
 		if strings.ToLower(strings.TrimSpace(meta.OutputMode)) != "file" {
-			return nil, true, errors.New("kafka record payload requires --output-mode file")
+			return nil, true, &execution.Failure{Kind: "output_failed", Code: "OutputFailed", Stage: "format", Outcome: execution.OutcomeSuccess, Cause: errors.New("kafka record payload requires --output-mode file")}
 		}
 		return rawBinaryOutput{
 			Data: append([]byte(nil), resp.Body...),

@@ -239,6 +239,8 @@ Global `--region` and `--endpoint` flags and `context.region`/`context.endpoint`
 
 When a dry-run plan includes `request_preview`, it recursively masks values under known sensitive keys such as password, secret, token, access key, and credential; it also masks a `Contents`/`LogTags` `Value` when the corresponding `Key` is sensitive. An unparseable body is omitted from the preview, and `redacted_fields` may list masked paths. This changes only the preview: the wire request and `body_sha256` are unchanged. Ordinary body strings are not guaranteed to be identified as secrets.
 
+Malformed JSON-like query values are replaced with `[unparseable query omitted]`; the displayed endpoint removes user information, query, and fragment.
+
 ### 6.3 Write-operation safety
 
 For write operations, run with `--dry-run` first to validate the request locally before sending it to TLS. A dry-run plan reports whether local checks (profile, endpoint, region, body JSON) passed.
@@ -329,11 +331,17 @@ Dynamic JSON is decoded and encoded with `json.Number` preserved across request 
 
 ### 8.5 Envelope fields and error output
 
-Success envelope: `status`, `action`, `requestId`, `summary` (`outputMode`, `deliveryMode`, `dryRun`, `itemCount`, `totalBytes`, optional `pagination`/`tracePath`), `artifacts`, `data`, `error` (`null`).
+Success envelope: `status`, `action`, `requestId`, `summary` (`outputMode`, `deliveryMode`, `remoteOutcome`, `deliveryOutcome`, `dryRun`, `itemCount`, `totalBytes`, optional `pagination`/`tracePath`), `artifacts`, `data`, `error` (`null`).
 
-Error envelope: `status` (`failed`), `action`, `requestId`, `summary`, `artifacts` (empty), `data` (`null`), `error` (`source`, `code`, `message`, `requestId`, `statusCode`, `kind`, `hint`, optional `details`).
+Error envelope: `status` (`failed`), `action`, `requestId`, `summary`, `artifacts` (empty), `data` (normally `null`, with progress for batch-ingest failures), `error` (`source`, `code`, `message`, `requestId`, `statusCode`, `kind`, `hint`, optional `details`).
 
 Structured error envelopes are used by `raw`, all `tool` commands (including `list`/`describe`), all `workflow` commands (including `list`/`describe`), and the human-shortcut envelope groups (`project`, `topic`, `metric-topic`, `index`, `log`). Other non-envelope groups write flat JSON to stderr in this field order: `errorCode`, `errorMessage`, `requestId`, `statusCode`, `kind`, `hint`.
+
+`summary.remoteOutcome` describes the business operation: `not_sent`, `unknown`, `success`, `failed`, or `partial`. `accepted` is reserved for a future operation with an explicit asynchronous contract. `summary.deliveryOutcome` (`success` or `failed`) separately describes result delivery. For `output_failed`, repair delivery and do not repeat the original write. For `result_unknown`, reconcile the remote state before considering another write. The CLI adds no retry in this change; existing `http.Client`/`Transport` policies still apply, including any behavior of a custom transport.
+
+For batch-ingest `partial_failure`, inspect `summary.progress` or `data.progress`: `confirmedBatches`, `confirmedLogs`, `confirmedLogOffset` (zero-based exclusive), `currentBatch` (one-based when a batch is active), `currentBatchOutcome`, and `lastConfirmedRequestId`. Only a confirmed successful response increments the counts. A read failure or invalid response after HTTP 200 is `unknown`; an unknown batch is not a safe automatic resume point. The current `requestId` and `statusCode` describe the current attempt and are not inherited from a previous confirmed batch.
+
+The standard catalog JSON response path requires HTTP 200; a non-empty body must be valid JSON. Empty responses and special codec, `raw`, and protobuf paths retain their existing 2xx/text/empty/PB compatibility contracts. Errors can use `not_found`, `conflict`, `throttled`, `protocol`, and typed `validation` kinds. Exit codes 1, 2, and 3 retain their existing roles; a transient failure alone does not make retry safe. If stdout delivery fails, the CLI returns nonzero and makes a best-effort structured report on stderr; broken stdout cannot guarantee JSON output.
 
 ## 9. Trace and diagnostics
 

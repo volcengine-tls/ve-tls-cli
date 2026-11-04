@@ -439,8 +439,8 @@ func TestWorkflowExecTopLevelJMESFilterMissUsesEnvelope(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected error object, got %#v", out["error"])
 	}
-	if got := errObj["kind"]; got != "decode" {
-		t.Fatalf("expected decode kind, got %#v", got)
+	if got := errObj["kind"]; got != "output_failed" {
+		t.Fatalf("expected output_failed kind, got %#v", got)
 	}
 	if !strings.Contains(asStringOrEmpty(errObj["message"]), "matched no value") {
 		t.Fatalf("unexpected error message: %#v", errObj["message"])

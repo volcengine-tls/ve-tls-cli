@@ -55,6 +55,7 @@ Discover -> Describe -> Exec -> Read Result
    - `volclog raw --method <METHOD> --path <PATH> --body '{...}'`
 5. Read result in this order.
    - `status` (`"success"` or `"failed"`)
+   - `summary.remoteOutcome` and `summary.deliveryOutcome`, where present
    - `summary.deliveryMode`
    - the flat `error` object (when `status` is `"failed"`)
    - business fields under `data` (when `status` is `"success"`)
@@ -83,6 +84,11 @@ Discover -> Describe -> Exec -> Read Result
 - Prefer `--dry-run` before any write or destructive change, but only on `raw`, `tool exec`, or `workflow exec`.
 - Treat `--dry-run` as contract or plan validation, not proof that the business query is correct.
 - A dry-run `request_preview` masks known sensitive keys recursively, including sensitive `Contents`/`LogTags` key/value entries; malformed bodies are omitted and `redacted_fields` may list paths. This affects only the preview, not the wire request or body hash. Ordinary body strings are not guaranteed to be recognized as secrets.
+- Malformed JSON-like query values use `[unparseable query omitted]`; displayed endpoints omit user information, query, and fragment.
+- `summary.remoteOutcome` distinguishes `not_sent`, `unknown`, `success`, `failed`, and `partial`; `summary.deliveryOutcome` is independently `success` or `failed`. `accepted` is reserved for a future explicit asynchronous operation contract.
+- For batch-ingest failures, inspect `summary.progress` or `data.progress`: `confirmedBatches`, `confirmedLogs`, zero-based exclusive `confirmedLogOffset`, one-based active `currentBatch`, `currentBatchOutcome`, and `lastConfirmedRequestId`. Only confirmed success responses count. HTTP 200 followed by a read or protocol failure is `unknown`; never treat an unknown batch as an automatically safe resume point. Current request ID and status refer to the current attempt, not an earlier confirmed batch.
+- Standard catalog JSON responses require HTTP 200 and valid JSON when the body is non-empty. Empty responses and special codec, `raw`, and protobuf paths retain their existing 2xx/text/empty/PB contracts. The CLI adds no retry here; existing `http.Client`/`Transport` and custom-transport behavior still applies.
+- A stdout write failure returns nonzero and reports a structured error to stderr on a best-effort basis; broken stdout cannot guarantee JSON. Exit codes 1, 2, and 3 keep their existing roles.
 - If fields are uniquely named, prefer flat JSON input before manual nesting.
 
 ## Error Recovery Quick Map
@@ -97,11 +103,14 @@ Use this table as the default first response after a failed envelope only after 
 | `error.kind=usage` | Re-run `tool list` or `workflow list`; do not invent aliases. |
 | `error.kind=unsupported_feature` | Read `error.hint`, then remove the unsupported flag or switch to the named surface; non-LogApp Topic resolution should switch to `app.resolve-resources`. |
 | `error.kind=incompatible_flags` | Remove one conflicting flag and rerun. |
-| `error.kind=filesystem` | Fix `--output-dir`, local path, or permissions before retrying. |
-| `error.kind=decode` | Read `error.hint`, remove the wrong filter or projection if present, then rerun unfiltered or with `--trace-dir`. |
-| `error.kind=server` | Read `error.code` and `error.requestId`; retry with backoff only when the operation contract permits it and the failure is clearly transient. |
+| `error.kind=filesystem` or `output_failed` | Fix delivery; inspect `remoteOutcome` and do not repeat the original write solely because output failed. |
+| `error.kind=result_unknown` or `protocol` | Reconcile the remote state before considering another write. A transient error alone does not make retry safe. |
+| `error.kind=partial_failure` | Inspect confirmed progress and the current batch outcome; reconcile unknown batches before any resume. |
+| `error.kind=not_found`, `conflict`, or `throttled` | Inspect the operation contract and current state; do not infer retry safety from the kind alone. |
+| `error.kind=decode` | Read `error.hint` and inspect the filter or projection; do not repeat a successful write to repair delivery. |
+| `error.kind=server` | Read `error.code`, `error.requestId`, and `remoteOutcome`; retry only when the operation contract and reconciled state permit it. |
 | `error.kind=config` | Run `volclog doctor` for host-side configuration checks, then inspect the reported runtime issue. |
-| `error.kind=unknown` | Read `error.hint` first, then `error.message` or `error.details`, and rerun with `--dry-run` or `--trace-dir` only if more detail is still needed. |
+| `error.kind=unknown` | Read `error.hint`, `error.message`, and `error.details`; reconcile before repeating a write. |
 | `ResultStatus=incomplete` | Narrow the time window and rerun before trusting counts or emptiness. |
 
 `volclog doctor` checks host/runtime configuration such as credentials, endpoint, and local setup. It does not replace `describe`, and it does not validate business query semantics.

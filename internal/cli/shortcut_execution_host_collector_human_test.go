@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 )
 
 func TestHostGroupListAllUsesShortcutOnlyPaginationOverride(t *testing.T) {
@@ -96,12 +98,20 @@ func TestCollectorListAllForcesTotalAndPreservesPaginationFailures(t *testing.T)
 	})
 
 	t.Run("transport error keeps pagination metadata nil", func(t *testing.T) {
+		const canary = "collector-transport-cause-canary"
+		sentinel := errors.New(canary)
 		ctx, _ := newShortcutExecutionCaptureContext(t, []shortcutExecutionResponse{
-			{err: errors.New("collector transport failed")},
+			{err: sentinel},
 		})
 		_, err := collectorList(ctx, []string{"--all"})
-		if err == nil || !strings.Contains(err.Error(), "collector transport failed") {
-			t.Fatalf("error = %v", err)
+		if !errors.Is(err, sentinel) {
+			t.Fatalf("original transport cause lost: %v", err)
+		}
+		if err.Error() != "request result unknown after transport failure" || strings.Contains(err.Error(), canary) {
+			t.Fatalf("unsafe or unexpected public error: %q", err.Error())
+		}
+		if ctx.RemoteOutcome != execution.OutcomeUnknown {
+			t.Fatalf("remote outcome = %q, want unknown", ctx.RemoteOutcome)
 		}
 		if ctx.PaginationMeta != nil {
 			t.Fatalf("pagination metadata = %#v, want nil", ctx.PaginationMeta)

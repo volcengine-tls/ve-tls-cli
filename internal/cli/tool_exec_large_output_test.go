@@ -202,8 +202,8 @@ func TestToolExecAutoArtifactMissingOutputDirReturnsHelpfulError(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected error object, got %#v", out["error"])
 	}
-	if kind, _ := errObj["kind"].(string); kind != "validation" {
-		t.Fatalf("expected validation kind, got %#v", errObj["kind"])
+	if kind, _ := errObj["kind"].(string); kind != "output_failed" {
+		t.Fatalf("expected output_failed kind, got %#v", errObj["kind"])
 	}
 	msg, _ := errObj["message"].(string)
 	if !strings.Contains(msg, "specify --output-dir <writable-dir>") {

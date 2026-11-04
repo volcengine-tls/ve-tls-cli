@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
@@ -237,12 +238,12 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 		}
 	}
 	if err := validateWorkflowExecInput(spec, input); err != nil {
-		return nil, err
+		return nil, validationFailure(err, "InvalidWorkflowInput")
 	}
 	options := resolveToolExecutionOptions(cfg)
 	compiledProjection, err := output.Compile(options.Projection)
 	if err != nil {
-		return nil, fmt.Errorf("invalid execution.projection: %w", err)
+		return nil, &execution.Failure{Kind: "decode", Code: "InvalidProjection", Stage: "validate", Outcome: execution.OutcomeNotSent, Cause: fmt.Errorf("invalid execution.projection: %w", err)}
 	}
 	if err := applyToolExecContext(ctx, cfg); err != nil {
 		return nil, err
@@ -276,16 +277,16 @@ func runWorkflowExec(ctx *Context, args []string) (any, error) {
 	}
 	filtered, err := applyCompiledToolExecFilter(out, compiledProjection)
 	if err != nil {
-		return nil, err
+		return nil, outputFailure(ctx, err, "projection", 3)
 	}
 	env, err := buildAPIEnvelope(ctx, "workflow", filtered, ctx.OutputMode, ctx.OutputFile, ctx.Format)
 	if err != nil {
-		return nil, err
+		return nil, postExecutionFailure(ctx, err, "artifact")
 	}
 	env["action"] = ctx.Action
 	env, err = finalizeWorkflowExecEnvelope(ctx, filtered, env, options)
 	if err != nil {
-		return nil, err
+		return nil, postExecutionFailure(ctx, err, "artifact")
 	}
 	return env, nil
 }
@@ -454,7 +455,7 @@ func finalizeWorkflowExecEnvelope(ctx *Context, result any, env map[string]any, 
 	filePath, err := resolveOutputFilePath("", ctx.OutputDir, "workflow", output.FormatJSON)
 	if err != nil {
 		if errors.Is(err, errMissingWritableOutputDir) {
-			return nil, errors.New("result too large for stdout; specify --output-dir <writable-dir> to allow automatic file delivery")
+			return nil, errMissingWritableOutputDir
 		}
 		return nil, err
 	}

@@ -91,10 +91,9 @@ func writeFilterApplicationError(ctx *Context, stdout, stderr io.Writer, group s
 		if strings.TrimSpace(ctx.TraceDir) != "" {
 			_ = ctx.initTrace()
 		}
-		errorEnv := buildAPIErrorEnvelope(ctx, group, err, outputMode)
+		errorEnv := buildAPIErrorEnvelope(ctx, group, outputFailure(ctx, err, "projection", 3), outputMode)
 		if err2 := output.Write(stdout, errorEnv, output.FormatJSON); err2 != nil {
-			writeCLIError(stderr, err2, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
-			return 3
+			return writeBrokenStdout(stderr, err2, errorEnv)
 		}
 		return 3
 	}

@@ -76,7 +76,7 @@ func TestRawServerErrorIsWrappedInEnvelope(t *testing.T) {
 	if errObj["statusCode"] != float64(http.StatusConflict) {
 		t.Fatalf("unexpected statusCode: %v", errObj["statusCode"])
 	}
-	if errObj["kind"] != "server" {
+	if errObj["kind"] != "conflict" {
 		t.Fatalf("unexpected kind: %v", errObj["kind"])
 	}
 	if errObj["source"] != "upstream" {
@@ -216,7 +216,7 @@ func TestShortcutServerErrorIsWrappedInEnvelope(t *testing.T) {
 	if errObj["statusCode"] != float64(http.StatusConflict) {
 		t.Fatalf("unexpected statusCode: %v", errObj["statusCode"])
 	}
-	if errObj["kind"] != "server" {
+	if errObj["kind"] != "conflict" {
 		t.Fatalf("unexpected kind: %v", errObj["kind"])
 	}
 }

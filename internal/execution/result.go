@@ -46,12 +46,13 @@ type Invocation struct {
 }
 
 type Result struct {
-	OperationID contract.OperationID
-	Data        any
-	RequestID   string
-	StatusCode  int
-	Pagination  *PaginationResult
-	Plan        *DryRunPlan
+	OperationID   contract.OperationID
+	Data          any
+	RequestID     string
+	StatusCode    int
+	RemoteOutcome string
+	Pagination    *PaginationResult
+	Plan          *DryRunPlan
 }
 
 type PaginationResult struct {
@@ -94,6 +95,8 @@ func (e *HTTPError) Error() string {
 	}
 	return string(e.Body)
 }
+
+func (e *HTTPError) RemoteOutcome() string { return OutcomeFailed }
 
 func resultForResponse(operationID contract.OperationID, response Response) Result {
 	return Result{

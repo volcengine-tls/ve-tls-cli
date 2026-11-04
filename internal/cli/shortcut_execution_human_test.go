@@ -180,10 +180,18 @@ func TestShortcutExecutionListAllLegacyAdaptation(t *testing.T) {
 	})
 
 	t.Run("transport failure keeps pagination metadata nil", func(t *testing.T) {
-		ctx, _ := newShortcutExecutionCaptureContext(t, []shortcutExecutionResponse{{err: errors.New("boom")}})
+		const canary = "project-transport-cause-canary"
+		sentinel := errors.New(canary)
+		ctx, _ := newShortcutExecutionCaptureContext(t, []shortcutExecutionResponse{{err: sentinel}})
 		_, err := projectList(ctx, []string{"--all"})
-		if err == nil || !strings.Contains(err.Error(), "boom") {
-			t.Fatalf("error = %v", err)
+		if !errors.Is(err, sentinel) {
+			t.Fatalf("original transport cause lost: %v", err)
+		}
+		if err.Error() != "request result unknown after transport failure" || strings.Contains(err.Error(), canary) {
+			t.Fatalf("unsafe or unexpected public error: %q", err.Error())
+		}
+		if ctx.RemoteOutcome != execution.OutcomeUnknown {
+			t.Fatalf("remote outcome = %q, want unknown", ctx.RemoteOutcome)
 		}
 		if ctx.PaginationMeta != nil {
 			t.Fatalf("pagination metadata = %#v", ctx.PaginationMeta)

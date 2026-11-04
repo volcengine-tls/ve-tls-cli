@@ -73,15 +73,15 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 	}
 	input, err := execution.NormalizeInput(operation, rawInput)
 	if err != nil {
-		return nil, err
+		return nil, validationFailure(err, "InvalidToolInput")
 	}
 	if err := execution.ValidateInput(operation, input); err != nil {
-		return nil, err
+		return nil, validationFailure(err, "InvalidToolInput")
 	}
 	options := resolveToolExecutionOptions(ctxCfg)
 	compiledProjection, err := output.Compile(options.Projection)
 	if err != nil {
-		return nil, fmt.Errorf("invalid execution.projection: %w", err)
+		return nil, &execution.Failure{Kind: "decode", Code: "InvalidProjection", Stage: "validate", Outcome: execution.OutcomeNotSent, Cause: fmt.Errorf("invalid execution.projection: %w", err)}
 	}
 	if err := applyToolExecContext(ctx, ctxCfg); err != nil {
 		return nil, err
@@ -144,16 +144,16 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 	warnings := toolDigestWarnings(operation, ctxCfg.ContractDigest)
 	filteredResult, err := applyCompiledToolExecFilter(result, compiledProjection)
 	if err != nil {
-		return nil, err
+		return nil, outputFailure(ctx, err, "projection", 3)
 	}
 	filteredResult = stabilizeProjectedToolResult(result, filteredResult, options.Projection)
 	env, err := buildAPIEnvelope(ctx, "tool", filteredResult, ctx.OutputMode, ctx.OutputFile, ctx.Format)
 	if err != nil {
-		return nil, err
+		return nil, postExecutionFailure(ctx, err, "artifact")
 	}
 	env, err = finalizeToolExecEnvelope(ctx, filteredResult, env, options)
 	if err != nil {
-		return nil, err
+		return nil, postExecutionFailure(ctx, err, "artifact")
 	}
 	env["action"] = ctx.Action
 	env["contract_digest"] = buildToolContractDigestStatus(operation, ctxCfg.ContractDigest)

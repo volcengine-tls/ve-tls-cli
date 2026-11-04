@@ -64,18 +64,17 @@ func renderFilteredEnvelopeFile(ctx *Context, stdout, stderr io.Writer, group st
 	}
 	path, ok := firstArtifactPath(env["artifacts"])
 	if !ok {
-		return writeRunError(ctx, stdout, stderr, group, rest, errors.New("missing filtered output artifact path"), "filesystem", "check the output directory and artifact path", "file", 2)
+		return writeDeliveryFailure(ctx, stdout, stderr, group, errors.New("missing filtered output artifact path"), "artifact", 2)
 	}
 	data, err = marshalOutputBytes(filtered, output.FormatJSON)
 	if err != nil {
 		return writeFilterApplicationError(ctx, stdout, stderr, group, rest, env, "file", err)
 	}
 	if err := writeFilteredOutputFile(path, data); err != nil {
-		return writeRunError(ctx, stdout, stderr, group, rest, err, "filesystem", "check the output directory and artifact path", "file", 2)
+		return writeDeliveryFailure(ctx, stdout, stderr, group, err, "artifact", 2)
 	}
-	if _, err := io.WriteString(stdout, "结果已写入文件。\n文件: "+path+"\n"); err != nil {
-		writeCLIError(stderr, err, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
-		return 3
+	if err := writeOutputNotice(stdout, "结果已写入文件。\n文件: "+path+"\n"); err != nil {
+		return writeDeliveryFailureToStderr(ctx, stderr, group, err, env)
 	}
 	return exitCode
 }
