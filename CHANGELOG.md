@@ -1,5 +1,26 @@
 # Changelog
 
+## volclog-v1.2.0-rc.1
+
+- Add four SavedSearch tools for creating, deleting, reading, and listing shared Topic saved queries, with exact field spelling, explicit write permission, upstream error propagation, and server-source provenance.
+- Correct 39 required-field discrepancies across 30 existing operations and persist the corrections in generator inputs. The catalog now contains 169 operations, including 163 public tools.
+- Keep explicitly selected profiles authoritative over environment credentials and targets; validate runtime context fields and conflicts, and redact credential-bearing dry-run previews.
+- Separate remote execution outcomes from output delivery failures, classify uncertain request results, and preserve confirmed progress across multi-batch writes.
+- Report collection completeness and continuation input for default single-page lists, pagination, searches, and exports; retain acquired partial results after later request failures.
+- Standardize default-edition invocation errors and file-delivery notices as JSON, preserve remote outcome evidence when filtering or writing output fails, and support JMESPath selection with file delivery.
+- Enforce declared input types, unknown-field rejection, conditional request requirements, and explicit recovery provenance in tool contracts.
+- Add automatic non-interactive behavior without a TTY, an optional whole-invocation deadline, explicit business-write permission, and validated trace controls.
+- Classify an existing Skill installation as a conflict and provide status/update guidance; align bundled profile-selection instructions with runtime behavior.
+
+### Upgrade notes
+
+- Business writes now require `--allow-write` or `context.execution.allow_write=true`. Inspect the contract and use `--dry-run` before granting write permission.
+- Read `summary.remoteOutcome` and `summary.deliveryOutcome` separately. An output failure does not establish that a write failed remotely; reconcile an unknown result before retrying.
+- Inspect `summary.completeness` before reporting a total. `summary.itemCount` counts returned items. Follow a supplied `next.operationId` and `next.input` as a single-page call with the same runtime selectors and page-all disabled, or use `--page-all` for full collection where supported.
+- In the default edition, parse structured invocation failures and file-delivery results from stdout. Obtain delivered file paths from `artifacts[].path`; human-edition file notices retain their text format.
+- Supply `--output-dir` for large-result delivery and forced file output on the default tool/workflow/raw path. Invalid context fields and disabled trace-redaction values now fail validation; `context.trace=false` disables tracing even with a global trace directory.
+- Refresh cached tool contracts and update bundled Skills before preparing requests against the corrected schemas. SavedSearch availability still depends on the deployed service and IAM permissions.
+
 ## volclog-v1.1.1
 
 - Preserve safe Console Login diagnostics through CLI error handling, including the failing stage, allowlisted OAuth error codes, HTTP status, and validated request IDs, without exposing tokens or raw response bodies.
