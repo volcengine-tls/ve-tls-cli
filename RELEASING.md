@@ -4,9 +4,9 @@
 
 ## 发布前检查（建议作为 PR 合入门禁）
 
-- `go test . ./cmd/... ./internal/...` 通过（明确排除 `repos/**`）
+- `go test . ./cmd/... ./internal/...` 和 `go test -tags=human . ./cmd/... ./internal/...` 通过（明确排除 `repos/**`）
 - `gofmt -w` 已执行，且 `find . -path './repos' -prune -o -name '*.go' -print0 | xargs -0 gofmt -l` 无输出
-- `go vet . ./cmd/... ./internal/...` 通过（明确排除 `repos/**`）
+- `bash scripts/check-go-quality.sh` 通过，覆盖默认和 human 两版的 vet/staticcheck（需安装 staticcheck 2024.1.1）
 - README/README_ZH 与快速开始文档中的二进制安装命令可在空目录直接执行
 - `volclog --help`、`volclog <group> -h`、`volclog version`、`volclog --version` 输出符合预期
 - `volclog version` 的 JSON 包含 `schema_version`、`version`、`edition`、`commit`、`catalog_digest`、`operation_count`、`public_operation_count`、`workflow_count`；`volclog --version` 保持文本兼容输出
@@ -23,25 +23,31 @@
 
 ## 版本号与 Tag 规则
 
-- 正式版使用 Tag：`volclog-vX.Y.Z`（例如 `volclog-v1.1.1`）
-- 预发布版使用标准 SemVer Tag：`volclog-vX.Y.Z-rc.N`（例如 `volclog-v1.1.1-rc.1`）
-- RC 存在问题时递增 `rc.N`；验证完成后再发布不带预发布后缀的正式版。
+- 正式版使用 Tag：`volclog-vX.Y.Z`（例如 `volclog-v1.2.0`）
+- 预发布版使用标准 SemVer Tag：`volclog-vX.Y.Z-rc.N`（例如 `volclog-v1.2.0-rc.1`）
+- 当前候选版为 `1.2.0-rc.1`，目标正式版为 `1.2.0`。RC 存在问题时递增 `rc.N`；验证完成后再发布不带预发布后缀的正式版。
+- 每次候选版或正式版都同步更新 `package.json`、`npm/human-package/package.json`、`package-lock.json` 的顶层及根包版本、`internal/version/version.go`、发布元数据测试和 CHANGELOG，并在合入后打对应 Tag。Tag 必须与包版本匹配。
 - Release workflow 会将 `${GITHUB_REF_NAME}` 注入到二进制版本号中：
-  - RC：`volclog --version` 输出 `volclog volclog-v1.1.1-rc.1`
-  - 正式版：`volclog --version` 输出 `volclog volclog-v1.1.1`
+  - RC：`volclog --version` 输出 `volclog volclog-v1.2.0-rc.1`
+  - 正式版：`volclog --version` 输出 `volclog volclog-v1.2.0`
   
 版本建议：
 - `0.0.0` 通常用于开发态占位（不建议作为对外发布版本号）
-- npm 包版本不带 `volclog-v` 前缀，例如 `1.1.1-rc.1`。
+- npm 包版本不带 `volclog-v` 前缀，例如 `1.2.0-rc.1`。
 - RC npm 包必须使用 `rc` dist-tag，正式版必须使用 `latest`；发布门禁会按版本号自动校验。
 
 ## 发布流程（GitHub Actions）
 
-### 1) 打 Tag 并推送
+### 1) 合入版本准备 PR 后，打候选版 Tag 并推送
+
+先确认该提交的 CI 通过，且版本元数据均为 `1.2.0-rc.1`：
+
 ```bash
-git tag volclog-v1.1.1
-git push origin volclog-v1.1.1
+git tag volclog-v1.2.0-rc.1
+git push origin volclog-v1.2.0-rc.1
 ```
+
+正式发布时，先提交并合入 `1.2.0` 的版本更新、完成同样验证，再推送 `volclog-v1.2.0` Tag。
 
 ### 2) 等待工作流完成
 - workflow：`.github/workflows/release-volclog.yml`
@@ -54,14 +60,14 @@ git push origin volclog-v1.1.1
 
 以下命令适用于已经包含安装脚本资产的 Release。安装指定 RC：
 ```bash
-tag="volclog-v1.1.1-rc.1"
+tag="volclog-v1.2.0-rc.1"
 base_url="https://github.com/volcengine-tls/ve-tls-cli/releases/download/${tag}"
 curl -fsSLO "${base_url}/install-binary.sh"
 VOLCLOG_BASE_URL="${base_url}" bash install-binary.sh
 ~/.local/bin/volclog --version
 ```
 
-正式 `v1.1.1` 发布、`latest` 已包含安装脚本资产后：
+正式 `v1.2.0` 发布、`latest` 已包含安装脚本资产后：
 ```bash
 curl -fsSLO https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download/install-binary.sh
 VOLCLOG_BASE_URL="https://github.com/volcengine-tls/ve-tls-cli/releases/latest/download" bash install-binary.sh
@@ -70,7 +76,7 @@ VOLCLOG_BASE_URL="https://github.com/volcengine-tls/ve-tls-cli/releases/latest/d
 
 Windows 安装（示例）：
 ```powershell
-$tag = "volclog-v1.1.1-rc.1"
+$tag = "volclog-v1.2.0-rc.1"
 $baseUrl = "https://github.com/volcengine-tls/ve-tls-cli/releases/download/$tag"
 Invoke-WebRequest -Uri "$baseUrl/install.ps1" -OutFile install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -BaseUrl $baseUrl
@@ -95,8 +101,8 @@ npm publish --registry https://registry.npmjs.org/ --tag rc --access public .
 npm publish --registry https://registry.npmjs.org/ --tag rc --access public ./npm/human-package
 ```
 
-两个包的 registry 均固定为官方 `https://registry.npmjs.org/`。当前正式版的
-`publishConfig.tag` 为 `latest`；`prepublishOnly` 会根据包版本是否包含预发布后缀，
+两个包的 registry 均固定为官方 `https://registry.npmjs.org/`，`publishConfig.tag`
+默认为 `latest`，因此 RC 发布必须显式传 `--tag rc`。`prepublishOnly` 会根据包版本是否包含预发布后缀，
 拒绝正式版使用 `rc` 或 RC 使用 `latest`，避免误更新 dist-tag。
 
 验证：
@@ -104,9 +110,11 @@ npm publish --registry https://registry.npmjs.org/ --tag rc --access public ./np
 ```bash
 npm view @volcengine-tls/volclog dist-tags --registry https://registry.npmjs.org/
 npm view @volcengine-tls/volclog-human dist-tags --registry https://registry.npmjs.org/
-npm install -g @volcengine-tls/volclog@latest --registry https://registry.npmjs.org/
-npm install -g @volcengine-tls/volclog-human@latest --registry https://registry.npmjs.org/
+npm install -g @volcengine-tls/volclog@rc --registry https://registry.npmjs.org/
+npm install -g @volcengine-tls/volclog-human@rc --registry https://registry.npmjs.org/
 ```
+
+正式版验证将安装命令中的 `@rc` 改为 `@latest`。
 
 ## 常见问题
 
