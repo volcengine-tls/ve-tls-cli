@@ -90,7 +90,7 @@ type partialResponseTransport struct{ cause error }
 
 func (t partialResponseTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"X-Tls-Requestid": {"request-id"}},
-		Body: failingTransportBody{cause: t.cause}, Request: req}, nil
+		Body: failingTransportBody(t), Request: req}, nil
 }
 
 func TestTransportMapsPartialResponseOnReadFailure(t *testing.T) {

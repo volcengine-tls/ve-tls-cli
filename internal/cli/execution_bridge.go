@@ -69,7 +69,7 @@ func adaptToolExecutionError(err error) error {
 	if err == nil {
 		return nil
 	}
-	if typed, _ := firstTypedOperationError(err); typed != nil {
+	if _, typed := firstTypedOperationError(err); typed != nil {
 		return err
 	}
 	var source *execution.HTTPError

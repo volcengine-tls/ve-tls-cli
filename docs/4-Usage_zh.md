@@ -142,6 +142,8 @@ volclog --profile default tool exec project.create \
 
 `--page-all` 是 `tool exec` 的直接标志，用于请求分页结果的所有页。
 
+不启用 `--page-all` 时，已声明分页的列表仍只请求一页，并在成功信封中返回 `summary.pagination.mode="single_page"` 和 `summary.completeness`。还有后续页或无法证明结束时，`complete=false`，可安全续取时提供 `next.operationId` 和 `next.input`；单页成功仍返回 0。续取保留筛选条件及省略的服务端 PageSize 默认值，不会套用 page-all 的请求大小。只有从第一页取得完整列表时才标记 `complete=true`；从中间页开始，即使已经到末尾，也只是 `stopReason="page_slice"`，不会宣称包含此前页面。没有显式 PageSize 且无法确定末页时，可能需要续取一个空页来确认结束。
+
 即使已经合并页面，也要检查 `summary.completeness`：`summary.pagination.merged=true` 只表示已累积页面，不代表结果完整。服务端的 `data.Total` 保持原值，`summary.itemCount` 表示已收集条数。完整性包含 `complete`、`stopReason`、`pageCount`、`itemCount`、`resumable`，以及可用时的 `next`。触及页数预算或后续请求失败时命令返回非零，并保留已收集数据。存在 `next` 时，复用相同运行时选择器，以其 `operationId` 和 `input` 发起普通 `tool exec` 单页调用，不传 `--page-all`，也不在上下文中启用 page-all；`next.pageAll` 为 `false`。
 
 ## 4. `workflow exec`

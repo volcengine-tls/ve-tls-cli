@@ -336,6 +336,10 @@ func anySlice(value any) ([]any, bool) {
 // It handles arbitrarily large decimal/exponent forms without converting them
 // to int or allocating a number proportional to the exponent.
 func totalAtMost(value any, count int) (bool, bool) {
+	return totalAtMostDecimal(value, strconv.Itoa(count))
+}
+
+func totalAtMostDecimal(value any, want string) (bool, bool) {
 	var raw string
 	switch typed := value.(type) {
 	case int:
@@ -407,7 +411,6 @@ func totalAtMost(value any, count int) (bool, bool) {
 		digits = digits[:len(digits)-remove]
 		scale = 0
 	}
-	want := strconv.Itoa(count)
 	if len(digits)+scale != len(want) {
 		return len(digits)+scale < len(want), true
 	}

@@ -449,6 +449,11 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 	for _, entry := range traps.Traps {
 		if trap, _ := entry["trap"].(string); trap == "env-creds-override-profile" {
 			foundEnvOverrideTrap = true
+			why, _ := entry["why"].(string)
+			fix, _ := entry["fix"].(string)
+			if !strings.Contains(why, "only when profile selection is implicit") || !strings.Contains(fix, "never together with profile") {
+				t.Fatalf("profile trap contradicts explicit profile selection: %+v", entry)
+			}
 			break
 		}
 	}
@@ -461,6 +466,9 @@ func TestVolclogCoreTemplateStaysMachineReadable(t *testing.T) {
 		t.Fatalf("read best-practices.md: %v", err)
 	}
 	bestPractices := string(bestPracticesBytes)
+	if strings.Contains(bestPractices, "Environment credentials override profile resolution.") || !strings.Contains(bestPractices, "Without an explicit profile, the existing environment precedence applies.") {
+		t.Fatal("best-practices.md contradicts the explicit profile contract")
+	}
 	for _, entry := range recovery.Recipes {
 		signal, _ := entry["error_signature"].(string)
 		if signal == "" {

@@ -84,7 +84,11 @@ func (e *Executor) Execute(ctx context.Context, invocation Invocation) (Result, 
 		}
 		return result, err
 	}
-	return e.executeOne(ctx, invocation.Operation, request, codec)
+	result, err = e.executeOne(ctx, invocation.Operation, request, codec)
+	if err != nil || invocation.Operation.Pagination == nil {
+		return result, err
+	}
+	return annotateSinglePage(invocation, request, result)
 }
 
 func isNilTransport(transport Transport) bool {

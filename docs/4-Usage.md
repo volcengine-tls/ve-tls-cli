@@ -142,6 +142,8 @@ volclog --profile default tool exec project.create \
 
 `--page-all` is a direct flag for `tool exec` and requests all pages of a paginated result.
 
+Without `--page-all`, a list with declared pagination still makes one request and includes `summary.pagination.mode="single_page"` and `summary.completeness` in its success envelope. More pages or uncertain termination mean `complete=false`; a safe continuation supplies `next.operationId` and `next.input`. A successful single page still exits 0. Continuations retain filters and an omitted service-default PageSize instead of injecting the page-all request size. Only a complete collection starting at page one has `complete=true`; a later terminal page is a `stopReason="page_slice"` and does not claim to include earlier pages. Without an explicit PageSize, confirming termination may require one additional empty page.
+
 Inspect `summary.completeness` even when pages were merged: `summary.pagination.merged=true` means pages were accumulated, not that the result is complete. The service's `data.Total` is preserved; `summary.itemCount` is the number collected. Completeness reports `complete`, `stopReason`, `pageCount`, `itemCount`, `resumable`, and, when available, `next`. Reaching a page budget or a later request failure returns nonzero while retaining collected data. When `next` is present, invoke its `operationId` and `input` as an ordinary `tool exec` request with the same runtime selectors and no `--page-all` or enabled page-all context; `next.pageAll` is `false`.
 
 ## 4. `workflow exec`

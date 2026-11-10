@@ -77,7 +77,7 @@ func (c toolExecutionCodec) Decode(
 		if _, ok := isHTTPError(err); ok {
 			return
 		}
-		if typed, _ := firstTypedOperationError(err); typed != nil {
+		if _, typed := firstTypedOperationError(err); typed != nil {
 			return
 		}
 		err = &execution.Failure{Kind: "protocol", Code: "InvalidResponse", Stage: "decode", Outcome: execution.OutcomeUnknown, Message: "response does not match the operation protocol", Cause: err}

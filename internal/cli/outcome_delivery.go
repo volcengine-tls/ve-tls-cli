@@ -28,7 +28,7 @@ func (c *Context) recordDecodedResult(data any, err error) (any, error) {
 		c.RemoteOutcome = execution.OutcomeFailed
 		return data, err
 	}
-	if _, kind := firstTypedOperationError(err); kind == "output_failed" {
+	if kind, _ := firstTypedOperationError(err); kind == "output_failed" {
 		c.RemoteOutcome = execution.ErrorOutcome(err, execution.OutcomeSuccess)
 		return data, err
 	}
@@ -67,7 +67,7 @@ func augmentOutcomeSummary(summary map[string]any, ctx *Context, err error) {
 	summary["remoteOutcome"] = currentRemoteOutcome(ctx, err)
 	summary["deliveryOutcome"] = "success"
 	var delivery *outputFailureError
-	_, kind := firstTypedOperationError(err)
+	kind, _ := firstTypedOperationError(err)
 	if errors.As(err, &delivery) || kind == "output_failed" {
 		summary["deliveryOutcome"] = "failed"
 	}

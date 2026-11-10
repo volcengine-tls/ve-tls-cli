@@ -60,9 +60,9 @@ traps:
     why: the CLI validates contract shape and runtime constraints, not business meaning
     fix: if no local validation/decode/filesystem error occurred, debug the query semantics, time window, and target resource before blaming the CLI
   - trap: env-creds-override-profile
-    symptom: a stateless sandbox run selects profile A but appears to use another account
-    why: process-wide environment credentials override local profile resolution
-    fix: remove broad env injection and switch to a host-generated one-shot secrets file plus an explicit non-secret profile selector
+    symptom: a run leaves profile selection implicit and uses environment credentials instead of the active profile
+    why: environment precedence applies only when profile selection is implicit; an explicit profile keeps its identity
+    fix: "use --profile/context.profile to select a saved identity, or omit profile to use environment credentials; choose --secrets-file/context.secrets_file separately, never together with profile"
   - trap: profile-and-secrets-file-are-exclusive
     symptom: a run sets profile and secrets-file together and fails fast before the request is sent
     why: profile and secrets-file are both runtime selectors, so the CLI rejects ambiguous credential selection instead of silently overriding

@@ -212,7 +212,9 @@ func TestCursorC3ContinuationCanBeConsumed(t *testing.T) {
 		t.Fatal(err)
 	}
 	continued, err := executor.Execute(context.Background(), Invocation{Operation: op, Input: next})
-	if err != nil || continued.Pagination != nil || len(transport.requests) != 2 ||
+	if err != nil || continued.Pagination == nil || continued.Pagination.Mode != "single_page" ||
+		continued.Pagination.Complete || continued.Pagination.Resumable || continued.Pagination.Merged ||
+		continued.Pagination.StopReason != "page_slice" || continued.Pagination.ItemCount != 1 || len(transport.requests) != 2 ||
 		transport.requests[1].Query["After"] != "cursor-2" || transport.requests[1].Query["Enabled"] != "true" {
 		t.Fatalf("continued=%#v err=%v requests=%#v", continued, err, transport.requests)
 	}
@@ -249,7 +251,9 @@ func TestPageNumberC3ContinuationCanBeConsumed(t *testing.T) {
 		t.Fatal(err)
 	}
 	continued, err := executor.Execute(context.Background(), Invocation{Operation: op, Input: continuedInput, Options: Options{PageAll: next.PageAll}})
-	if err != nil || continued.Pagination != nil || len(transport.requests) != 2 {
+	if err != nil || continued.Pagination == nil || continued.Pagination.Mode != "single_page" ||
+		continued.Pagination.Complete || continued.Pagination.Resumable || continued.Pagination.Merged ||
+		continued.Pagination.StopReason != "page_slice" || continued.Pagination.ItemCount != 2 || len(transport.requests) != 2 {
 		t.Fatalf("continued=%#v err=%v", continued, err)
 	}
 	first, second := transport.requests[0], transport.requests[1]

@@ -33,6 +33,14 @@ const (
 // depending on filesystem races or permissions. Production uses os.Rename.
 var skillRename = os.Rename
 
+type skillAlreadyExistsError struct {
+	target string
+}
+
+func (e *skillAlreadyExistsError) Error() string {
+	return fmt.Sprintf("skill already exists: %s (use --force to overwrite)", e.target)
+}
+
 type skillManifest struct {
 	SchemaVersion    int    `json:"schema_version"`
 	Name             string `json:"name"`
@@ -512,7 +520,7 @@ func stageAndSwapBundledSkill(root fs.FS, destDir, name string, force bool) erro
 			return fmt.Errorf("refusing symlink installed skill: %s", target)
 		}
 		if !force {
-			return fmt.Errorf("skill already exists: %s (use --force to overwrite)", target)
+			return &skillAlreadyExistsError{target: target}
 		}
 	} else if !os.IsNotExist(err) {
 		return err
@@ -585,7 +593,7 @@ func swapSkillDirectory(destDir, name, stagedSkill string, force bool) error {
 			return fmt.Errorf("refusing symlink installed skill: %s", target)
 		}
 		if !force {
-			return fmt.Errorf("skill already exists: %s (use --force to overwrite)", target)
+			return &skillAlreadyExistsError{target: target}
 		}
 	}
 

@@ -16,6 +16,15 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 	if payload, code, ok := classifyTypedOperationError(err, requestID, statusCode, group); ok {
 		return payload, code
 	}
+	var skillExists *skillAlreadyExistsError
+	if errors.As(err, &skillExists) {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "conflict",
+			Hint:       "run 'volclog skill status --dir <skills-dir>' to inspect installed skills, or 'volclog skill update --dir <skills-dir>' to update them",
+		}, 2
+	}
 	var contextValidation *toolContextValidationError
 	if errors.As(err, &contextValidation) {
 		return errPayload{

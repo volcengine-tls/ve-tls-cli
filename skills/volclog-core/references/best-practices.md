@@ -147,7 +147,7 @@ Preferred order:
 
 Hard rule:
 
-- Environment credentials override profile resolution. If a stateless run must target a specific local profile, use host-generated secrets files instead of sandbox-wide env injection.
+- An explicit `--profile` or `context.profile` must exist and keeps that profile's identity. Environment credentials and tokens cannot replace or fill its static credentials; dynamic identities remain provider-backed. Without an explicit profile, the existing environment precedence applies.
 - `--profile`/`context.profile` and `--secrets-file`/`context.secrets_file` are mutually exclusive runtime selectors; conflicting selectors fail fast instead of silently overriding each other.
 
 ## Doctor Boundary
@@ -214,7 +214,7 @@ When the command already failed, follow the smallest next action:
 - `ingest-is-not-tool-put`: use `workflow log.ingest` for local file or stdin import, and `tool log.put` only for the public PutLogs contract.
 - `shortcuts-are-human-first`: human shortcut groups are for humans; agent flows should stay on `tool / workflow / raw`.
 - `thin-client-does-not-judge-business-semantics`: if there was no local validation, decode, or filesystem error, debug the query semantics and time window before blaming the CLI.
-- `env-creds-override-profile`: process-wide environment credentials override local profile resolution.
+- `env-creds-override-profile`: environment precedence applies only when profile selection is implicit; an explicit `--profile` or `context.profile` keeps its identity.
 - `profile-and-secrets-file-are-exclusive`: choose exactly one runtime selector family, not both `profile` and `secrets_file`.
 - `high-risk-retry-is-not-auto-retry`: ambiguous high-risk outcomes require contract-named reconciliation or escalation, never an automatic replay.
 - `compact-describe-can-omit-optional-fields`: use `tool describe --view full` before authoring nested optional configuration.

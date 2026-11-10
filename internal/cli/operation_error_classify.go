@@ -27,7 +27,7 @@ func classifyTypedOperationError(err error, requestID string, statusCode int, gr
 			return errPayload{RequestID: requestID, StatusCode: statusCode, Kind: "deadline", ErrorCode: "RequestDeadlineExceeded", Hint: "the deadline expired before sending"}, 2, true
 		}
 	}
-	typed, kind := firstTypedOperationError(err)
+	kind, typed := firstTypedOperationError(err)
 	if typed == nil {
 		return errPayload{}, 0, false
 	}
@@ -83,27 +83,27 @@ func classifyTypedOperationError(err error, requestID string, statusCode int, gr
 	return payload, code, true
 }
 
-func firstTypedOperationError(err error) (error, string) {
+func firstTypedOperationError(err error) (string, error) {
 	if err == nil {
-		return nil, ""
+		return "", nil
 	}
 	if typed, ok := err.(interface{ ErrorKind() string }); ok {
 		if kind := strings.TrimSpace(typed.ErrorKind()); kind != "" {
-			return err, kind
+			return kind, err
 		}
 	}
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
 		for _, child := range joined.Unwrap() {
-			if typed, kind := firstTypedOperationError(child); typed != nil {
-				return typed, kind
+			if kind, typed := firstTypedOperationError(child); typed != nil {
+				return kind, typed
 			}
 		}
-		return nil, ""
+		return "", nil
 	}
 	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
 		return firstTypedOperationError(wrapped.Unwrap())
 	}
-	return nil, ""
+	return "", nil
 }
 
 // Authentication commands and transaction sentinels have established error
