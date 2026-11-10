@@ -115,7 +115,9 @@ func TestCLIMinimalE2E_HTTPPathsAndShapes(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			code := Run(tc.args, &stdout, &stderr)
+			// Authorize the fixture's write case against its local test server.
+			args := append([]string{"--allow-write"}, tc.args...)
+			code := Run(args, &stdout, &stderr)
 			if code != 0 {
 				t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 			}

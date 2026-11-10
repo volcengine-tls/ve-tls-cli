@@ -66,6 +66,7 @@ func TestAssistantStreamUsesClientSign(t *testing.T) {
 	cl.HTTP = &http.Client{Transport: rt, Timeout: time.Second}
 
 	ctx := newContext(&bytes.Buffer{}, &bytes.Buffer{}, output.FormatJSON, "", "")
+	ctx.AllowWrite = true // Authorize the synthetic, unclassified stream request.
 	ctx.client = cl
 
 	if _, err := assistantStreamAnswer(ctx, "instance-1", "topic-1", "session-1", "what is TLS", "Text2Tls"); err != nil {
@@ -118,6 +119,7 @@ func TestAssistantProviderFailureDoesNotHitTransport(t *testing.T) {
 	cl.HTTP = &http.Client{Transport: rt, Timeout: time.Second}
 
 	ctx := newContext(&bytes.Buffer{}, &bytes.Buffer{}, output.FormatJSON, "", "")
+	ctx.AllowWrite = true // Authorize the synthetic, unclassified stream request.
 	ctx.client = cl
 
 	_, err = assistantStreamAnswer(ctx, "instance-1", "topic-1", "session-1", "what is TLS", "Text2Tls")

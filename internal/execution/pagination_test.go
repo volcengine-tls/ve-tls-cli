@@ -42,7 +42,7 @@ func TestExecutorPageNumberPaginationUsesOnlyOperationMetadata(t *testing.T) {
 		t.Fatalf("requests = %#v", transport.requests)
 	}
 	data := result.Data.(map[string]any)
-	if len(data["Rows"].([]any)) != 3 || data["TotalCount"] != 3 || data["Keep"] != "last" {
+	if len(data["Rows"].([]any)) != 3 || data["TotalCount"] != json.Number("3") || data["Keep"] != "last" {
 		t.Fatalf("data = %#v", data)
 	}
 	if result.RequestID != "req-page-2" || result.Pagination.PageCount != 2 ||
@@ -73,8 +73,9 @@ func TestExecutorCursorPaginationAndMaxPageGuard(t *testing.T) {
 		Input:     Input{},
 		Options:   Options{PageAll: true},
 	})
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
+	var incomplete *IncompleteError
+	if !errors.As(err, &incomplete) || incomplete.State.StopReason != "max_pages" {
+		t.Fatalf("Execute error = %v", err)
 	}
 	if len(transport.requests) != 2 ||
 		transport.requests[0].Query["After"] != "" ||
@@ -83,10 +84,11 @@ func TestExecutorCursorPaginationAndMaxPageGuard(t *testing.T) {
 	}
 	data := result.Data.(map[string]any)
 	if !reflect.DeepEqual(data["Items"], []any{json.Number("1"), json.Number("2"), json.Number("3"), json.Number("4")}) ||
-		data["Total"] != 4 {
+		data["Total"] != json.Number("4") {
 		t.Fatalf("data = %#v", data)
 	}
-	if result.Pagination.PageCount != 2 {
+	if result.Pagination.PageCount != 2 || result.Pagination.Complete || !result.Pagination.Resumable ||
+		result.Pagination.ItemCount != 4 || result.Pagination.Next.Input["query"].(map[string]any)["After"] != "cursor-3" {
 		t.Fatalf("pagination = %#v", result.Pagination)
 	}
 }
@@ -121,8 +123,11 @@ func TestExecutorPaginationErrorsUseCurrentAttemptMetadata(t *testing.T) {
 	if result.Pagination == nil || result.Pagination.PageCount != 1 {
 		t.Fatalf("pagination progress = %#v", result.Pagination)
 	}
-	if result.Pagination.Merged {
-		t.Fatalf("failed pagination incorrectly reports merged: %#v", result.Pagination)
+	if !result.Pagination.Merged || result.Pagination.ItemCount != 1 || result.RemoteOutcome != OutcomePartial {
+		t.Fatalf("failed pagination lost merged data: %#v", result.Pagination)
+	}
+	if got := result.Data.(map[string]any)["Rows"]; !reflect.DeepEqual(got, []any{json.Number("1")}) {
+		t.Fatalf("partial rows = %#v", got)
 	}
 }
 
@@ -149,7 +154,8 @@ func TestExecutorPaginationRejectsExplicitStartAndMissingItems(t *testing.T) {
 		Operation: op,
 		Options:   Options{PageAll: true},
 	})
-	if err == nil || err.Error() != "unexpected list field: Items" {
+	var incomplete *IncompleteError
+	if !errors.As(err, &incomplete) || incomplete.State.StopReason != "invalid_response" {
 		t.Fatalf("items error = %v", err)
 	}
 	if result.Pagination == nil || result.Pagination.PageCount != 1 {

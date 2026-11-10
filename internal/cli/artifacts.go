@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
@@ -33,8 +34,10 @@ func attachMeta(out any, tracePath string) any {
 }
 
 type fileArtifactOutput struct {
-	Path   string
-	Format output.Format
+	Path         string
+	Format       output.Format
+	Completeness *execution.Completeness `json:"completeness,omitempty"`
+	MetadataPath string                  `json:"metadataPath,omitempty"`
 }
 
 func buildOutputArtifact(path string, format output.Format) map[string]any {
@@ -44,6 +47,19 @@ func buildOutputArtifact(path string, format output.Format) map[string]any {
 	}
 	if fi, err := os.Stat(path); err == nil {
 		artifact["sizeBytes"] = fi.Size()
+	}
+	return artifact
+}
+
+func fileArtifactDescriptor(file fileArtifactOutput) map[string]any {
+	artifact := buildOutputArtifact(file.Path, file.Format)
+	if file.Completeness != nil {
+		artifact["complete"] = file.Completeness.Complete
+		artifact["completeness"] = file.Completeness
+		artifact["itemCount"] = file.Completeness.ItemCount
+	}
+	if file.MetadataPath != "" {
+		artifact["metadataPath"] = file.MetadataPath
 	}
 	return artifact
 }

@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
-	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 func runCollector(ctx *Context, args []string) (any, error) {
@@ -130,8 +129,7 @@ func collectorList(ctx *Context, args []string) (any, error) {
 			},
 			PageAll: true,
 			LegacyPageAll: &legacyPageAllPolicy{
-				ListField:  "Rules",
-				ForceTotal: true,
+				ListField: "Rules",
 			},
 		})
 	}
@@ -172,7 +170,7 @@ func collectorGet(ctx *Context, args []string) (any, error) {
 }
 
 func collectorCreate(ctx *Context, args []string) (any, error) {
-	req, err := buildCollectorBody(args, false)
+	req, err := buildCollectorBody(args, false, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +183,7 @@ func collectorCreate(ctx *Context, args []string) (any, error) {
 }
 
 func collectorModify(ctx *Context, args []string) (any, error) {
-	req, err := buildCollectorBody(args, true)
+	req, err := buildCollectorBody(args, true, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +221,7 @@ func collectorDelete(ctx *Context, args []string) (any, error) {
 	})
 }
 
-func buildCollectorBody(args []string, modify bool) (map[string]any, error) {
+func buildCollectorBody(args []string, modify bool, invocation ...*Context) (map[string]any, error) {
 	var (
 		ruleID       string
 		topicID      string
@@ -297,7 +295,7 @@ func buildCollectorBody(args []string, modify bool) (map[string]any, error) {
 			return nil, errors.New("unknown flag: " + args[0])
 		}
 	}
-	req, err := readJSONObjectRequestArg(requestArg)
+	req, err := readJSONObjectRequestArg(requestArg, invocation...)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +321,7 @@ func buildCollectorBody(args []string, modify bool) (map[string]any, error) {
 	maybeSetStringField(req, "RuleName", ruleName)
 	maybeSetStringField(req, "LogType", logType)
 	if strings.TrimSpace(pathsArg) != "" {
-		paths, err := util.ReadStringListMaybeFile(pathsArg)
+		paths, err := inputInvocation(invocation).readStringListMaybeFile(pathsArg)
 		if err != nil {
 			return nil, err
 		}

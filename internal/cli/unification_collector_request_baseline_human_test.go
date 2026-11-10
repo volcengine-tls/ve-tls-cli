@@ -344,7 +344,7 @@ func captureCollectorListAllFirstRequestBaseline(t *testing.T, args []string) ma
 		t.Fatalf("collector list --all response has type %T, want object", out)
 	}
 	rules, ok := response["Rules"].([]any)
-	if !ok || len(rules) != 0 || response["Total"] != 0 {
+	if !ok || len(rules) != 0 || response["Total"] != json.Number("0") {
 		t.Fatalf("collector list --all response mismatch: %#v", response)
 	}
 	if len(transport.requests) != 1 {

@@ -16,8 +16,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
-	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 	"github.com/volcengine-tls/ve-tls-cli/internal/version"
 )
 
@@ -90,7 +90,7 @@ func assistantDescribeSessionAnswer(ctx *Context, args []string) (any, error) {
 	if topicID == "" {
 		return nil, errors.New("missing --topic-id")
 	}
-	q, err := util.ReadStringMaybeFile(questionArg)
+	q, err := ctx.readStringMaybeFile(questionArg)
 	if err != nil {
 		return nil, err
 	}
@@ -219,11 +219,15 @@ func assistantCreateSession(ctx *Context, instanceID, topicID string) (string, e
 }
 
 func assistantStreamAnswer(ctx *Context, instanceID, topicID, sessionID, question, intent string) (string, error) {
+	ctx.beginRequest()
+	if err := ctx.authorizeBusinessRequest("POST", "/DescribeSessionAnswer"); err != nil {
+		return "", err
+	}
 	cl, err := ctx.Client()
 	if err != nil {
 		return "", err
 	}
-	q, err := util.ReadStringMaybeFile(question)
+	q, err := ctx.readStringMaybeFile(question)
 	if err != nil {
 		return "", err
 	}
@@ -238,14 +242,16 @@ func assistantStreamAnswer(ctx *Context, instanceID, topicID, sessionID, questio
 		"Question":   q,
 		"Intent":     intent,
 	})
-	resp, err := doStream(context.Background(), cl, "POST", "/DescribeSessionAnswer", nil, nil, body)
+	resp, err := doStream(ctx.ExecutionContext(), cl, "POST", "/DescribeSessionAnswer", nil, nil, body)
 	if err != nil {
+		ctx.RemoteOutcome = execution.ErrorOutcome(err, execution.OutcomeUnknown)
 		return "", err
 	}
 	defer resp.Body.Close()
 	ctx.RequestID = resp.Header.Get("x-tls-requestid")
 	ctx.StatusCode = resp.StatusCode
 	if resp.StatusCode >= 300 {
+		ctx.RemoteOutcome = execution.OutcomeFailed
 		b, _ := io.ReadAll(resp.Body)
 		return "", &httpError{
 			statusCode: resp.StatusCode,
@@ -277,8 +283,10 @@ func assistantStreamAnswer(ctx *Context, instanceID, topicID, sessionID, questio
 		}
 	}
 	if err := sc.Err(); err != nil {
-		return "", err
+		ctx.RemoteOutcome = execution.OutcomeUnknown
+		return "", &execution.Failure{Kind: "result_unknown", Code: "RequestResultUnknown", Stage: "read_response", Outcome: execution.OutcomeUnknown, Message: "stream result is unknown after response read failure", Cause: err}
 	}
+	ctx.RemoteOutcome = execution.OutcomeSuccess
 	return sb.String(), nil
 }
 
@@ -332,6 +340,9 @@ func mustJSON(v any) []byte {
 }
 
 func doStream(ctx context.Context, c *tlsapi.Client, method, path string, query map[string]string, header map[string]string, body []byte) (*http.Response, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, validationFailure(err, "InvalidRequest")
+	}
 	u, err := url.Parse(c.Endpoint + path)
 	if err != nil {
 		return nil, err
@@ -368,7 +379,14 @@ func doStream(ctx context.Context, c *tlsapi.Client, method, path string, query 
 	}
 	req, err = c.Sign(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, &execution.Failure{Stage: "sign", Outcome: execution.OutcomeNotSent, Cause: err}
 	}
-	return c.HTTP.Do(req)
+	if err := ctx.Err(); err != nil {
+		return nil, validationFailure(err, "InvalidRequest")
+	}
+	response, err := c.HTTP.Do(req)
+	if err != nil {
+		return response, &execution.Failure{Kind: "result_unknown", Code: "RequestResultUnknown", Stage: "transport", Outcome: execution.OutcomeUnknown, Message: "stream request result unknown after transport failure", Cause: err}
+	}
+	return response, nil
 }

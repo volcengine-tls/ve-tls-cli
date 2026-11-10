@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -150,7 +151,7 @@ func TestShortcutExecutionPreservesGETEmptyBodyAndTopicTriState(t *testing.T) {
 }
 
 func TestShortcutExecutionListAllLegacyAdaptation(t *testing.T) {
-	t.Run("success forces total when service omits it", func(t *testing.T) {
+	t.Run("success leaves total absent when service omits it", func(t *testing.T) {
 		ctx, _ := newShortcutExecutionCaptureContext(t, []shortcutExecutionResponse{
 			{body: `{"Projects":[{"ProjectId":"p1"},{"ProjectId":"p2"}]}`},
 			{body: `{"Projects":[{"ProjectId":"p3"}]}`},
@@ -160,8 +161,8 @@ func TestShortcutExecutionListAllLegacyAdaptation(t *testing.T) {
 			t.Fatalf("project list --all: %v", err)
 		}
 		data := out.(map[string]any)
-		if data["Total"] != 3 {
-			t.Fatalf("Total = %#v, want 3", data["Total"])
+		if total, ok := data["Total"]; ok {
+			t.Fatalf("Total = %#v, want absent", total)
 		}
 		if ctx.PaginationMeta == nil {
 			t.Fatal("pagination metadata is nil")
@@ -179,14 +180,22 @@ func TestShortcutExecutionListAllLegacyAdaptation(t *testing.T) {
 		}
 	})
 
-	t.Run("transport failure keeps pagination metadata nil", func(t *testing.T) {
-		ctx, _ := newShortcutExecutionCaptureContext(t, []shortcutExecutionResponse{{err: errors.New("boom")}})
+	t.Run("transport failure exposes incomplete pagination", func(t *testing.T) {
+		const canary = "project-transport-cause-canary"
+		sentinel := errors.New(canary)
+		ctx, _ := newShortcutExecutionCaptureContext(t, []shortcutExecutionResponse{{err: sentinel}})
 		_, err := projectList(ctx, []string{"--all"})
-		if err == nil || !strings.Contains(err.Error(), "boom") {
-			t.Fatalf("error = %v", err)
+		if !errors.Is(err, sentinel) {
+			t.Fatalf("original transport cause lost: %v", err)
 		}
-		if ctx.PaginationMeta != nil {
-			t.Fatalf("pagination metadata = %#v", ctx.PaginationMeta)
+		if err.Error() != "result incomplete: request_failed" || strings.Contains(err.Error(), canary) {
+			t.Fatalf("unsafe or unexpected public error: %q", err.Error())
+		}
+		if ctx.RemoteOutcome != execution.OutcomeUnknown {
+			t.Fatalf("remote outcome = %q, want unknown", ctx.RemoteOutcome)
+		}
+		if ctx.Completeness == nil || ctx.Completeness.Complete || ctx.Completeness.PageCount != 0 || ctx.PaginationMeta["stopReason"] != "request_failed" {
+			t.Fatalf("pagination metadata = %#v, want incomplete request failure", ctx.PaginationMeta)
 		}
 	})
 
@@ -201,6 +210,78 @@ func TestShortcutExecutionListAllLegacyAdaptation(t *testing.T) {
 			t.Fatalf("pagination metadata = %#v", ctx.PaginationMeta)
 		}
 	})
+}
+
+func TestShortcutListAllPreservesServerTotal(t *testing.T) {
+	tests := []struct {
+		name      string
+		listField string
+		run       func(*Context) (any, error)
+	}{
+		{"project", "Projects", func(ctx *Context) (any, error) {
+			return projectList(ctx, []string{"--all", "--page-size", "2"})
+		}},
+		{"topic", "Topics", func(ctx *Context) (any, error) {
+			return topicList(ctx, []string{"--all", "--page-size", "2"})
+		}},
+		{"metric-topic", "Topics", func(ctx *Context) (any, error) {
+			return metricTopicList(ctx, []string{"--all", "--page-size", "2"})
+		}},
+		{"host-group", "HostGroupHostsRulesInfos", func(ctx *Context) (any, error) {
+			return hostGroupList(ctx, []string{"--all", "--page-size", "2"})
+		}},
+		{"collector", "Rules", func(ctx *Context) (any, error) {
+			return collectorList(ctx, []string{"--all", "--page-size", "2"})
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name+"/total reached", func(t *testing.T) {
+			ctx, transport := newShortcutExecutionCaptureContext(t, []shortcutExecutionResponse{
+				{body: fmt.Sprintf(`{"%s":[{"id":"1"},{"id":"2"}],"Total":3}`, tc.listField)},
+				{body: fmt.Sprintf(`{"%s":[{"id":"3"}],"Total":3}`, tc.listField)},
+			})
+			out, err := tc.run(ctx)
+			if err != nil {
+				t.Fatalf("list --all: %v", err)
+			}
+			data, ok := out.(map[string]any)
+			if !ok || data["Total"] != json.Number("3") {
+				t.Fatalf("server Total not preserved: %#v", out)
+			}
+			if ctx.Completeness == nil || !ctx.Completeness.Complete || ctx.Completeness.ItemCount != 3 {
+				t.Fatalf("completeness = %#v, want complete with three items", ctx.Completeness)
+			}
+			if len(transport.requests) != 2 {
+				t.Fatalf("requests = %d, want 2", len(transport.requests))
+			}
+		})
+		t.Run(tc.name+"/inconsistent total", func(t *testing.T) {
+			ctx, transport := newShortcutExecutionCaptureContext(t, []shortcutExecutionResponse{
+				{body: fmt.Sprintf(`{"%s":[{"id":"1"},{"id":"2"}],"Total":99}`, tc.listField)},
+				{body: fmt.Sprintf(`{"%s":[{"id":"3"}],"Total":99}`, tc.listField)},
+				{body: fmt.Sprintf(`{"%s":[],"Total":99}`, tc.listField)},
+			})
+			_, err := tc.run(ctx)
+			var incomplete *execution.IncompleteError
+			if !errors.As(err, &incomplete) || incomplete.State == nil {
+				t.Fatalf("expected incomplete pagination, got %v", err)
+			}
+			if incomplete.State.Complete || incomplete.State.StopReason != "inconsistent_total" ||
+				incomplete.State.PageCount != 3 || incomplete.State.ItemCount != 3 {
+				t.Fatalf("unexpected completeness: %#v", incomplete.State)
+			}
+			data, ok := incomplete.Data.(map[string]any)
+			if !ok || data["Total"] != json.Number("99") {
+				t.Fatalf("server Total not preserved: %#v", incomplete.Data)
+			}
+			if rows, ok := data[tc.listField].([]any); !ok || len(rows) != 3 {
+				t.Fatalf("collected rows = %#v, want 3", data[tc.listField])
+			}
+			if len(transport.requests) != 3 {
+				t.Fatalf("requests = %d, want 3", len(transport.requests))
+			}
+		})
+	}
 }
 
 func TestTopicListConflictPrecedesPageAllConflict(t *testing.T) {
@@ -300,6 +381,7 @@ func newShortcutExecutionCaptureContext(
 	}
 	client.HTTP.Transport = transport
 	ctx := newContext(&bytes.Buffer{}, &bytes.Buffer{}, output.FormatJSON, "", "")
+	ctx.AllowWrite = true // Authorize write cases against this capture transport.
 	ctx.client = client
 	profile := config.Profile{
 		AccessKeyID:     "ak",

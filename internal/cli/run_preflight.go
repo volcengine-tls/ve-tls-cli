@@ -35,23 +35,21 @@ func preflightRunInvocation(invocation *runInvocation, stdout, stderr io.Writer)
 	if outputMode != "stdout" && outputMode != "file" {
 		return writeRunError(ctx, stdout, stderr, group, rest, errors.New("unsupported output-mode: "+flags.OutputMode), "usage", "invalid --output-mode", outputMode, 1), true
 	}
-	if outputMode == "file" && strings.TrimSpace(flags.Filter) != "" && filterTargetsEnvelope(group, rest) {
-		return writeRunError(ctx, stdout, stderr, group, rest, errors.New("--jmes-filter cannot be combined with file delivery"), "incompatible_flags", "remove --jmes-filter or use stdout delivery", outputMode, 1), true
-	}
 	if rejectsOutputFileForGroup(group) && strings.TrimSpace(flags.OutputFile) != "" {
 		return writeRunError(ctx, stdout, stderr, group, rest, errors.New("--output-file is not supported for "+strings.TrimSpace(group)), "usage", "use output_dir-based delivery instead", outputMode, 1), true
 	}
 	if err := ctx.validateDryRunScope(group, rest); err != nil {
 		return writeRunError(ctx, stdout, stderr, group, rest, err, "usage", "invalid --dry-run scope", outputMode, 1), true
 	}
-	if outputMode == "file" {
+	// Tool/workflow exec validates its context before creating output paths.
+	if outputMode == "file" && !defersSecretsResolutionToCommand(group, rest) {
 		if err := preflightOutputFilePath(flags.OutputFile, ctx.OutputDir, group, knownFileDeliveryFormat(group, rest, invocation.format)); err != nil {
 			return writeRunError(ctx, stdout, stderr, group, rest, err, "filesystem", "provide a writable --output-dir or check the local file path and permissions", outputMode, 2), true
 		}
 	}
 	if ctx.GlobalSecretsFile != "" {
 		if err := preflightGlobalSecretsFile(group, ctx.Profile, ctx.GlobalSecretsFile); err != nil {
-			if emitsStructuredEnvelope(group, rest) {
+			if emitsStructuredEnvelope(group, rest) || defaultAgentErrorProtocol(group, rest) {
 				return writeStructuredError(stdout, stderr, err, "", 0, group, buildAPIErrorEnvelope(ctx, group, err, outputMode)), true
 			}
 			hint := "use exactly one runtime selector: --profile or --secrets-file"
@@ -63,7 +61,7 @@ func preflightRunInvocation(invocation *runInvocation, stdout, stderr io.Writer)
 		}
 		if !defersSecretsResolutionToCommand(group, rest) {
 			if err := loadSecretsFile(ctx.GlobalSecretsFile); err != nil {
-				if emitsStructuredEnvelope(group, rest) {
+				if emitsStructuredEnvelope(group, rest) || defaultAgentErrorProtocol(group, rest) {
 					return writeStructuredError(stdout, stderr, err, "", 0, group, buildAPIErrorEnvelope(ctx, group, err, outputMode)), true
 				}
 				writeCLIError(stderr, err, "", 0, "config", "failed to load --secrets-file")

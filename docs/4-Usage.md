@@ -87,6 +87,10 @@ volclog tool describe project.create --view full
 
 `tool list` takes the group as a positional argument (not a `--group` flag) and supports `--verb` to filter by verb and `--format text|json` (default `text`). `tool describe <group.action>` shows the tool's identity, input schema, context schema, execution schema, behavior, output policy, and contract digest. The `--view` flag selects `compact` (default) or `full`; explicit JSON output defaults to `full`.
 
+The full view also exposes `recovery_source`, `recovery_notes`, `doc_url`, `doc_url_source`, `input_policy`, and `source`. A missing verified documentation URL is `null`. `identity.api_version_default` is the client's default request header (`0.3.0`), with `identity.api_version_source` identifying its source; it is not a verified per-operation API version. Unknown `identity.maintainer` and `identity.deprecated` are `null` in the full view. Compact output omits some of these details.
+
+`recovery_source=reviewed-read-contract` identifies a reviewed read or non-persistent purpose; it does not establish service idempotency or enable automatic retries. For `unverified` recovery, reconcile the operation outcome before considering a retry.
+
 ### 2.2 `workflow list` and `workflow describe`
 
 ```bash
@@ -110,10 +114,12 @@ volclog --profile default tool exec project.describe-projects
 
 ### 3.1 Input and context
 
-`--input` supplies the request body. It accepts `file://<path>`, `-` (stdin), or an inline JSON object (must start with `{`). `--context` supplies runtime and execution controls using the same sources.
+`--input` supplies operation request fields. It accepts `file://<path>`, `-` (stdin), or an inline JSON object (must start with `{`). `--context` supplies runtime and execution controls using the same sources.
+
+Context validation rejects unknown fields, incorrect types, and conflicting aliases before applying the context. Supported legacy forms remain available: `trace` as a boolean, string, or object; `execution.artifact` as a boolean, string, or object; `execution.output`/`output_mode`; `execution.projection` as a string, object, or array; and `execution.page.all`/`page_all` for supported paginated tools.
 
 ```bash
-volclog --profile default tool exec project.create \
+volclog --profile default --allow-write tool exec project.create \
   --input '{"ProjectName":"my-project","Region":"cn-beijing","Description":"example"}'
 
 volclog --profile default tool exec project.create \
@@ -125,7 +131,7 @@ The `file://req.json` file must contain the required `ProjectName` and `Region` 
 
 ### 3.2 Contract validation and dry-run
 
-Before any network call, `tool exec` normalizes flat input into the correct `query`/`path`/`header`/`body` sections (when the contract defines an input schema) and validates required fields. A missing required field fails before the request is sent.
+Before any network call, `tool exec` routes unambiguous flat input to `query`/`path`/`header`/`body` and applies the declared schema to both flat and sectioned input. Sectioned input rejects extra top-level keys; inside a section, `additionalProperties` determines whether extra fields are rejected, accepted, or validated against a schema (an absent declaration permits them). An operation without a section schema retains passthrough behavior, subject to input and context shape rules. The CLI does not inject schema defaults. Human shortcuts retain their existing legacy validation; service-side validation still applies.
 
 `--dry-run` runs the same contract validation, then skips the network call and returns a local plan that checks profile, endpoint, region, and body JSON validity:
 
@@ -135,6 +141,10 @@ volclog --profile default tool exec project.create \
 ```
 
 `--page-all` is a direct flag for `tool exec` and requests all pages of a paginated result.
+
+Without `--page-all`, a list with declared pagination still makes one request and includes `summary.pagination.mode="single_page"` and `summary.completeness` in its success envelope. More pages or uncertain termination mean `complete=false`; a safe continuation supplies `next.operationId` and `next.input`. A successful single page still exits 0. Continuations retain filters and an omitted service-default PageSize instead of injecting the page-all request size. Only a complete collection starting at page one has `complete=true`; a later terminal page is a `stopReason="page_slice"` and does not claim to include earlier pages. Without an explicit PageSize, confirming termination may require one additional empty page.
+
+Inspect `summary.completeness` even when pages were merged: `summary.pagination.merged=true` means pages were accumulated, not that the result is complete. The service's `data.Total` is preserved; `summary.itemCount` is the number collected. Completeness reports `complete`, `stopReason`, `pageCount`, `itemCount`, `resumable`, and, when available, `next`. Reaching a page budget or a later request failure returns nonzero while retaining collected data. When `next` is present, invoke its `operationId` and `input` as an ordinary `tool exec` request with the same runtime selectors and no `--page-all` or enabled page-all context; `next.pageAll` is `false`.
 
 ## 4. `workflow exec`
 
@@ -147,7 +157,7 @@ volclog --profile default workflow exec log.export \
 
 ### 4.1 Input and context
 
-`--input` and `--context` behave exactly as in `tool exec`: `file://<path>`, `-` (stdin), or inline JSON object. The workflow's required params are validated before execution.
+`--input` and `--context` accept the same sources as in `tool exec`: `file://<path>`, `-` (stdin), or inline JSON object. The workflow's required params are validated before execution.
 
 ### 4.2 Execution controls
 
@@ -156,8 +166,11 @@ volclog --profile default workflow exec log.export \
 - `execution.dry_run` — skip the network call
 - `execution.artifact` — force file delivery
 - `execution.projection` — project the raw result with a JMESPath expression before the envelope is built
+- `execution.non_interactive` — disable prompts, without cancelling automatic non-TTY mode
+- `execution.allow_write` — permit an authorized CLI write; this is not an IAM grant
+- `execution.timeout` — set a positive Go duration for the whole invocation
 
-Although the context parser recognizes `execution.page.all` / `execution.page_all`, current workflow execution does not consume them. Pagination semantics are workflow-specific; follow the guidance in `workflow describe` for the workflow you are using. Do not rely on page-all context controls for workflows.
+`workflow exec` explicitly rejects `execution.page` and `execution.page_all` in context, including `false` values. Pagination semantics are workflow-specific; follow the guidance in `workflow describe` for the workflow you are using.
 
 ```bash
 volclog --profile default workflow exec log.export \
@@ -166,6 +179,8 @@ volclog --profile default workflow exec log.export \
 ```
 
 Before running a workflow, use `workflow list` or `workflow describe` to confirm that the workflow ID is available in the current installation.
+
+For SearchLogs, `ListOver` is a completion signal only for pure search. SQL/analysis results are complete only when `ResultStatus=complete`; `incomplete` and `time_out` are reported as incomplete, and `error` as a failure. Do not invent a SQL `OFFSET` to resume an incomplete response. An explicitly written SQL `LIMIT`/`OFFSET` is a separate query and does not guarantee a shared snapshot.
 
 ### 4.3 App resource-resolution workflows
 
@@ -219,6 +234,8 @@ volclog --profile default raw --method POST --path /CreateProject \
 
 An explicit identity selector is optional. With none, normal profile selection or static environment resolution applies.
 
+A non-empty `--profile` or `context.profile` must name an existing profile. Its static AK/SK and token are never replaced or filled by environment credentials; missing static AK/SK fails before a request. Dynamic identity remains provider-backed. Without an explicit profile, the existing environment precedence remains in effect.
+
 The identity selectors are: global `--profile`, global `--secrets-file`, `context.profile`, and `context.secrets_file`. The conflict rules are:
 
 - Any profile selector (global `--profile` or `context.profile`) combined with any secrets-file selector (global `--secrets-file` or `context.secrets_file`) conflicts.
@@ -227,15 +244,29 @@ The identity selectors are: global `--profile`, global `--secrets-file`, `contex
 
 A conflict fails with `conflicting runtime selectors` (or `conflicting profile selectors` when two different profile names are supplied).
 
-Global `--region` and `--endpoint` flags provide explicit one-command overrides and are never persisted. `context.region` and `context.endpoint` remain fallback defaults available only through `tool`/`workflow` context. The full region/endpoint/timeout precedence is detailed in [Configuration](3-Configuration.md).
+Global `--region` and `--endpoint` flags and `context.region`/`context.endpoint` are one-command runtime overrides. They take precedence over applicable profile, environment, and project defaults and are never persisted. When a global flag and context provide different non-empty values for the same field, validation fails. The full region/endpoint/timeout precedence is detailed in [Configuration](3-Configuration.md).
+
+A global flag requiring a separate value does not consume a following `--flag`: for example, `--output-dir --dry-run` fails as a missing value. Prefix a relative path starting with `--` with `./`.
 
 ### 6.2 `--dry-run` and context dry-run
 
 `--dry-run` is a global flag that works for `raw`, `tool exec`, and `workflow exec`. For `tool exec` and `workflow exec`, `execution.dry_run` in the `--context` JSON has the same effect. `--dry-run` is rejected for other groups.
 
+When a dry-run plan includes `request_preview`, it recursively masks values under known sensitive keys such as password, secret, token, access key, and credential; it also masks a `Contents`/`LogTags` `Value` when the corresponding `Key` is sensitive. An unparseable body is omitted from the preview, and `redacted_fields` may list masked paths. This changes only the preview: the wire request and `body_sha256` are unchanged. Ordinary body strings are not guaranteed to be identified as secrets.
+
+Malformed JSON-like query values are replaced with `[unparseable query omitted]`; the displayed endpoint removes user information, query, and fragment.
+
 ### 6.3 Write-operation safety
 
-For write operations, run with `--dry-run` first to validate the request locally before sending it to TLS. A dry-run plan reports whether local checks (profile, endpoint, region, body JSON) passed.
+TLS writes and raw requests whose operation is unknown are rejected by default with `error.kind=permission` and `error.code=WritePermissionRequired`; this includes an unknown raw GET and `volclog-human` write shortcuts. For a write already authorized by the user, pass `--allow-write` or set `context.execution.allow_write=true` for `tool exec` / `workflow exec`. This CLI gate does not grant IAM permissions. Reviewed reads, including POST `log.search`, need no write permission. Do not add the flag to every call. A global `--allow-write` conflicts with explicit context `allow_write=false`.
+
+Use `--dry-run` to validate a write locally before sending it. A dry-run is exempt from the write gate and does not execute the business request; it does not prove service acceptance.
+
+### 6.4 Non-interactive execution and total timeout
+
+Without a TTY, non-interactive mode is automatic. `--non-interactive` or `context.execution.non_interactive=true` enables it explicitly; context `false` cannot disable automatic non-TTY mode and conflicts with an explicit global `true`.
+
+`--timeout 30s` or `context.execution.timeout="30s"` sets an optional whole-invocation budget as a positive Go duration. It starts at command invocation and is not reset for each page or batch; there is no overall default. This budget is independent of the profile's per-request `timeout_seconds`. Equal global and context durations are accepted; unequal values conflict. SIGINT, SIGTERM, and `RunContext` cancellation propagate through the same work: before sending, the outcome is `not_sent`; after sending, an uncertain outcome remains `unknown`. Completed partial results remain available under the C3 completeness contract.
 
 For provider-specific login, refresh, and logout behavior, see [Authentication](2-Authentication.md). For profile and runtime precedence, see [Configuration](3-Configuration.md).
 
@@ -247,24 +278,28 @@ For provider-specific login, refresh, and logout behavior, see [Authentication](
 
 `--output-mode` accepts `stdout` (default) and `file`. Any other value is rejected.
 
+Without an explicit stdout filter, default `volclog` emits JSON envelopes for `raw`, `tool exec`, and `workflow exec` success and error results. A JSON scalar or string returned by `raw` is wrapped under `data`; `volclog-human` retains its prior display. An explicit stdout `--jmes-filter` may instead return an array, scalar, or `null`.
+
 ### 7.2 stdout vs file delivery
 
 By default, results are written to stdout. With `--output-mode file` (forced file mode), the output contract depends on the command surface:
 
-- For `raw`, `tool exec`, and `workflow exec`, the complete envelope is written to an artifact file under `--output-dir`. stdout contains only the fixed Chinese file notice (`结果已写入文件。\n文件: <path>\n`), not the envelope. Automation must read the artifact path from the notice and read the file.
+- For `raw`, `tool exec`, and `workflow exec`, a successful result is written to an artifact file under `--output-dir`: normally the complete envelope, or the selected value when `--jmes-filter` is set. Default `volclog` writes a JSON delivery envelope to stdout with `status=success`, `data=null`, and the file path in `artifacts[].path`; `volclog-human` keeps the Chinese file notice.
 - For non-envelope command groups, the raw result is written to the selected file and stdout emits only the bare file path.
 - For generic human-shortcut envelope commands (for example `project list`, `topic create`), the envelope artifact is written to the file and the complete envelope is also emitted to stdout.
-- For human `volclog-human log export` / `log export-analysis`, exported data rows are streamed into the file artifact (JSON array for `--output json`, JSONL rows for `--output jsonl`) and stdout emits the complete envelope containing artifact metadata. The artifact itself is not an envelope.
+- For human `volclog-human log export` / `log export-analysis` without `--jmes-filter`, exported data rows are streamed into the file artifact (JSON array for `--output json`, JSONL rows for `--output jsonl`) and stdout emits the complete envelope containing artifact metadata. The artifact itself is not an envelope.
 
-Automation must follow the output contract of the command surface it invokes; the fixed Chinese notice rule applies specifically to `raw`, `tool exec`, and `workflow exec`. Human log exports do not use the fixed notice.
+For a successful default file delivery, `summary.deliveryMode` is `file_forced` or `file_auto`, `summary.itemCount` retains the business-result count, `summary.totalBytes` is the stdout delivery envelope's byte length, and `artifacts[].sizeBytes` is the actual file size. This is a compatibility change: scripts that parsed the Chinese notice must instead parse `artifacts[].path`. Human log shortcuts retain their own output contract.
 
-Exception: default `workflow exec log.export` and `log.export-analysis` stream exported rows directly into the data artifact (JSON array for `--output json`, JSONL rows for `--output jsonl`) rather than writing an envelope. The data artifact is not an envelope and does not contain envelope metadata. stdout still contains only the fixed file notice with the data-artifact path. See [Advanced](6-Advanced.md) section 2 for details.
+Exception: without `--jmes-filter`, default `workflow exec log.export` and `log.export-analysis` stream exported rows directly into the data artifact (JSON array for `--output json`, JSONL rows for `--output jsonl`) rather than writing an envelope. The data artifact is not an envelope and does not contain envelope metadata. On success, stdout contains the JSON delivery envelope with the data-artifact path. With `--jmes-filter`, these exports accumulate their results in memory before filtering and file delivery. For large exports, prefer unfiltered streaming or server-side field selection where available; client-side filtering does not reduce server scanning or network traffic. See [Advanced](6-Advanced.md) section 2 for details.
+
+When a streamed export stops at its page budget or a later failure, it returns nonzero. When valid written rows can be retained, they go to a unique partial file without replacing the completed target. The failure envelope's artifact descriptor reports `completeness` and `metadataPath`; the latter points to the partial file's `.meta.json` sidecar. If metadata delivery itself fails, the retained data path is reported with the delivery error.
 
 `--output-file` is rejected for `tool`, `workflow`, and `raw`; use `--output-dir` for those groups. Other groups may use either `--output-file` or `--output-dir`.
 
 ### 7.3 Automatic spill (`file_auto`)
 
-For `tool exec` and `workflow exec`, automatic spill requires the output format to be JSON (`--output json`, either as the default or set explicitly); `--output jsonl` does not trigger automatic spill. When the estimated JSON envelope size exceeds 16 KiB and the output mode is `stdout` (not explicitly set), there is no `--jmes-filter`, and no `execution.artifact`/`execution.projection`, the complete envelope is automatically written to a file under `--output-dir`. The envelope stored in the file has `summary.deliveryMode=file_auto`. stdout emits only the fixed file notice (`结果过大，已写入文件。\n文件: <path>\n`); the internal preview is not printed to stdout. Automation must read the artifact path from the notice and read the file. If `--output-dir` is missing or unwritable, the command errors with `result too large for stdout; specify --output-dir <writable-dir> to allow automatic file delivery`.
+For `tool exec` and `workflow exec`, automatic spill requires the output format to be JSON (`--output json`, either as the default or set explicitly); `--output jsonl` does not trigger automatic spill. When the estimated JSON envelope size exceeds 16 KiB and the output mode is `stdout` (not explicitly set), there is no `--jmes-filter`, and no `execution.artifact`/`execution.projection`, the complete envelope is automatically written to a file under `--output-dir`. The envelope stored in the file has `summary.deliveryMode=file_auto`. Default stdout is a delivery envelope with `data=null` and the path in `artifacts[].path`, without a business-result preview; human stdout retains the Chinese notice. If `--output-dir` is missing or unwritable, the command errors with `result too large for stdout; specify --output-dir <writable-dir> to allow automatic file delivery`.
 
 ### 7.4 Deterministic file delivery
 
@@ -275,7 +310,9 @@ volclog --profile default --output json --output-mode file --output-dir ./out \
 
 ### 7.5 Frozen output for interactive auth commands
 
-`login`, `logout`, `sso`, and `configure sso` always emit their exact JSON result shape to stdout. `--output jsonl|table` may parse but does not change the frozen JSON shape (JSON is forced); do not rely on it to change the output. The following are rejected before any auth side effect runs: non-`stdout` `--output-mode`, `--output-file`, `--jmes-filter`, `--trace-dir`, and `--secrets-file`. `--output-dir` alone and `--trace-redact` without `--trace-dir` do not divert the frozen result.
+`login`, `logout`, `sso`, and `configure sso` always emit their exact JSON result shape to stdout. `--output jsonl|table` may parse but does not change the frozen JSON shape (JSON is forced); do not rely on it to change the output. The following are rejected before any auth side effect runs: non-`stdout` `--output-mode`, `--output-file`, `--jmes-filter`, `--trace-dir`, and `--secrets-file`. `--output-dir` alone and a valid `--trace-redact` without `--trace-dir` do not divert the frozen result.
+
+In non-interactive mode, `login` uses a device code without opening a browser. A session replacement requiring confirmation returns `interaction_required`; select another `--profile` or use an interactive terminal. There is no `--force` override. SSO selects a single account or role automatically, but fails immediately when a required choice has multiple candidates and was not supplied. The transactional token is rolled back and configuration changes are not committed on failure; a registration cache may already have been written.
 
 ## 8. Filtering, projection, and envelopes
 
@@ -285,29 +322,57 @@ The CLI compiles and validates `--jmes-filter` before dispatching any request. A
 
 ### 8.2 Null, missing path, and invalid expression
 
-- If the filter resolves to an existing `null` value, the command prints literal `null` and succeeds.
-- If the filter path does not exist (missing key, out-of-range index), the command fails with a `filter matched no value` error and exit code `3`.
+- If the filter resolves to an existing `null` value, the command succeeds and emits literal `null` to stdout or writes it to the requested file.
+- If the filter path does not exist (missing key, out-of-range index), the command fails with a `filter matched no value` error and exit code `3`; file delivery does not create or overwrite the result file.
 - If the filter expression is invalid, the command fails with `invalid jmes-filter expression` and exit code `3`.
 
-### 8.3 Incompatibility with file delivery
+### 8.3 Filtering into a file
 
-`--jmes-filter` cannot be combined with `--output-mode file` for `raw`, `tool exec`, and `workflow exec`. For other groups, the combination is allowed.
+For `raw`, `tool exec`, and `workflow exec`, combine `--jmes-filter` with `--output-mode file` to write the selected value from the complete success envelope as a single JSON document. `tool exec` and `workflow exec` also support requesting file delivery through context `execution.artifact`. Even with `--output jsonl`, the file is JSON, not JSONL; it can contain an array, scalar, or `null` rather than an envelope. The filter changes the file content only: default stdout remains a JSON delivery envelope, while human stdout retains the Chinese notice. Without a filter, ordinary file output retains the complete envelope; the unfiltered streamed-export exception above is unchanged.
+
+The filter sees `summary.deliveryMode=file_forced`; in that input, `summary.totalBytes` measures the full envelope before filtering. The default stdout delivery envelope has its own `summary.totalBytes`, while `artifacts[].sizeBytes` measures the selected file. A global filter disables automatic spill. If the upstream operation fails in file mode, the complete error is emitted with a non-zero exit code; the error is not filtered into a file.
+
+For example, select project names from the envelope and write them to `./out`:
+
+```bash
+volclog --profile default --output jsonl --output-mode file --output-dir ./out \
+  --jmes-filter 'data.Projects[].ProjectName' \
+  tool exec project.describe-projects --input '{"PageSize":20}'
+```
+
+Alternatively, project the raw result first, then select the envelope's `data` and request file delivery through the context:
+
+```bash
+volclog --profile default --output-dir ./out --jmes-filter 'data' \
+  tool exec project.describe-projects --input '{"PageSize":20}' \
+  --context '{"execution":{"projection":"Projects[].ProjectName","artifact":true}}'
+```
+
+The first example writes the project-name array as JSON. The second retains the existing projection wrapper: the array is under `data.items`, alongside server metadata such as `Total` when present; selecting `data` writes that object. Read the path from the default stdout envelope's `artifacts[].path` to open the file.
 
 ### 8.4 CLI envelope filtering vs `execution.projection`
 
 `--jmes-filter` is compiled before the request and then evaluated as a CLI-level filter on the final envelope (or raw result for non-envelope groups) after the response is received.
 
-`execution.projection` (in the `--context` JSON for `tool exec` and `workflow exec`) is compiled before the request and evaluated on the raw result after the response is received, before the CLI builds the envelope. It is not server-side. It uses the same JMESPath engine as `--jmes-filter` but operates on the raw result rather than the final envelope.
+`execution.projection` (in the `--context` JSON for `tool exec` and `workflow exec`) is compiled before the request and evaluated on the raw result after the response is received, before the CLI builds the envelope. It is not server-side. It uses the same JMESPath engine as `--jmes-filter` but operates on the raw result rather than the final envelope. The examples above use `data.Projects[].ProjectName` for the envelope filter and `Projects[].ProjectName` for the earlier raw-result projection; when both are used, the filter sees the already projected result under `data`.
 
 Dynamic JSON is decoded and encoded with `json.Number` preserved across request bodies, service responses, envelopes, JSONL, and JMESPath evaluation. Large integers and long decimals therefore do not pass through a `float64` conversion and lose precision.
 
 ### 8.5 Envelope fields and error output
 
-Success envelope: `status`, `action`, `requestId`, `summary` (`outputMode`, `deliveryMode`, `dryRun`, `itemCount`, `totalBytes`, optional `pagination`/`tracePath`), `artifacts`, `data`, `error` (`null`).
+Success envelope: `status`, `action`, `requestId`, `summary` (`outputMode`, `deliveryMode`, `remoteOutcome`, `deliveryOutcome`, `dryRun`, `itemCount`, `totalBytes`, optional `pagination`/`completeness`/`async`/`asyncTasks`/`tracePath`), `artifacts`, `data`, `error` (`null`).
 
-Error envelope: `status` (`failed`), `action`, `requestId`, `summary`, `artifacts` (empty), `data` (`null`), `error` (`source`, `code`, `message`, `requestId`, `statusCode`, `kind`, `hint`, optional `details`).
+Error envelope: `status` (`failed`), `action`, `requestId`, `summary`, `artifacts`, `data`, `error` (`source`, `code`, `message`, `requestId`, `statusCode`, `kind`, `hint`, optional `details`). `data` is normally `null`, but may contain retained partial results or batch-ingest progress; `artifacts` may describe a retained partial file.
 
-Structured error envelopes are used by `raw`, all `tool` commands (including `list`/`describe`), all `workflow` commands (including `list`/`describe`), and the human-shortcut envelope groups (`project`, `topic`, `metric-topic`, `index`, `log`). Other non-envelope groups write flat JSON to stderr in this field order: `errorCode`, `errorMessage`, `requestId`, `statusCode`, `kind`, `hint`.
+Default `volclog` also emits a failed JSON envelope on stdout and exits nonzero for early usage failures, including no arguments, unknown flags or groups, and missing option values. Explicit help and `--version` remain text; use the `version` command for JSON. Text-mode `tool`/`workflow` discovery and the frozen JSON shapes and error contracts of `login`, `logout`, `sso`, and `configure sso` remain unchanged. Human-shortcut envelope groups retain their existing error contract. If stdout is broken, the CLI exits with code 3 and makes a best-effort structured report on stderr.
+
+`summary.remoteOutcome` describes the business operation: `not_sent`, `unknown`, `accepted`, `success`, `failed`, or `partial`. `accepted` means a documented asynchronous submission was accepted, not that its work completed. `summary.deliveryOutcome` (`success` or `failed`) separately describes result delivery. For `output_failed`, repair delivery and do not repeat the original write. For `result_unknown`, reconcile the remote state before considering another write. The CLI adds no retry in this change; existing `http.Client`/`Transport` policies still apply, including any behavior of a custom transport.
+
+Creating a download task returns `accepted` and `summary.async` with its task ID and, when the topic is available, a single-call `next` for `log.describe-download-tasks`. The CLI does not wait automatically. `TaskName` is a fuzzy filter: match `Tasks[].TaskId` across pages, then inspect that entry in `summary.asyncTasks`. `wait`/`creating` are nonterminal; `success` means the file was generated; `created_cut` is partial and only some such tasks have a downloadable file; `fail` is failed and unknown states remain unknown. A successful entry can provide a `next` for `log.describe-download-url`; a truncated entry can provide only a conditional `possibleNext`. The returned download URL expires after five minutes. File generation alone does not guarantee the entire query window was exported: request limits, precision options, and service limits still apply.
+
+For batch-ingest `partial_failure`, inspect `summary.progress` or `data.progress`: `confirmedBatches`, `confirmedLogs`, `confirmedLogOffset` (zero-based exclusive), `currentBatch` (one-based when a batch is active), `currentBatchOutcome`, and `lastConfirmedRequestId`. Only a confirmed successful response increments the counts. A read failure or invalid response after HTTP 200 is `unknown`; an unknown batch is not a safe automatic resume point. The current `requestId` and `statusCode` describe the current attempt and are not inherited from a previous confirmed batch.
+
+The standard catalog JSON response path requires HTTP 200; a non-empty body must be valid JSON. Empty responses and special codec, `raw`, and protobuf paths retain their existing 2xx/text/empty/PB compatibility contracts. Errors can use `not_found`, `conflict`, `throttled`, `protocol`, and typed `validation` kinds. Exit codes 1, 2, and 3 retain their existing roles; a transient failure alone does not make retry safe. If stdout delivery fails, the CLI returns nonzero and makes a best-effort structured report on stderr; broken stdout cannot guarantee JSON output.
 
 ## 9. Trace and diagnostics
 
@@ -319,7 +384,7 @@ Each trace event records the event type, and where applicable: the HTTP method a
 
 The `error_message` field stores the transport error string directly. A transport error can include the full request URL and query values. Never put credentials or other secrets in query parameters. Treat trace files as sensitive diagnostic artifacts: keep their permissions restricted and share them only after inspection.
 
-`--trace-redact` accepts `on` (default) and `off`, plus aliases (`true`/`1`/`yes`/`enabled`/`strict`/`default` map to `on`; `false`/`0`/`no`/`disabled` map to `off`). Unrecognized values default to `on`. `--trace-redact off` is accepted and normalized but does not disable the forced structured-field redaction and does not emit raw header, query, or body values.
+`--trace-redact` accepts `on` (default), `true`, `1`, `yes`, `enabled`, `strict`, and `default`; all enable redaction. `off`, `false`, `0`, `no`, `disabled`, and unknown values fail validation. `context.trace=false` or `context.trace.enabled=false` disables even a globally configured trace directory.
 
 ### 9.2 Doctor and Request ID
 
@@ -340,7 +405,7 @@ The `requestId` in the envelope (or `x-tls-requestid` response header) identifie
 volclog-human project list --output table
 volclog-human topic create --describe
 volclog-human index create --print-request-template=required > index_req.json
-volclog-human index create --topic-id 'YOUR_TOPIC_ID' --request file://index_req.json
+volclog-human --allow-write index create --topic-id 'YOUR_TOPIC_ID' --request file://index_req.json
 ```
 
 For the complete human shortcut introduction, see [Human Shortcuts](7-Human-Shortcuts.md). For longer automation-oriented workflows, see the [Practical Guide](5-Practical-Guide.md); for advanced topics, see [Advanced](6-Advanced.md).

@@ -10,8 +10,8 @@ import (
 )
 
 type defaultEditionCLIError struct {
-	ErrorCode    string `json:"errorCode"`
-	ErrorMessage string `json:"errorMessage"`
+	ErrorCode    string `json:"code"`
+	ErrorMessage string `json:"message"`
 	Kind         string `json:"kind"`
 	Hint         string `json:"hint"`
 }
@@ -24,10 +24,7 @@ func TestDefaultEditionRejectsShortcutGroups(t *testing.T) {
 			if code != 1 {
 				t.Fatalf("expected exit=1 for %s, got=%d stdout=%q stderr=%q", group, code, stdout.String(), stderr.String())
 			}
-			var payload defaultEditionCLIError
-			if err := json.Unmarshal(stderr.Bytes(), &payload); err != nil {
-				t.Fatalf("stderr should be cli error json for %s: %v stderr=%q", group, err, stderr.String())
-			}
+			payload := decodeDefaultEditionError(t, stdout.Bytes(), stderr.Bytes())
 			if payload.ErrorCode != "CLIError" || payload.Kind != "usage" {
 				t.Fatalf("unexpected cli error payload for %s: %#v", group, payload)
 			}
@@ -49,15 +46,27 @@ func TestDefaultEditionStillRoutesRemovedLegacyCommandsToMigrationHint(t *testin
 			if code != 1 {
 				t.Fatalf("expected exit=1 for %s, got=%d stdout=%q stderr=%q", group, code, stdout.String(), stderr.String())
 			}
-			var payload defaultEditionCLIError
-			if err := json.Unmarshal(stderr.Bytes(), &payload); err != nil {
-				t.Fatalf("stderr should be cli error json for %s: %v stderr=%q", group, err, stderr.String())
-			}
+			payload := decodeDefaultEditionError(t, stdout.Bytes(), stderr.Bytes())
 			if !strings.Contains(payload.Hint, "tool list") {
 				t.Fatalf("expected legacy migration hint for %s: %#v", group, payload)
 			}
 		})
 	}
+}
+
+func decodeDefaultEditionError(t *testing.T, stdout, stderr []byte) defaultEditionCLIError {
+	t.Helper()
+	var env struct {
+		Status  string                 `json:"status"`
+		Error   defaultEditionCLIError `json:"error"`
+		Summary struct {
+			RemoteOutcome string `json:"remoteOutcome"`
+		} `json:"summary"`
+	}
+	if err := json.Unmarshal(stdout, &env); err != nil || len(stderr) != 0 || env.Status != "failed" || env.Summary.RemoteOutcome != "not_sent" {
+		t.Fatalf("expected early failure envelope: error=%v stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	return env.Error
 }
 
 func contains(s, sub string) bool {

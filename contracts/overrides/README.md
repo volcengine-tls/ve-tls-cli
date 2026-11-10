@@ -161,11 +161,11 @@ defaults were additionally checked against its pinned wayout dependency commit
 | `processor.create-processor` | Omitted type uses `ingester`, empty description is accepted, `MaxQps` defaults to 0; keep the verified persistence default of 5000 for `TimeoutMs` | `CreateProcessorRequest.Validate`, request conversion, and wayout processor model |
 | `log.create-download-task` | Search/Analyze require explicit positive `Limit` and `Sort`; LogContext requires `ContextFlow` and `Source`; do not claim a default `Sort` | `api/rest/index/create_download_task.go::CreateDownloadTaskReq.Validate` |
 
-JSON Schema describes the conditional requirements and types. The existing CLI
-validator still checks required-field presence recursively, not array item
-types, enums, ranges, or `if`/`then` conditions. Defaults in the contract describe
-server behavior; the CLI does not inject these values. Dry-run is therefore a
-request-planning check, not proof that all service validation will pass.
+`tool exec` validates declared types, array items, enums, bounds, required fields,
+additional properties, and the catalog's `oneOf`/`allOf`/`if`/`then` conditions.
+Human shortcuts retain their legacy validation. Defaults describe server
+behavior; the CLI does not inject them. Dry-run validates the declared schema
+and request plan, without proving that service-only or business rules will pass.
 
 ### Download-task identity migration
 
@@ -203,3 +203,46 @@ go run ./internal/openapigen \
 ```
 
 These checks prove strict decoding, internal contract validity, deterministic merge behavior, and catalog/lock integrity. They do not fetch the log-service repository or prove ongoing parity with a later server revision; updating the pinned baseline requires a new source audit.
+
+### Recovery, usage, and documentation policies
+
+`recovery.yaml` records a decision for every checked-in canonical operation ID.
+The reviewed-read entries identify a documented read or non-persistent purpose;
+they do not establish service idempotency or enable automatic retries. Every
+other operation is marked `high-risk-retry` with unverified provenance and
+instructions to reconcile the outcome before retrying. A newly introduced ID
+without an entry receives this conservative policy during source or merge-only
+generation. Formal refresh rejects missing and unknown recovery IDs.
+
+The comments alongside reviewed reads record the catalog's wire, request
+fields, summary, and available output information. They do not claim the
+catalog has a complete response schema. `documentation.json` maps only
+verified operation IDs to exact official `https://www.volcengine.com/docs/...`
+links. Unlinked operations remain without a URL; the existing source string is
+preserved. `usage_constraints.yaml` adds reviewed guidance without removing
+existing operation constraints. These three inputs are applied after complete
+internal and supplemental replacements so a replacement cannot erase them.
+
+When the external Swagger inputs are unavailable, refresh the existing
+catalog and lock together with:
+
+```bash
+go run -buildvcs=false ./internal/openapigen --refresh-contract-policies-only
+```
+
+The refresh checks the existing catalog against the lock before changing it,
+requires complete recovery coverage, checks official links and IDs, and rejects
+drift in other locked inputs. It records the policy files and generator helper
+in the lock. Its explicitly mutable files are the contract catalog, types and
+legacy projection; the main, internal, supplemental and policy generator files;
+and these three policy inputs. Both merge-only paths reapply the same policies
+and require already-locked policy inputs to match; refresh after changing them.
+Full source generation likewise applies the policies after all merges.
+
+The policy refresh also projects the current `non_interactive`, `allow_write`,
+and `timeout` execution controls into the shared schema while preserving
+existing controls. `allow_write` is a CLI action gate, not an IAM grant;
+reviewed reads such as POST `log.search` do not require it. The timeout is a
+whole-invocation budget from command start, separate from profile HTTP
+timeouts. Trace redaction accepts only the documented enabled aliases; an
+explicit `context.trace=false` or `enabled:false` disables global tracing.

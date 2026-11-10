@@ -13,6 +13,28 @@ import (
 
 func classifyError(err error, requestID string, statusCode int, group string) (errPayload, int) {
 	msg := strings.TrimSpace(err.Error())
+	if payload, code, ok := classifyTypedOperationError(err, requestID, statusCode, group); ok {
+		return payload, code
+	}
+	var skillExists *skillAlreadyExistsError
+	if errors.As(err, &skillExists) {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "conflict",
+			Hint:       "run 'volclog skill status --dir <skills-dir>' to inspect installed skills, or 'volclog skill update --dir <skills-dir>' to update them",
+		}, 2
+	}
+	var contextValidation *toolContextValidationError
+	if errors.As(err, &contextValidation) {
+		return errPayload{
+			ErrorCode:  "InvalidContext",
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "validation",
+			Hint:       "check --context fields and runtime selector conflicts",
+		}, 1
+	}
 	var unsupported *unsupportedFeatureError
 	if errors.As(err, &unsupported) {
 		return errPayload{
@@ -36,18 +58,7 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 		}, 1
 	}
 	if he, ok := isHTTPError(err); ok {
-		kind := "server"
-		hint := ""
-		if he.statusCode == 401 || he.statusCode == 403 {
-			kind = "auth"
-			hint = "check credentials/region/endpoint"
-		} else if he.statusCode == 400 {
-			kind = "usage"
-			hint = "check request parameters"
-		}
-		if strings.EqualFold(httpErrorCode(he.body), "IndexNotExists") {
-			hint = "index does not exist; inspect current config with 'volclog index get --topic-id <TopicId>' or create one with 'volclog index create --describe' and 'volclog index create --print-request-template=full'"
-		}
+		kind, hint := classifyOperationHTTPError(he, frozenAuthClassification(err, group))
 		return errPayload{
 			RequestID:  he.requestID,
 			StatusCode: he.statusCode,

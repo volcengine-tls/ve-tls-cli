@@ -50,9 +50,9 @@ func TestNormalizeTraceRedactValue(t *testing.T) {
 		"default": "on",
 		"on":      "on",
 		"enabled": "on",
-		"off":     "off",
-		"false":   "off",
-		"weird":   "on",
+		"off":     "",
+		"false":   "",
+		"weird":   "",
 	}
 	for raw, want := range cases {
 		if got := normalizeTraceRedactValue(raw); got != want {

@@ -93,8 +93,11 @@ func TestMetricTopicExecutorPreservesGETBodyAndListAllTotal(t *testing.T) {
 	if !ok {
 		t.Fatalf("result = %T, want object", out)
 	}
-	if data["Total"] != 2 {
-		t.Fatalf("Total = %#v, want 2", data["Total"])
+	if total, exists := data["Total"]; exists {
+		t.Fatalf("Total = %#v, want absent when omitted by the service", total)
+	}
+	if ctx.Completeness == nil || ctx.Completeness.ItemCount != 2 || !ctx.Completeness.Complete {
+		t.Fatalf("unexpected completeness: %#v", ctx.Completeness)
 	}
 	if ctx.PaginationMeta == nil {
 		t.Fatal("pagination metadata is nil")
@@ -135,7 +138,11 @@ func TestLogExecutorRoutesSearchHistogramAndContextOperations(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, transport := newShortcutExecutionCaptureContext(t, nil)
+			var responses []shortcutExecutionResponse
+			if tc.name == "search" {
+				responses = []shortcutExecutionResponse{{body: `{"Logs":[],"ListOver":true}`}}
+			}
+			ctx, transport := newShortcutExecutionCaptureContext(t, responses)
 			if _, err := runLog(ctx, tc.args); err != nil {
 				t.Fatalf("run log: %v", err)
 			}

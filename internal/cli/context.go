@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	appruntime "github.com/volcengine-tls/ve-tls-cli/internal/app/runtime"
 	"github.com/volcengine-tls/ve-tls-cli/internal/config"
@@ -16,22 +18,28 @@ import (
 )
 
 type InvocationOptions struct {
-	Stdout             io.Writer
-	Stderr             io.Writer
-	Format             output.Format
-	OutputExplicit     bool
-	OutputMode         string
-	OutputModeExplicit bool
-	OutputDir          string
-	OutputFile         string
-	Profile            string
-	RuntimeRegion      string
-	RuntimeEndpoint    string
-	GlobalSecretsFile  string
-	Filter             string
-	TraceDir           string
-	TraceRedact        string
-	DryRun             bool
+	Stdout                 io.Writer
+	Stderr                 io.Writer
+	Format                 output.Format
+	OutputExplicit         bool
+	OutputMode             string
+	OutputModeExplicit     bool
+	OutputDir              string
+	OutputFile             string
+	Profile                string
+	RuntimeRegion          string
+	RuntimeEndpoint        string
+	GlobalSecretsFile      string
+	Filter                 string
+	TraceDir               string
+	TraceRedact            string
+	DryRun                 bool
+	NonInteractive         bool
+	NonInteractiveExplicit bool
+	AllowWrite             bool
+	AllowWriteExplicit     bool
+	Timeout                time.Duration
+	TimeoutExplicit        bool
 }
 
 type ResponseState struct {
@@ -41,6 +49,11 @@ type ResponseState struct {
 	StatusCode     int
 	Action         string
 	PaginationMeta map[string]any
+	RemoteOutcome  string
+	TargetSnapshot map[string]any
+	Progress       map[string]any
+	Completeness   *execution.Completeness
+	TaskMeta       map[string]any
 }
 
 type configState struct {
@@ -78,6 +91,7 @@ type Context struct {
 	configState
 	runtimeState
 	traceState
+	invocationControlState
 
 	apiIOMeta apiIOMeta
 }
@@ -139,6 +153,7 @@ func (c *Context) ResolveProfile() error {
 	c.resolution = resolution
 	c.profile = resolution.Profile
 	c.profileResolved = true
+	c.captureTargetSnapshot()
 	return nil
 }
 
@@ -156,6 +171,7 @@ func (c *Context) invalidateProfileCache() {
 	c.profile = config.Profile{}
 	c.resolution = appruntime.Resolution{}
 	c.client = nil
+	c.TargetSnapshot = nil
 }
 
 func (c *Context) Client() (*tlsapi.Client, error) {
@@ -199,13 +215,24 @@ func (c *Context) Client() (*tlsapi.Client, error) {
 }
 
 func (c *Context) DoRaw(method, path string, query map[string]string, header map[string]string, body []byte) (tlsapi.Response, error) {
-	return c.doRaw(context.Background(), method, path, query, header, body)
+	return c.doRaw(c.ExecutionContext(), method, path, query, header, body)
 }
 
 func (c *Context) doRaw(ctx context.Context, method, path string, query map[string]string, header map[string]string, body []byte) (tlsapi.Response, error) {
+	c.beginRequest()
+	if err := c.authorizeBusinessRequest(method, path); err != nil {
+		return tlsapi.Response{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return tlsapi.Response{}, &execution.Failure{Kind: "validation", Stage: "preflight", Outcome: execution.OutcomeNotSent, Cause: err}
+	}
 	client, err := c.Client()
 	if err != nil {
-		return tlsapi.Response{}, err
+		var endpointError *url.Error
+		if errors.As(err, &endpointError) {
+			return tlsapi.Response{}, &execution.Failure{Kind: "config", Code: "InvalidEndpoint", Outcome: execution.OutcomeNotSent, Stage: "resolve_client", Message: "invalid TLS endpoint configuration", Cause: err}
+		}
+		return tlsapi.Response{}, &execution.Failure{Outcome: execution.OutcomeNotSent, Stage: "resolve_client", Cause: err}
 	}
 	transport := appruntime.NewTracingTransport(
 		appruntime.NewTransport(func() (*tlsapi.Client, error) {
@@ -220,9 +247,6 @@ func (c *Context) doRaw(ctx context.Context, method, path string, query map[stri
 		Header: header,
 		Body:   body,
 	})
-	if err != nil {
-		return tlsapi.Response{}, err
-	}
 	resp := tlsapi.Response{
 		StatusCode: response.StatusCode,
 		Header:     response.Header,
@@ -230,10 +254,18 @@ func (c *Context) doRaw(ctx context.Context, method, path string, query map[stri
 	}
 	c.RequestID = resp.Header.Get("x-tls-requestid")
 	c.StatusCode = resp.StatusCode
-	return resp, nil
+	if err != nil {
+		c.RemoteOutcome = execution.ErrorOutcome(err, execution.OutcomeUnknown)
+	} else if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		c.RemoteOutcome = execution.OutcomeSuccess
+	} else {
+		c.RemoteOutcome = execution.OutcomeFailed
+	}
+	return resp, err
 }
 
 func (c *Context) Do(method, path string, query map[string]string, header map[string]string, body []byte) (any, error) {
+	c.beginRequest()
 	meta := c.apiIOMeta
 	if meta.Method == "" {
 		meta.Method = method
@@ -253,7 +285,7 @@ func (c *Context) Do(method, path string, query map[string]string, header map[st
 	previewBody := append([]byte(nil), body...)
 	adaptedHeader, adaptedBody, state, specialHandled, err := prepareSpecialIORequest(meta, header, body)
 	if err != nil {
-		return nil, err
+		return nil, &execution.Failure{Kind: "validation", Code: "InvalidRequest", Stage: "encode", Outcome: execution.OutcomeNotSent, Cause: err}
 	}
 	if specialHandled {
 		header = adaptedHeader
@@ -261,7 +293,7 @@ func (c *Context) Do(method, path string, query map[string]string, header map[st
 	}
 	if c.DryRun {
 		plan := c.buildDryRunPlan(method, path, query, header, body, originalRequestPreview(previewBody, body, specialHandled), meta.RequestFormat, specialHandled)
-		c.tracePlan(method, path, query, header, body, plan)
+		c.tracePlan(method, plan["path"].(string), query, header, body, plan)
 		return plan, nil
 	}
 	resp, err := c.DoRaw(method, path, query, header, body)
@@ -269,13 +301,15 @@ func (c *Context) Do(method, path string, query map[string]string, header map[st
 		return nil, err
 	}
 	if out, handled, err := decodeSpecialIOResponse(meta, state, resp); handled {
-		return out, err
+		return c.recordOperationResult(method, path, header, body, out, err)
 	}
-	return decodeResponse(resp)
+	out, err := decodeResponse(resp)
+	return c.recordOperationResult(method, path, header, body, out, err)
 }
 
 func (c *Context) buildDryRunPlan(method, path string, query map[string]string, header map[string]string, body []byte, previewBody []byte, previewFormat requestFormat, specialHandled bool) map[string]any {
 	checks := make([]map[string]any, 0, 4)
+	var redactedFields []string
 	valid := true
 	if err := c.ResolveProfile(); err != nil {
 		checks = append(checks, map[string]any{
@@ -285,10 +319,15 @@ func (c *Context) buildDryRunPlan(method, path string, query map[string]string, 
 		})
 		valid = false
 	} else {
+		endpoint := strings.TrimSpace(c.profile.Endpoint)
+		endpointPreview, changed := execution.RedactPreviewURL(endpoint)
+		if changed {
+			redactedFields = append(redactedFields, "checks.endpoint.detail")
+		}
 		checks = append(checks, map[string]any{
 			"name":   "endpoint",
-			"ok":     strings.TrimSpace(c.profile.Endpoint) != "",
-			"detail": strings.TrimSpace(c.profile.Endpoint),
+			"ok":     endpoint != "",
+			"detail": endpointPreview,
 		})
 		if strings.TrimSpace(c.profile.Endpoint) == "" {
 			valid = false
@@ -331,17 +370,25 @@ func (c *Context) buildDryRunPlan(method, path string, query map[string]string, 
 	}
 	sort.Strings(queryKeys)
 	headers := redactedHeaderKeys(header)
+	pathPreview, pathFields := execution.RedactPreviewPath(strings.TrimSpace(path))
+	redactedFields = append(redactedFields, pathFields...)
 	plan := map[string]any{
 		"type":             "plan",
 		"method":           strings.ToUpper(strings.TrimSpace(method)),
-		"path":             strings.TrimSpace(path),
+		"path":             pathPreview,
 		"query_keys":       queryKeys,
 		"headers_redacted": headers,
 		"body_sha256":      sha256Hex(body),
 		"checks":           checks,
 		"valid":            valid,
 	}
-	plan["request_preview"] = buildDryRunRequestPreview(query, previewBody, previewFormat, specialHandled)
+	preview, previewFields := execution.RedactRequestPreview(buildDryRunRequestPreview(query, previewBody, previewFormat, specialHandled))
+	plan["request_preview"] = preview
+	redactedFields = append(redactedFields, previewFields...)
+	if len(redactedFields) > 0 {
+		sort.Strings(redactedFields)
+		plan["redacted_fields"] = redactedFields
+	}
 	return plan
 }
 
@@ -373,13 +420,13 @@ func decodeDryRunPreviewBody(body []byte, format requestFormat) (any, bool) {
 	if normalizeRequestFormat(format) == requestFormatJSONL {
 		rows, err := parseJSONLObjects(trimmed)
 		if err != nil {
-			return string(trimmed), true
+			return execution.UnparseableBodyPreview, true
 		}
 		return rows, true
 	}
 	v, err := util.UnmarshalJSON(trimmed)
 	if err != nil {
-		return string(trimmed), true
+		return execution.UnparseableBodyPreview, true
 	}
 	return v, true
 }
@@ -444,6 +491,7 @@ func (c *Context) validateDryRunScope(group string, rest []string) error {
 }
 
 func (c *Context) Close() {
+	c.closeExecutionContext()
 	if c.traceW != nil {
 		_ = c.traceW.Close()
 		c.traceW = nil

@@ -81,11 +81,15 @@ type DocsSpec struct {
 	Summary          string `json:"summary"`
 	Source           string `json:"source"`
 	UsageConstraints string `json:"usage_constraints"`
+	URL              string `json:"url,omitempty"`
+	URLSource        string `json:"url_source,omitempty"`
 }
 
 type RiskSpec struct {
-	Level         string `json:"level"`
-	ErrorRecovery string `json:"error_recovery"`
+	Level          string `json:"level"`
+	ErrorRecovery  string `json:"error_recovery"`
+	RecoverySource string `json:"recovery_source,omitempty"`
+	RecoveryNotes  string `json:"recovery_notes,omitempty"`
 }
 
 // LegacyToolV1 mirrors the legacy CLI tool JSON field order. Do not reorder
@@ -112,4 +116,8 @@ type LegacyToolV1 struct {
 	SupportsDryRun   bool       `json:"supports_dry_run"`
 	SupportsAll      bool       `json:"supports_all"`
 	IsEnvelopeOutput bool       `json:"is_envelope_output"`
+	RecoverySource   string     `json:"recovery_source,omitempty"`
+	RecoveryNotes    string     `json:"recovery_notes,omitempty"`
+	DocURL           string     `json:"doc_url,omitempty"`
+	DocURLSource     string     `json:"doc_url_source,omitempty"`
 }

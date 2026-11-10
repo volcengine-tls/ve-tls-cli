@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/jsonx"
 	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
@@ -14,6 +15,8 @@ type httpError struct {
 	body       []byte
 	requestID  string
 }
+
+func (e *httpError) RemoteOutcome() string { return execution.OutcomeFailed }
 
 func (e *httpError) Error() string {
 	if len(e.body) == 0 {
@@ -51,6 +54,10 @@ func isHTTPError(err error) (*httpError, bool) {
 	var he *httpError
 	if errors.As(err, &he) {
 		return he, true
+	}
+	var source *execution.HTTPError
+	if errors.As(err, &source) {
+		return &httpError{statusCode: source.StatusCode, body: source.Body, requestID: source.RequestID}, true
 	}
 	return nil, false
 }

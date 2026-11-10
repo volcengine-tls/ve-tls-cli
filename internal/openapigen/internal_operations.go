@@ -91,7 +91,7 @@ func mergeInternalOperations(
 }
 
 func mergeInternalOperationsIntoCheckedInCatalog(
-	catalogPath, lockPath, internalOperationsPath, lockRoot string,
+	catalogPath, lockPath, internalOperationsPath, lockRoot string, policyPaths ...string,
 ) error {
 	rawCatalog, err := os.ReadFile(catalogPath)
 	if err != nil {
@@ -115,6 +115,25 @@ func mergeInternalOperationsIntoCheckedInCatalog(
 	if err := validateMergeOnlyUnchangedInputs(lockRoot, internalOperationsPath, existingLock); err != nil {
 		return err
 	}
+	recoveryPath, usagePath, documentationPath, err := policyInputPaths(lockRoot, policyPaths)
+	if err != nil {
+		return err
+	}
+	if err := requireLockedPolicyPaths(lockRoot, recoveryPath, usagePath, documentationPath, existingLock); err != nil {
+		return err
+	}
+	policies, err := loadRecoveryPolicies(recoveryPath)
+	if err != nil {
+		return err
+	}
+	usage, err := loadUsageConstraints(usagePath)
+	if err != nil {
+		return err
+	}
+	docs, err := loadDocumentationOverrides(documentationPath)
+	if err != nil {
+		return err
+	}
 	internalOperations, err := loadInternalOperationOverrides(internalOperationsPath)
 	if err != nil {
 		return err
@@ -123,11 +142,16 @@ func mergeInternalOperationsIntoCheckedInCatalog(
 	if err != nil {
 		return err
 	}
+	catalog, err = applyContractPolicies(catalog, policies, usage, docs, false)
+	if err != nil {
+		return err
+	}
 	inputs := make(map[string]string, len(existingLock.Inputs)+2)
 	for _, input := range existingLock.Inputs {
 		inputs[input.Name] = filepath.Join(lockRoot, filepath.FromSlash(input.Path))
 	}
 	inputs["generator_internal_operations"] = filepath.Join(lockRoot, "internal", "openapigen", "internal_operations.go")
+	addContractPolicyInputs(inputs, lockRoot, recoveryPath, usagePath, documentationPath)
 	if filepath.IsAbs(internalOperationsPath) {
 		inputs["override_internal_operations"] = internalOperationsPath
 	} else {

@@ -22,6 +22,9 @@ func newToolExecutionCodecRegistry(ctx *Context) (*execution.CodecRegistry, erro
 	if err != nil {
 		return nil, err
 	}
+	if err := registry.Register(contract.CodecJSON, searchAwareJSONCodec{context: ctx, fallback: fallback}); err != nil {
+		return nil, err
+	}
 	for id, profile := range map[contract.CodecID]specialIOProfile{
 		contract.CodecPutLogs:     specialIOProfilePutLogs,
 		contract.CodecWebTracks:   specialIOProfileWebTracks,
@@ -66,7 +69,19 @@ func (c toolExecutionCodec) Decode(
 	operation contract.Operation,
 	response execution.Response,
 	state any,
-) (any, error) {
+) (data any, err error) {
+	defer func() {
+		if err == nil {
+			return
+		}
+		if _, ok := isHTTPError(err); ok {
+			return
+		}
+		if _, typed := firstTypedOperationError(err); typed != nil {
+			return
+		}
+		err = &execution.Failure{Kind: "protocol", Code: "InvalidResponse", Stage: "decode", Outcome: execution.OutcomeUnknown, Message: "response does not match the operation protocol", Cause: err}
+	}()
 	var specialState *specialIOState
 	if state != nil {
 		var ok bool

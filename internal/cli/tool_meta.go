@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
+	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
 )
 
 type toolDescribeView string
@@ -409,7 +410,10 @@ func buildToolDescribeCommon(operation contract.Operation) (toolDescribeCommon, 
 	verb := semanticToolVerb(operation)
 	usageNotes := []any{}
 	if supportsAll {
-		usageNotes = append(usageNotes, "execution.page.all increases completeness and may increase payload size; pair it with execution.artifact or execution.projection for large results.")
+		usageNotes = append(usageNotes,
+			"page.all merges page payloads; check summary.completeness. Service Total is preserved; summary.itemCount counts collected rows.",
+			"Incomplete results exit nonzero with data. Resume via next.operationId and next.input with the same runtime selectors and page-all disabled.",
+		)
 	}
 	usageNotes = append(usageNotes, toolSpecificUsageNotes(operation)...)
 	return toolDescribeCommon{
@@ -420,16 +424,20 @@ func buildToolDescribeCommon(operation contract.Operation) (toolDescribeCommon, 
 		executionSchema: executionSchema,
 		execution:       execution,
 		identity: map[string]any{
-			"id":         strings.TrimSpace(string(operation.ID)),
-			"group":      strings.TrimSpace(operation.Group),
-			"action":     strings.TrimSpace(operation.Action),
-			"resource":   strings.TrimSpace(operation.Resource),
-			"verb":       verb,
-			"family":     strings.TrimSpace(operation.Family),
-			"method":     strings.ToUpper(strings.TrimSpace(operation.Wire.Method)),
-			"path":       strings.TrimSpace(operation.Wire.Path),
-			"visibility": strings.TrimSpace(operation.Visibility),
-			"summary":    strings.TrimSpace(operation.Docs.Summary),
+			"id":                  strings.TrimSpace(string(operation.ID)),
+			"group":               strings.TrimSpace(operation.Group),
+			"action":              strings.TrimSpace(operation.Action),
+			"resource":            strings.TrimSpace(operation.Resource),
+			"verb":                verb,
+			"family":              strings.TrimSpace(operation.Family),
+			"method":              strings.ToUpper(strings.TrimSpace(operation.Wire.Method)),
+			"path":                strings.TrimSpace(operation.Wire.Path),
+			"visibility":          strings.TrimSpace(operation.Visibility),
+			"summary":             strings.TrimSpace(operation.Docs.Summary),
+			"api_version_default": tlsapi.DefaultAPIVersion,
+			"api_version_source":  "client-default-header",
+			"deprecated":          nil,
+			"maintainer":          nil,
 		},
 		usageNotes:       usageNotes,
 		usageConstraints: strings.TrimSpace(operation.Docs.UsageConstraints),
@@ -447,14 +455,14 @@ func buildToolDescribeCommon(operation contract.Operation) (toolDescribeCommon, 
 		contractDigest: map[string]any{
 			"value":   digestValue,
 			"policy":  "soft",
-			"warning": "contract digest mismatch is advisory; continue execution if mismatch",
+			"warning": "Contract digest mismatch is advisory; execution continues.",
 		},
 		contractCache: map[string]any{
-			"safe_scope": "Safe to reuse within the same CLI build while contract_digest.value stays unchanged.",
+			"safe_scope": "Reuse within one CLI build while contract_digest.value is unchanged.",
 			"refresh_when": []any{
 				"contract_digest changes",
 				"CLI version or build changes",
-				"execution returns unknown field, contract mismatch, or nearby usage errors for this action",
+				"unknown field, contract mismatch, or usage errors for this action",
 			},
 		},
 	}, nil
@@ -467,8 +475,8 @@ func toolSpecificUsageNotes(operation contract.Operation) []any {
 			"The selected profile must have endpoint and region configured. The explicit --region and --endpoint overrides in the commands below keep the target environment unambiguous.",
 			"Preflight: run volclog --profile <profile> --region <region> --endpoint <tls-endpoint> tool exec shard.describe --input '{\"TopicId\":\"<topic-id>\"}' --page-all; select a non-final readwrite shard whose next shard is contiguous and readwrite.",
 			"Plan without mutation: run volclog --profile <profile> --region <region> --endpoint <tls-endpoint> --dry-run tool exec shard.merge --input '{\"TopicId\":\"<topic-id>\",\"ShardId\":0}' after replacing the placeholders and ShardId.",
-			"Execute once after reviewing the plan: run volclog --profile <profile> --region <region> --endpoint <tls-endpoint> tool exec shard.merge --input '{\"TopicId\":\"<topic-id>\",\"ShardId\":0}'.",
-			"Dry-run validates request planning and required-field presence only; TopicId UUID syntax, ShardId range, and shard mergeability remain service-side validation.",
+			"Execute once after reviewing the plan: run volclog --profile <profile> --region <region> --endpoint <tls-endpoint> --allow-write tool exec shard.merge --input '{\"TopicId\":\"<topic-id>\",\"ShardId\":0}'.",
+			"Dry-run validates the declared schema and request plan, including non-negative integer ShardId; TopicId UUID syntax and shard mergeability require service-side validation.",
 			"On success, read status first and then the resulting shard list from data.Shards. If the result is ambiguous, preserve error.requestId and run shard.describe again; do not retry shard.merge automatically.",
 		}
 	case "log.search":
@@ -476,8 +484,8 @@ func toolSpecificUsageNotes(operation contract.Operation) []any {
 			"SearchLogs Query supports both plain search syntax and SQL/analysis syntax such as '* | select ...'.",
 			"HitCount is only the count returned in the current response window of SearchLogs; do not treat it as the whole-window total hit count.",
 			"Use log.describe-histogram-v1 only for pure search queries when you need time-distribution preview or a better whole-window hit estimate before narrowing or widening a search window; Histogram.TotalCount is the better whole-window hit count in that pure-search case.",
-			"For SQL/analysis queries, body fields such as Context, Sort, Limit, and Offset do not page analysis rows; use SQL limit/offset inside Query instead.",
-			"If SearchLogs returns ResultStatus=incomplete, the service returned only a partial scan; this can happen for both search and analysis queries, so narrow the time range and rerun before trusting counts, rows, or absence of hits.",
+			"For SQL/analysis queries, body fields such as Context, Sort, Limit, and Offset do not page analysis rows. User-authored SQL LIMIT/OFFSET calls are independent queries without a shared-snapshot guarantee; do not invent an OFFSET to resume an incomplete response.",
+			"SQL/analysis is complete only when ResultStatus=complete; ListOver applies to pure search only. ResultStatus=incomplete or time_out reports incomplete data, and error reports failure; inspect summary.completeness before trusting counts, rows, or absence of hits.",
 			"Prefer log.search for interactive analysis, quick previews, and smaller result sets; switch to workflow log.export-analysis when analysis rows may exceed stdout or token budget.",
 		}
 	case "log.describe-histogram-v1":
@@ -510,6 +518,11 @@ func buildToolDescribeFullOutput(operation contract.Operation, common toolDescri
 		"output_policy":       strings.TrimSpace(operation.Output.Policy),
 		"risk":                strings.TrimSpace(operation.Risk.Level),
 		"recovery":            strings.TrimSpace(operation.Risk.ErrorRecovery),
+		"recovery_source":     strings.TrimSpace(operation.Risk.RecoverySource),
+		"recovery_notes":      strings.TrimSpace(operation.Risk.RecoveryNotes),
+		"doc_url":             toolDocumentationURL(operation),
+		"doc_url_source":      strings.TrimSpace(operation.Docs.URLSource),
+		"input_policy":        toolInputPolicy(operation),
 		"source":              strings.TrimSpace(operation.Docs.Source),
 		"contract_digest":     common.contractDigest,
 		"contract_cache_hint": common.contractCache,
@@ -527,11 +540,12 @@ func buildToolDescribeCompactOutput(operation contract.Operation, common toolDes
 	compactInputSchema := compactToolInputSchema(common.inputSchema)
 	target := map[string]any{
 		"identity": map[string]any{
-			"id":     common.identity["id"],
-			"group":  common.identity["group"],
-			"action": common.identity["action"],
-			"method": common.identity["method"],
-			"path":   common.identity["path"],
+			"id":                  common.identity["id"],
+			"group":               common.identity["group"],
+			"action":              common.identity["action"],
+			"method":              common.identity["method"],
+			"path":                common.identity["path"],
+			"api_version_default": common.identity["api_version_default"],
 		},
 		"context_schema":      compactToolContextSchema(common.contextSchema),
 		"execution_schema":    compactToolExecutionSchema(common.executionSchema),
@@ -540,6 +554,9 @@ func buildToolDescribeCompactOutput(operation contract.Operation, common toolDes
 		"behavior":            common.behavior,
 		"risk":                strings.TrimSpace(operation.Risk.Level),
 		"recovery":            strings.TrimSpace(operation.Risk.ErrorRecovery),
+		"recovery_source":     strings.TrimSpace(operation.Risk.RecoverySource),
+		"doc_url":             toolDocumentationURL(operation),
+		"input_policy":        toolInputPolicy(operation),
 		"output_policy":       strings.TrimSpace(operation.Output.Policy),
 		"source":              strings.TrimSpace(operation.Docs.Source),
 		"contract_digest":     common.contractDigest,
@@ -599,10 +616,14 @@ func buildToolFlatInputSchema(inputSchema map[string]any) map[string]any {
 	props := map[string]any{}
 	requiredSet := map[string]struct{}{}
 	locations := map[string][]string{}
+	allSectionsClosed := true
 	for _, section := range []string{"body", "query", "path", "header"} {
 		raw, ok := inputSchema[section].(map[string]any)
-		if !ok || len(raw) == 0 {
+		if !ok {
 			continue
+		}
+		if additional, ok := raw["additionalProperties"].(bool); !ok || additional {
+			allSectionsClosed = false
 		}
 		required := toolRequiredFields(raw["required"])
 		requiredLookup := map[string]struct{}{}
@@ -650,6 +671,9 @@ func buildToolFlatInputSchema(inputSchema map[string]any) map[string]any {
 		"type":       "object",
 		"properties": flatProps,
 	}
+	if allSectionsClosed {
+		out["additionalProperties"] = false
+	}
 	if len(requiredSet) > 0 {
 		required := make([]string, 0, len(requiredSet))
 		for name := range requiredSet {
@@ -694,13 +718,13 @@ func buildToolInputEncodingHint(inputSchema map[string]any) map[string]any {
 	sort.Strings(overlaps)
 	hint := map[string]any{
 		"transport": "--input accepts file://req.json, -, or inline JSON object.",
-		"sectioned": "Nested form stays authoritative: {\"query\": {...}, \"path\": {...}, \"header\": {...}, \"body\": {...}}.",
+		"sectioned": "Use nested {query,path,header,body} for explicit placement.",
 	}
 	switch {
 	case len(sections) == 1 && sections[0] == "body":
 		hint["recommended"] = "flat input is the natural form for this tool; top-level keys map directly to the request body."
 	case len(sections) == 1:
-		hint["recommended"] = "flat input is accepted for this tool; top-level keys map directly to " + sections[0] + " fields."
+		hint["recommended"] = "flat input keys map directly to " + sections[0] + " fields."
 	default:
 		hint["recommended"] = "flat input is accepted when each key maps unambiguously to one section; use nested sections when you want explicit query/path/header/body placement."
 	}
@@ -741,10 +765,8 @@ func appendToolSchemaLocation(existing []string, section string) []string {
 
 func compactToolInputSection(schema map[string]any) (map[string]any, bool) {
 	props, _ := schema["properties"].(map[string]any)
-	if len(props) == 0 {
-		return nil, false
-	}
 	out := map[string]any{}
+	copyToolSchemaConstraints(out, schema)
 	if fieldType := strings.TrimSpace(strings.ToLower(toolAnyToString(schema["type"]))); fieldType != "" {
 		out["type"] = fieldType
 	}
@@ -798,11 +820,7 @@ func compactToolFieldSchemaAtDepth(schema map[string]any, depth int) map[string]
 	if fieldType := strings.TrimSpace(strings.ToLower(toolAnyToString(schema["type"]))); fieldType != "" {
 		out["type"] = fieldType
 	}
-	for _, key := range []string{"format", "default", "enum", "pattern", "minimum", "maximum", "minLength", "maxLength"} {
-		if value, ok := schema[key]; ok {
-			out[key] = deepCloneToolValue(value)
-		}
-	}
+	copyToolSchemaConstraints(out, schema)
 	if shouldKeepCompactToolFieldDescription(schema, depth) {
 		if description := strings.TrimSpace(toolAnyToString(schema["description"])); description != "" {
 			out["description"] = description
@@ -838,6 +856,14 @@ func compactToolFieldSchemaAtDepth(schema map[string]any, depth int) map[string]
 		return map[string]any{}
 	}
 	return out
+}
+
+func copyToolSchemaConstraints(out, schema map[string]any) {
+	for _, key := range []string{"format", "default", "enum", "const", "pattern", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems", "additionalProperties", "oneOf", "allOf", "if", "then", "else"} {
+		if value, ok := schema[key]; ok {
+			out[key] = deepCloneToolValue(value)
+		}
+	}
 }
 
 func shouldKeepCompactToolFieldDescription(schema map[string]any, depth int) bool {
@@ -907,14 +933,38 @@ func compactToolContextSchema(schema map[string]any) map[string]any {
 	if len(props) == 0 {
 		return out
 	}
+	compactEffects := map[string]string{
+		"profile":         "Explicit profile ignores credential and target environment values; conflicting --profile fails.",
+		"secrets_file":    "Resolve selectors first; load supported VOLCENGINE_* values only if selected.",
+		"region":          "Override region ahead of defaults; conflicting --region fails. Endpoint is independent.",
+		"endpoint":        "Override endpoint ahead of defaults; conflicting --endpoint fails. Never derived from region.",
+		"contract_digest": "Soft check warns on mismatch; execution continues.",
+		"execution":       "Controls are nested under context.execution.",
+	}
 	compactProps := make(map[string]any, len(props))
 	for name, raw := range props {
 		field, _ := raw.(map[string]any)
+		var compactField map[string]any
 		if normalizeToken(name) == "execution" {
-			compactProps[name] = compactToolExecutionContextFieldSchema(field)
-			continue
+			compactField = compactToolExecutionContextFieldSchema(field)
+		} else {
+			compactField = compactToolDocFieldSchema(field)
 		}
-		compactProps[name] = compactToolDocFieldSchema(field)
+		// The runtime effect covers the field guidance in compact view.
+		delete(compactField, "when_to_use")
+		if strings.TrimSpace(toolAnyToString(compactField["runtime_effect"])) != "" {
+			delete(compactField, "description")
+		}
+		if name != "profile" && name != "trace" {
+			delete(compactField, "default")
+		}
+		if effect, ok := compactEffects[name]; ok {
+			compactField["runtime_effect"] = effect
+		}
+		if name == "profile" && compactField["discover_values"] != nil {
+			compactField["discover_values"] = "Run volclog configure list; omit for the active profile."
+		}
+		compactProps[name] = compactField
 	}
 	out["properties"] = compactProps
 	return out
@@ -941,12 +991,39 @@ func compactToolExecutionSchema(schema map[string]any) map[string]any {
 		field, _ := raw.(map[string]any)
 		compactProps[name] = compactToolExecutionFieldSchema(field)
 	}
+	// Both names accept the same normalized mode; keep the nested field and
+	// refer to the single full explanation on execution.output_mode.
+	outputMode, _ := compactProps["output_mode"].(map[string]any)
+	outputField, _ := compactProps["output"].(map[string]any)
+	outputProps, _ := outputField["properties"].(map[string]any)
+	modeField, _ := outputProps["mode"].(map[string]any)
+	modeDescription := toolAnyToString(modeField["description"])
+	if modeDescription != "" && modeDescription == toolAnyToString(outputMode["description"]) {
+		modeField["description"] = "Same as execution.output_mode."
+	}
+	compactDescriptions := map[string]string{
+		"projection":      "JMES string, {jmes}, or nested arrays; validate all, use first non-empty.",
+		"artifact":        "File output: boolean, path, or {path,dir}; aliases must agree.",
+		"output_mode":     "Empty is unset; stdout or file/artifact. Case-insensitive; trim whitespace. Aliases must agree.",
+		"output":          "Non-empty mode/path/dir must agree with artifact and output_mode aliases.",
+		"page":            "Auto-pagination when supported; page_all must agree.",
+		"page_all":        "Alias for page.all; both must agree.",
+		"non_interactive": "Disable prompts; false cannot cancel non-TTY mode.",
+		"allow_write":     "CLI gate, not IAM; reviewed reads incl. POST log.search are exempt. Omission inherits global or false; false conflicts with global true.",
+		"timeout":         "Positive Go duration from invocation start; no overall default. Separate from profile HTTP timeout; equal global values may repeat.",
+	}
+	for name, description := range compactDescriptions {
+		if field, ok := compactProps[name].(map[string]any); ok {
+			field["description"] = description
+		}
+	}
 	out["properties"] = compactProps
 	return out
 }
 
 func compactToolExecutionFieldSchema(schema map[string]any) map[string]any {
 	out := compactToolDocFieldSchema(schema)
+	delete(out, "when_to_use")
 	props, _ := schema["properties"].(map[string]any)
 	if len(props) == 0 || hasToolOneOf(schema) {
 		return out
@@ -954,7 +1031,9 @@ func compactToolExecutionFieldSchema(schema map[string]any) map[string]any {
 	compactProps := make(map[string]any, len(props))
 	for name, raw := range props {
 		field, _ := raw.(map[string]any)
-		compactProps[name] = compactToolDocFieldSchema(field)
+		compactField := compactToolDocFieldSchema(field)
+		delete(compactField, "when_to_use")
+		compactProps[name] = compactField
 	}
 	out["properties"] = compactProps
 	return out
@@ -1080,6 +1159,7 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 	if strings.TrimSpace(strings.ToLower(toolAnyToString(ctx["type"]))) == "" {
 		ctx["type"] = "object"
 	}
+	ctx["additionalProperties"] = false
 	props := ensureToolSchemaProperties(ctx)
 	execProps, _ := executionSchema["properties"].(map[string]any)
 	executionDescription := "Execution controls for dry-run, projection, artifact export, and pagination."
@@ -1093,7 +1173,7 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 			"when_to_use":     "Set this when you need a non-default account/profile or want to switch tenant/environment without changing input.",
 			"default":         "active CLI profile",
 			"discover_values": "Run `volclog configure list` to inspect saved profile names; omit profile to use the active CLI profile.",
-			"runtime_effect":  "Runtime loads credentials and defaults from the selected profile. If global --profile is also set, conflicting selectors fail fast instead of silently overriding each other.",
+			"runtime_effect":  "An explicit profile ignores credential and default target environment values. A different global --profile is a conflict.",
 		},
 		"secrets_file": {
 			"type":           "string",
@@ -1107,20 +1187,20 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 			"description":    "Target region for the TLS OpenAPI endpoint.",
 			"when_to_use":    "Set this to choose a region explicitly or override defaults.",
 			"default":        "resolved from profile or environment",
-			"runtime_effect": "Runtime uses this value as the request signing region. Endpoint remains independently explicit.",
+			"runtime_effect": "Sets the runtime signing region ahead of profile and environment defaults; a different global --region is a conflict. Endpoint remains independently explicit.",
 		},
 		"endpoint": {
 			"type":           "string",
 			"description":    "Explicit TLS OpenAPI endpoint URL.",
 			"when_to_use":    "Set this to choose the TLS service address explicitly.",
 			"default":        "resolved from explicit runtime configuration",
-			"runtime_effect": "Runtime sends requests to this endpoint; it is never derived from region.",
+			"runtime_effect": "Sets the runtime endpoint ahead of profile and environment defaults; a different global --endpoint is a conflict. The endpoint is never derived from region.",
 		},
 		"trace": {
 			"description":    "Trace configuration for request/response diagnostics.",
 			"when_to_use":    "Set this when you need troubleshooting artifacts or transport traces.",
 			"default":        false,
-			"runtime_effect": "Runtime enables trace capture, chooses the trace directory, and normalizes legacy strict/default redact inputs to the current on/off setting.",
+			"runtime_effect": "Selects the trace directory; false or enabled:false disables global trace. Redaction stays on; on/true/1/yes/enabled/strict/default are accepted, off and other values are rejected.",
 		},
 		"contract_digest": {
 			"type":           "string",
@@ -1130,12 +1210,13 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 			"runtime_effect": "Runtime compares digest in soft mode and emits advisory mismatch warnings only.",
 		},
 		"execution": {
-			"type":           "object",
-			"properties":     execProps,
-			"description":    executionDescription,
-			"when_to_use":    "Set this to change execution behavior without altering business request payload.",
-			"default":        map[string]any{},
-			"runtime_effect": "Runtime reads execution controls from context.execution; do not pass execution as a separate file.",
+			"type":                 "object",
+			"properties":           execProps,
+			"additionalProperties": false,
+			"description":          executionDescription,
+			"when_to_use":          "Set this to change execution behavior without altering business request payload.",
+			"default":              map[string]any{},
+			"runtime_effect":       "Runtime reads execution controls from context.execution; do not pass execution as a separate file.",
 		},
 	}
 	for key, doc := range contextDocs {
@@ -1147,13 +1228,28 @@ func enrichToolContextSchema(base map[string]any, executionSchema map[string]any
 				map[string]any{"type": "boolean"},
 				map[string]any{"type": "string"},
 				map[string]any{
-					"type": "object",
+					"type":                 "object",
+					"additionalProperties": false,
 					"properties": map[string]any{
 						"enabled": map[string]any{"type": "boolean"},
 						"dir":     map[string]any{"type": "string"},
-						"redact":  map[string]any{"type": "string"},
+						"redact": map[string]any{
+							"type": "string",
+							"enum": []any{"on", "true", "1", "yes", "enabled", "strict", "default"},
+						},
 					},
 				},
+			}
+		}
+		if forms, ok := traceField["oneOf"].([]any); ok {
+			for _, raw := range forms {
+				if form, ok := raw.(map[string]any); ok && form["type"] == "object" {
+					form["additionalProperties"] = false
+					props, _ := form["properties"].(map[string]any)
+					if redact, ok := props["redact"].(map[string]any); ok {
+						redact["enum"] = []any{"on", "true", "1", "yes", "enabled", "strict", "default"}
+					}
+				}
 			}
 		}
 	}
@@ -1165,15 +1261,16 @@ func enrichToolExecutionSchema(base map[string]any, supportsAll bool) map[string
 	if strings.TrimSpace(strings.ToLower(toolAnyToString(exec["type"]))) == "" {
 		exec["type"] = "object"
 	}
+	exec["additionalProperties"] = false
 	props := ensureToolSchemaProperties(exec)
 	executionDocs := map[string]string{
-		"dry_run":    "When true, runtime validates and builds request envelope but does not call remote API.",
-		"projection": "Projection filter for response payload; supports string, string array, or {\"jmes\": \"...\"}.",
-		"artifact":   "Artifact export control; supports boolean, output path string, or object with path.",
+		"dry_run":    "Validate and plan without a remote request.",
+		"projection": "Filter response data with a string, {jmes:...}, or nested arrays; every item is validated and the first non-empty expression is used.",
+		"artifact":   "Artifact export control; supports boolean, output path string, or object with path and dir. Output aliases must agree.",
 	}
 	if supportsAll {
-		executionDocs["page"] = "Pagination execution controls. page.all requests auto-pagination for supported actions."
-		executionDocs["page_all"] = "Compatibility alias for page.all. Prefer page.all in new context files, but runtime still accepts page_all."
+		executionDocs["page"] = "Pagination execution controls. page.all requests auto-pagination for supported actions; page_all must agree when both are specified."
+		executionDocs["page_all"] = "Compatibility alias for page.all; both values must agree when specified together. Prefer page.all in new context files."
 	} else {
 		delete(props, "page")
 		delete(props, "page_all")

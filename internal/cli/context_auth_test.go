@@ -366,7 +366,7 @@ func TestPaginationRefreshUsesNewTokenOnNextRequest(t *testing.T) {
 // the provider returns credentials from a different source.
 func TestDynamicRequestsKeepTLSServiceAndResolvedRegion(t *testing.T) {
 	clearAuthTestEnv(t)
-	t.Setenv("VOLCENGINE_REGION", "cn-shanghai")
+	t.Setenv("VOLCENGINE_REGION", "cn-hangzhou")
 	server, ch := newCapturingServer(t)
 
 	cfg := config.Config{
@@ -374,6 +374,7 @@ func TestDynamicRequestsKeepTLSServiceAndResolvedRegion(t *testing.T) {
 		Profiles: map[string]config.Profile{
 			"sso": {
 				Mode:     config.AuthModeSSO,
+				Region:   "cn-beijing",
 				Endpoint: server.URL,
 			},
 		},
@@ -388,6 +389,7 @@ func TestDynamicRequestsKeepTLSServiceAndResolvedRegion(t *testing.T) {
 	factory := &fakeAuthFactory{ssoProvider: provider}
 	ctx := newTestContext(t, cfg, "/tmp/test-config.json")
 	ctx.Profile = "sso"
+	ctx.RuntimeRegion = "cn-shanghai"
 	ctx.authFactory = factory
 
 	if _, err := ctx.DoRaw("GET", "/DescribeProjects", nil, nil, nil); err != nil {
@@ -395,7 +397,7 @@ func TestDynamicRequestsKeepTLSServiceAndResolvedRegion(t *testing.T) {
 	}
 	cr := <-ch
 	// The Authorization header's credential scope must contain the resolved
-	// region (cn-shanghai from env) and the TLS service.
+	// region (cn-shanghai from the runtime flag) and the TLS service.
 	if !strings.Contains(cr.authorization, "cn-shanghai") {
 		t.Fatalf("expected resolved region cn-shanghai in Authorization, got %q", cr.authorization)
 	}

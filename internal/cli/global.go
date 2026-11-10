@@ -1,6 +1,9 @@
 package cli
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 type GlobalFlags struct {
 	Profile            string
@@ -19,6 +22,10 @@ type GlobalFlags struct {
 	DryRun             bool
 	ShowHelp           bool
 	ShowVersion        bool
+	NonInteractive     bool
+	AllowWrite         bool
+	Timeout            string
+	ControlConflict    bool
 }
 
 func parseGlobal(args []string) (group string, rest []string, flags GlobalFlags, ok bool) {
@@ -28,70 +35,82 @@ func parseGlobal(args []string) (group string, rest []string, flags GlobalFlags,
 			break
 		}
 		switch a {
+		case "--non-interactive":
+			flags.NonInteractive = true
+			args = args[1:]
+		case "--allow-write":
+			flags.AllowWrite = true
+			args = args[1:]
+		case "--timeout":
+			if !hasGlobalFlagValue(args, 0) {
+				return "", nil, GlobalFlags{}, false
+			}
+			setGlobalTimeout(&flags, args[1])
+			args = args[2:]
 		case "--profile":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.Profile = args[1]
 			args = args[2:]
 		case "--region":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.Region = args[1]
 			args = args[2:]
 		case "--endpoint":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.Endpoint = args[1]
 			args = args[2:]
 		case "--output":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.Output = args[1]
 			args = args[2:]
 		case "--output-mode":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.OutputMode = args[1]
 			flags.OutputModeExplicit = true
 			args = args[2:]
 		case "--output-dir":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.OutputDir = args[1]
 			flags.OutputDirExplicit = true
 			args = args[2:]
 		case "--output-file":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.OutputFile = args[1]
 			args = args[2:]
 		case "--jmes-filter":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.Filter = args[1]
 			args = args[2:]
 		case "--trace-dir":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.TraceDir = args[1]
 			args = args[2:]
 		case "--trace-redact":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.TraceRedact = args[1]
 			args = args[2:]
 		case "--secrets-file":
-			if len(args) < 2 {
+			if !hasGlobalFlagValue(args, 0) {
 				return "", nil, GlobalFlags{}, false
 			}
 			flags.SecretsFile = args[1]
@@ -123,46 +142,56 @@ func extractTrailingGlobals(args []string, flags GlobalFlags, allowDryRun bool) 
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch a {
+		case "--non-interactive":
+			merged.NonInteractive = true
+		case "--allow-write":
+			merged.AllowWrite = true
+		case "--timeout":
+			if !hasGlobalFlagValue(args, i) {
+				return nil, GlobalFlags{}, false
+			}
+			setGlobalTimeout(&merged, args[i+1])
+			i++
 		case "--output":
-			if i+1 >= len(args) {
+			if !hasGlobalFlagValue(args, i) {
 				return nil, GlobalFlags{}, false
 			}
 			merged.Output = args[i+1]
 			i++
 		case "--output-mode":
-			if i+1 >= len(args) {
+			if !hasGlobalFlagValue(args, i) {
 				return nil, GlobalFlags{}, false
 			}
 			merged.OutputMode = args[i+1]
 			merged.OutputModeExplicit = true
 			i++
 		case "--output-dir":
-			if i+1 >= len(args) {
+			if !hasGlobalFlagValue(args, i) {
 				return nil, GlobalFlags{}, false
 			}
 			merged.OutputDir = args[i+1]
 			merged.OutputDirExplicit = true
 			i++
 		case "--output-file":
-			if i+1 >= len(args) {
+			if !hasGlobalFlagValue(args, i) {
 				return nil, GlobalFlags{}, false
 			}
 			merged.OutputFile = args[i+1]
 			i++
 		case "--jmes-filter":
-			if i+1 >= len(args) {
+			if !hasGlobalFlagValue(args, i) {
 				return nil, GlobalFlags{}, false
 			}
 			merged.Filter = args[i+1]
 			i++
 		case "--trace-dir":
-			if i+1 >= len(args) {
+			if !hasGlobalFlagValue(args, i) {
 				return nil, GlobalFlags{}, false
 			}
 			merged.TraceDir = args[i+1]
 			i++
 		case "--trace-redact":
-			if i+1 >= len(args) {
+			if !hasGlobalFlagValue(args, i) {
 				return nil, GlobalFlags{}, false
 			}
 			merged.TraceRedact = args[i+1]
@@ -178,6 +207,40 @@ func extractTrailingGlobals(args []string, flags GlobalFlags, allowDryRun bool) 
 		}
 	}
 	return rest, merged, true
+}
+
+func setGlobalTimeout(flags *GlobalFlags, value string) {
+	if flags.Timeout != "" {
+		before, e1 := time.ParseDuration(strings.TrimSpace(flags.Timeout))
+		after, e2 := time.ParseDuration(strings.TrimSpace(value))
+		if e1 != nil || e2 != nil || before != after {
+			flags.ControlConflict = true
+		}
+	}
+	flags.Timeout = value
+}
+
+// Other command groups retain their own option grammar; only these invocation
+// controls are additionally accepted after the command name.
+func extractTrailingInvocationControls(args []string, flags GlobalFlags) ([]string, GlobalFlags, bool) {
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--non-interactive":
+			flags.NonInteractive = true
+		case "--allow-write":
+			flags.AllowWrite = true
+		case "--timeout":
+			if !hasGlobalFlagValue(args, i) {
+				return nil, GlobalFlags{}, false
+			}
+			setGlobalTimeout(&flags, args[i+1])
+			i++
+		default:
+			rest = append(rest, args[i])
+		}
+	}
+	return rest, flags, true
 }
 
 func allowsTrailingGlobalsForGroup(group string) bool {
@@ -210,4 +273,14 @@ func allowsTrailingDryRun(group string, rest []string) bool {
 		return false
 	}
 	return false
+}
+
+// Values that are separate option tokens must not swallow execution controls.
+// A path beginning with -- can be expressed with an explicit ./ prefix.
+func hasGlobalFlagValue(args []string, index int) bool {
+	if index+1 >= len(args) {
+		return false
+	}
+	next := args[index+1]
+	return next != "-h" && !strings.HasPrefix(next, "--")
 }

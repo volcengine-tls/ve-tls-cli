@@ -32,8 +32,7 @@ func writeStructuredError(stdout, stderr io.Writer, err error, requestID string,
 	payload, code := classifyError(err, requestID, statusCode, group)
 	if env != nil {
 		if err2 := output.Write(stdout, env, output.FormatJSON); err2 != nil {
-			writeCLIError(stderr, err2, payload.RequestID, payload.StatusCode, "decode", "output write failed")
-			return 3
+			return writeBrokenStdout(stderr, err2, env)
 		}
 		return code
 	}

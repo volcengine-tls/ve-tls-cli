@@ -189,6 +189,7 @@ func (r Resolver) Resolve(request ResolveRequest) (Resolution, error) {
 	if lookup == nil {
 		lookup = os.Getenv
 	}
+	explicit := strings.TrimSpace(request.ExplicitProfile) != ""
 	name := request.Config.SelectedProfileName(request.ExplicitProfile)
 	profile, found := request.Config.GetProfile(name)
 
@@ -197,7 +198,7 @@ func (r Resolver) Resolve(request ResolveRequest) (Resolution, error) {
 	envToken := strings.TrimSpace(lookup("VOLCENGINE_TOKEN"))
 	completeEnvCredential := envAK != "" && envSK != ""
 
-	if !found && !completeEnvCredential {
+	if !found && (explicit || !completeEnvCredential) {
 		return Resolution{}, errors.New("profile not found: " + name)
 	}
 
@@ -212,7 +213,7 @@ func (r Resolver) Resolve(request ResolveRequest) (Resolution, error) {
 	dynamic := !request.ForceStatic && config.IsProviderAuthMode(mode)
 
 	if !dynamic {
-		if completeEnvCredential {
+		if completeEnvCredential && !explicit {
 			// Preserve config.EffectiveProfile compatibility: a complete
 			// environment credential pair creates an environment-only profile.
 			// It must not inherit runtime or auth fields from the selected
@@ -247,6 +248,11 @@ func (r Resolver) Resolve(request ResolveRequest) (Resolution, error) {
 	if strings.TrimSpace(profile.Endpoint) == "" {
 		return Resolution{}, errors.New("missing endpoint")
 	}
+	if explicit && !dynamic && (profile.AccessKeyID == "" || profile.SecretAccessKey == "") {
+		// The static client fills missing fields from the process environment.
+		// Fail here so an explicit profile can never inherit that identity.
+		return Resolution{}, errors.New("missing access key id or secret access key")
+	}
 	return Resolution{
 		ProfileName: name,
 		Profile:     profile,
@@ -275,15 +281,20 @@ func applyStaticRuntimeSettings(profile config.Profile, request ResolveRequest) 
 }
 
 func applyDynamicRuntimeSettings(profile config.Profile, request ResolveRequest, lookup func(string) string) config.Profile {
+	envRegion, envEndpoint := "", ""
+	if strings.TrimSpace(request.ExplicitProfile) == "" {
+		envRegion = lookup("VOLCENGINE_REGION")
+		envEndpoint = lookup("VOLCENGINE_ENDPOINT")
+	}
 	profile.Region = firstNonEmpty(
 		request.RuntimeRegion,
-		lookup("VOLCENGINE_REGION"),
+		envRegion,
 		profile.Region,
 		request.Defaults.Region,
 	)
 	profile.Endpoint = firstNonEmpty(
 		request.RuntimeEndpoint,
-		lookup("VOLCENGINE_ENDPOINT"),
+		envEndpoint,
 		profile.Endpoint,
 		request.Defaults.Endpoint,
 	)

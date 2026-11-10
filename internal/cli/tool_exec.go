@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -59,30 +58,36 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 	ctx.Action = "tool." + strings.TrimSpace(string(operation.ID))
 	ctxCfg := toolExecContext{Execution: map[string]any{}}
 	if strings.TrimSpace(contextArg) != "" {
-		ctxCfg, err = loadToolExecContext(contextArg)
+		ctxCfg, err = loadToolExecContext(contextArg, ctx)
 		if err != nil {
 			return nil, err
 		}
 	}
+	if err := ctx.applyExecutionControls(ctxCfg); err != nil {
+		return nil, err
+	}
 	rawInput := map[string]any{}
 	if strings.TrimSpace(inputArg) != "" {
-		rawInput, err = readToolJSONObjectFlag("--input", inputArg)
+		rawInput, err = readToolJSONObjectFlag("--input", inputArg, ctx)
 		if err != nil {
 			return nil, err
 		}
 	}
 	input, err := execution.NormalizeInput(operation, rawInput)
 	if err != nil {
-		return nil, err
+		return nil, validationFailure(err, "InvalidToolInput")
 	}
 	if err := execution.ValidateInput(operation, input); err != nil {
-		return nil, err
+		return nil, validationFailure(err, "InvalidToolInput")
+	}
+	options := resolveToolExecutionOptions(ctxCfg)
+	compiledProjection, err := output.Compile(options.Projection)
+	if err != nil {
+		return nil, &execution.Failure{Kind: "decode", Code: "InvalidProjection", Stage: "validate", Outcome: execution.OutcomeNotSent, Cause: fmt.Errorf("invalid execution.projection: %w", err)}
 	}
 	if err := applyToolExecContext(ctx, ctxCfg); err != nil {
 		return nil, err
 	}
-
-	options := resolveToolExecutionOptions(ctxCfg)
 	if strings.TrimSpace(options.OutputDir) != "" {
 		ctx.OutputDir = strings.TrimSpace(options.OutputDir)
 	}
@@ -94,22 +99,16 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 	}
 	options.DryRun = ctx.DryRun
 	if options.Artifact {
-		if strings.TrimSpace(ctx.Filter) != "" {
-			return nil, errors.New("--jmes-filter cannot be combined with file delivery for tool exec")
-		}
 		ctx.OutputMode = "file"
 		if strings.TrimSpace(options.ArtifactPath) != "" {
 			ctx.OutputFile = strings.TrimSpace(options.ArtifactPath)
 		}
+	}
+	if ctx.OutputMode == "file" {
 		if err := preflightOutputFilePath(ctx.OutputFile, ctx.OutputDir, "tool", output.FormatJSON); err != nil {
 			return nil, err
 		}
 	}
-	compiledProjection, err := output.Compile(options.Projection)
-	if err != nil {
-		return nil, fmt.Errorf("invalid execution.projection: %w", err)
-	}
-
 	runtime := execution.RuntimeView{}
 	if options.DryRun {
 		runtime = buildToolExecutionRuntimeView(ctx)
@@ -122,7 +121,7 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 		newContextExecutionTransport(ctx),
 		codecs,
 	)
-	executionResult, err := executor.Execute(context.Background(), execution.Invocation{
+	executionResult, err := executor.Execute(ctx.ExecutionContext(), execution.Invocation{
 		Operation: operation,
 		Input:     input,
 		Options: execution.Options{
@@ -136,6 +135,11 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 		return nil, adaptToolExecutionError(err)
 	}
 	result := executionResult.Data
+	if executionResult.Plan == nil {
+		if err := applyTaskResult(ctx, string(operation.ID), input, result); err != nil {
+			return nil, err
+		}
+	}
 	if executionResult.Plan != nil {
 		ctx.traceToolExecutionPlan(executionResult.Plan)
 		result, err = toolExecutionPlanValue(executionResult.Plan)
@@ -147,16 +151,16 @@ func runToolExec(ctx *Context, args []string) (any, error) {
 	warnings := toolDigestWarnings(operation, ctxCfg.ContractDigest)
 	filteredResult, err := applyCompiledToolExecFilter(result, compiledProjection)
 	if err != nil {
-		return nil, err
+		return nil, outputFailure(ctx, err, "projection", 3)
 	}
 	filteredResult = stabilizeProjectedToolResult(result, filteredResult, options.Projection)
 	env, err := buildAPIEnvelope(ctx, "tool", filteredResult, ctx.OutputMode, ctx.OutputFile, ctx.Format)
 	if err != nil {
-		return nil, err
+		return nil, postExecutionFailure(ctx, err, "artifact")
 	}
 	env, err = finalizeToolExecEnvelope(ctx, filteredResult, env, options)
 	if err != nil {
-		return nil, err
+		return nil, postExecutionFailure(ctx, err, "artifact")
 	}
 	env["action"] = ctx.Action
 	env["contract_digest"] = buildToolContractDigestStatus(operation, ctxCfg.ContractDigest)

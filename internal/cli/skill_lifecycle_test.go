@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -108,6 +109,136 @@ func TestSkillInstallWritesManifestAndDigest(t *testing.T) {
 	}
 	if manifest.SourceDigest != sourceDigest || manifest.InstalledDigest != diskDigest {
 		t.Fatalf("digest mismatch: manifest=%#v source=%s disk=%s", manifest, sourceDigest, diskDigest)
+	}
+}
+
+func TestSkillInstallExistingReportsConflictAndPreservesFiles(t *testing.T) {
+	dest := t.TempDir()
+	args := []string{"install", "--dir", dest, "--name", "volclog-core"}
+	runSkillJSON(t, args...)
+	contentPath := filepath.Join(dest, "volclog-core", "SKILL.md")
+	manifestPath := filepath.Join(dest, "volclog-core", skillManifestFileName)
+	content, err := os.ReadFile(contentPath)
+	if err != nil {
+		t.Fatalf("read installed skill: %v", err)
+	}
+	manifest, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read installed manifest: %v", err)
+	}
+	modifiedContent := []byte("user modification\n")
+	modifiedManifest := append(append([]byte(nil), manifest...), '\n')
+	if err := os.WriteFile(contentPath, modifiedContent, 0o644); err != nil {
+		t.Fatalf("modify skill: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, modifiedManifest, 0o644); err != nil {
+		t.Fatalf("modify manifest: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run(append([]string{"skill"}, args...), &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("exit=%d, want 2; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	payload := c4InvocationFailure(t, stdout.String(), stderr.String(), false)
+	wantMessage := fmt.Sprintf("skill already exists: %s (use --force to overwrite)", filepath.Join(dest, "volclog-core"))
+	if payload.Kind != "conflict" || payload.ErrorMessage != wantMessage {
+		t.Fatalf("unexpected conflict: %#v", payload)
+	}
+	for _, want := range []string{"volclog skill status --dir <skills-dir>", "volclog skill update --dir <skills-dir>"} {
+		if !strings.Contains(payload.Hint, want) {
+			t.Fatalf("hint %q missing %q", payload.Hint, want)
+		}
+	}
+	if strings.Contains(payload.Hint, "--dry-run") || strings.Contains(payload.Hint, "--trace") {
+		t.Fatalf("irrelevant conflict hint: %q", payload.Hint)
+	}
+	for path, want := range map[string][]byte{contentPath: modifiedContent, manifestPath: modifiedManifest} {
+		got, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("%s changed after conflict: got=%q err=%v", path, got, err)
+		}
+	}
+
+	runSkillJSON(t, append(args, "--force")...)
+	for path, want := range map[string][]byte{contentPath: content, manifestPath: manifest} {
+		got, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("%s not restored by force install: got=%q err=%v", path, got, err)
+		}
+	}
+}
+
+func TestSkillSwapExistingReportsWrappedConflict(t *testing.T) {
+	dest := t.TempDir()
+	target := filepath.Join(dest, "volclog-core")
+	stage := filepath.Join(dest, ".stage", "volclog-core")
+	for _, dir := range []string{target, stage} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("create %s: %v", dir, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(dir), 0o644); err != nil {
+			t.Fatalf("write %s: %v", dir, err)
+		}
+	}
+
+	err := swapSkillDirectory(dest, "volclog-core", stage, false)
+	if err == nil {
+		t.Fatal("expected conflict when target appears before swap")
+	}
+	wrapped := fmt.Errorf("install: %w", err)
+	var exists *skillAlreadyExistsError
+	if !errors.As(wrapped, &exists) || exists.target != target {
+		t.Fatalf("wrapped conflict lost target: %v", wrapped)
+	}
+	wantMessage := fmt.Sprintf("skill already exists: %s (use --force to overwrite)", target)
+	if err.Error() != wantMessage {
+		t.Fatalf("error=%q, want %q", err, wantMessage)
+	}
+	payload, code := classifyError(wrapped, "", 0, "skill")
+	if code != 2 || payload.Kind != "conflict" {
+		t.Fatalf("wrapped conflict classification: exit=%d payload=%#v", code, payload)
+	}
+	for _, dir := range []string{target, stage} {
+		got, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
+		if err != nil || string(got) != dir {
+			t.Fatalf("%s changed after conflict: got=%q err=%v", dir, got, err)
+		}
+	}
+}
+
+func TestSkillInstallRejectsSymlinkEvenWithForce(t *testing.T) {
+	dest := t.TempDir()
+	outside := t.TempDir()
+	contentPath := filepath.Join(outside, "SKILL.md")
+	if err := os.WriteFile(contentPath, []byte("outside\n"), 0o644); err != nil {
+		t.Fatalf("write outside file: %v", err)
+	}
+	link := filepath.Join(dest, "volclog-core")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink unavailable on this platform: %v", err)
+	}
+	for _, force := range []bool{false, true} {
+		args := []string{"skill", "install", "--dir", dest, "--name", "volclog-core"}
+		if force {
+			args = append(args, "--force")
+		}
+		var stdout, stderr bytes.Buffer
+		if code := Run(args, &stdout, &stderr); code == 0 {
+			t.Fatalf("force=%t: expected symlink rejection", force)
+		}
+		payload := c4InvocationFailure(t, stdout.String(), stderr.String(), false)
+		if !strings.Contains(payload.ErrorMessage, "symlink") || payload.Kind == "conflict" {
+			t.Fatalf("force=%t: unexpected error: %#v", force, payload)
+		}
+	}
+	info, err := os.Lstat(link)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("installed symlink changed: info=%v err=%v", info, err)
+	}
+	content, err := os.ReadFile(contentPath)
+	if err != nil || string(content) != "outside\n" {
+		t.Fatalf("symlink target changed: content=%q err=%v", content, err)
 	}
 }
 
@@ -341,7 +472,8 @@ func TestSkillStatusRejectsInstalledSymlink(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("expected symlink rejection, stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
-	if !strings.Contains(strings.ToLower(stderr.String()), "symlink") {
+	payload := c4InvocationFailure(t, stdout.String(), stderr.String(), false)
+	if !strings.Contains(strings.ToLower(payload.ErrorMessage), "symlink") {
 		t.Fatalf("missing symlink error: stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
 }

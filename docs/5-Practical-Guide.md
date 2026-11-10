@@ -47,7 +47,7 @@ volclog --profile '<profile>' tool describe log.search
 
 ### Create the project and topic
 
-Use `--dry-run` first to validate the request shape locally before sending it. A dry-run is a local validation gate; it does not check remote existence, permissions, or TLS service behavior.
+Use `--dry-run` first to validate the request shape locally before sending it. A dry-run does not require write permission and does not execute the business request. For the following writes, use `--allow-write` only when the user has authorized the intended changes; this CLI gate does not grant IAM permission.
 
 `project.create` requires `ProjectName` and `Region` in the body:
 
@@ -56,7 +56,7 @@ volclog --profile '<profile>' tool exec project.create \
   --input '{"ProjectName":"<project-name>","Region":"<region>","Description":"example project"}' \
   --dry-run
 
-volclog --profile '<profile>' tool exec project.create \
+volclog --profile '<profile>' --allow-write tool exec project.create \
   --input '{"ProjectName":"<project-name>","Region":"<region>","Description":"example project"}'
 ```
 
@@ -67,7 +67,7 @@ volclog --profile '<profile>' tool exec topic.create \
   --input '{"ProjectId":"<project-id>","TopicName":"<topic-name>","ShardCount":<shard-count>,"Ttl":<ttl-days>}' \
   --dry-run
 
-volclog --profile '<profile>' tool exec topic.create \
+volclog --profile '<profile>' --allow-write tool exec topic.create \
   --input '{"ProjectId":"<project-id>","TopicName":"<topic-name>","ShardCount":<shard-count>,"Ttl":<ttl-days>}'
 ```
 
@@ -88,7 +88,7 @@ volclog --profile '<profile>' workflow exec log.ingest \
   --input '{"TopicId":"<topic-id>","Input":"file://sample.log","InputFormat":"lines"}' \
   --context '{"execution":{"dry_run":true}}'
 
-volclog --profile '<profile>' workflow exec log.ingest \
+volclog --profile '<profile>' --allow-write workflow exec log.ingest \
   --input '{"TopicId":"<topic-id>","Input":"file://sample.log","InputFormat":"lines"}'
 ```
 
@@ -104,7 +104,7 @@ volclog --profile '<profile>' tool exec log.search \
 - `project.create` and `topic.create` return `status: success` and a non-empty `ProjectId` / `TopicId`.
 - `log.ingest` returns `status: success`.
 - `log.search` returns `status: success` and the `data` contains the sample log entry.
-- If `ResultStatus` is `incomplete`, the service returned only a partial scan; narrow the time range and rerun before trusting the result.
+- Inspect `summary.completeness`; `ResultStatus=incomplete` or `time_out` means incomplete data, and `error` means failure. Narrow the time range when appropriate before trusting the result.
 
 ### Recovery checkpoints
 
@@ -137,7 +137,7 @@ volclog --profile '<profile>' tool exec log.search \
   --input '{"TopicId":"<topic-id>","Query":"<query>","StartTime":<from-ms>,"EndTime":<to-ms>,"Limit":20}'
 ```
 
-If `ResultStatus` is `incomplete`, narrow the time range or query before exporting; the export workflow does not expose `ResultStatus` in its output.
+Inspect `summary.completeness` and the service `ResultStatus` before exporting. Treat `incomplete` and `time_out` as incomplete and `error` as failure; narrow the time range or query when appropriate. The row-only export file does not contain `ResultStatus`.
 
 ### Discover the export contract
 
@@ -147,11 +147,11 @@ The only current workflow IDs are `log.export`, `log.export-analysis`, and `log.
 volclog --profile '<profile>' workflow describe log.export
 ```
 
-`log.export` auto-paginates pure-search results. It defaults to at most 100 pages when `MaxPages` is omitted, and can stop at the selected/default page limit without exposing a "more pages remained" signal. The exported data artifact contains rows only and does not preserve `ResultStatus` or the final `ListOver` state. Command success and file existence therefore prove only that those rows were exported, not that the evidence set is complete. For evidence-grade export, inspect a bounded preview first, do not proceed as complete when preview `ResultStatus=incomplete`, narrow or split the time window or query, and explicitly choose `MaxPages` based on expected volume. You own the `MaxPages` choice. For analysis (SQL) queries, use `log.export-analysis` instead; it does not auto-paginate analysis rows, so SQL `limit`/`offset` semantics apply.
+`log.export` auto-paginates pure-search results and defaults to at most 100 pages when `MaxPages` is omitted. Reaching that budget before the observed end or a later request failure returns nonzero with `summary.completeness` and any retained rows. The row-only artifact does not include `ResultStatus` or `ListOver`; use the reported completeness and, when available, its `next` single-page request. For SQL/analysis, use `log.export-analysis`: it does not auto-paginate analysis rows, and only `ResultStatus=complete` marks the result complete. Explicit SQL `LIMIT`/`OFFSET` calls are independent queries without a shared-snapshot guarantee; do not invent an offset to resume an incomplete response.
 
 ### Export to a file
 
-Force JSONL export to a writable directory with an explicit `MaxPages`. `log.export` streams exported rows directly into the data artifact (JSONL rows for `--output jsonl`); the artifact is not an envelope. stdout contains only the fixed file notice with the data-artifact path:
+Force JSONL export to a writable directory with an explicit `MaxPages`. `log.export` streams exported rows directly into the data artifact (JSONL rows for `--output jsonl`); the artifact is not an envelope. Default stdout contains a JSON delivery envelope with the data-artifact path:
 
 ```bash
 volclog --profile '<profile>' --output jsonl --output-mode file --output-dir ./evidence \
@@ -161,13 +161,14 @@ volclog --profile '<profile>' --output jsonl --output-mode file --output-dir ./e
 
 ### Success signals
 
-- stdout prints `结果已写入文件。\n文件: <path>\n` (the fixed file notice).
+- stdout has `status=success`, `data=null`, `summary.deliveryMode=file_forced`, and the file path in `artifacts[].path`.
 - The file at `<path>` contains the exported log rows (JSONL), not an envelope.
 - The export artifact does not contain `status`, `summary.deliveryMode`, `requestId`, or `ResultStatus`.
-- Success proves only that the exported rows were written; it does not prove the evidence set is complete.
+- A successful export has observed its applicable completion signal; the row file alone does not contain that metadata or guarantee a snapshot across separate queries.
 
 ### Recovery checkpoints
 
+- If the export is incomplete, inspect the nonzero result's `summary.completeness` and retained data or artifact. A streamed partial has a unique path and a `.meta.json` sidecar, exposed through the artifact's `metadataPath`; a previous complete target is preserved. If `next` is present, use its `operationId` and `input` in a single `tool exec` call with the same runtime selectors and page-all disabled.
 - If the command errors with `result too large for stdout`, the output was not forced to file; rerun with `--output-mode file --output-dir '<writable-dir>'`.
 - If `workflow exec` reports a missing required field, rerun `workflow describe log.export` and align the request body.
 - If transport request IDs for the multi-page export are needed, enable a restricted trace directory (`--trace-dir '<dir>'`) and inspect the trace after the run. Trace files are sensitive: structured fields keep header/query keys and body hashes, but the transport `error_message` field may contain URL and query values. Never put credentials in query parameters.

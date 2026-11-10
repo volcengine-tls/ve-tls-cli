@@ -61,7 +61,7 @@ For a collection failure, use these commands to locate the host group and rule. 
 
 ### 3.2 Create a Topic and Index
 
-The following shortcuts perform real writes. When you need a preview, switch to the public contract first; inspect `index.create` in the same way for an index:
+The following shortcuts perform real writes and use the same CLI write gate as `tool exec`. When you need a preview, switch to the public contract first; inspect `index.create` in the same way for an index:
 
 ```bash
 volclog-human tool describe topic.create
@@ -70,17 +70,17 @@ volclog-human --profile default --dry-run tool exec topic.create \
   --input '{"ProjectId":"YOUR_PROJECT_ID","TopicName":"YOUR_TOPIC_NAME","Ttl":30,"ShardCount":1}'
 ```
 
-After confirming the request, use the shortcuts:
+For changes the user has authorized, use `--allow-write` with the shortcuts. This permits the CLI action; IAM permissions still apply. Generating the local request template does not need the flag:
 
 ```bash
-volclog-human --profile default topic create \
+volclog-human --profile default --allow-write topic create \
   --project-id 'YOUR_PROJECT_ID' \
   --topic-name 'YOUR_TOPIC_NAME' \
   --ttl 30 \
   --shard-count 1
 
 volclog-human index create --print-request-template=required > index-request.json
-volclog-human --profile default index create \
+volclog-human --profile default --allow-write index create \
   --topic-id 'YOUR_TOPIC_ID' \
   --request file://index-request.json
 ```
