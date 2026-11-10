@@ -205,7 +205,7 @@ func TestNewCatalogDeduplicatesSchemasAndRebuildsLegacyTool(t *testing.T) {
 		Path:             "/ListThings",
 		Visibility:       "public",
 		Summary:          "ListThings",
-		InputSchema:      operation.InputSchema,
+		InputSchema:      built.InputSchema,
 		ContextSchema:    context,
 		ExecutionSchema:  execution,
 		OutputPolicy:     "envelope",

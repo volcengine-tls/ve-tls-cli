@@ -3,7 +3,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
@@ -19,7 +18,6 @@ type shortcutExecutionRequest struct {
 
 type legacyPageAllPolicy struct {
 	ListField          string
-	ForceTotal         bool
 	PaginationOverride *contract.PaginationSpec
 }
 
@@ -46,7 +44,7 @@ func executeShortcutOperation(ctx *Context, request shortcutExecutionRequest) (a
 	result, executeErr := execution.NewExecutor(
 		newContextExecutionTransport(ctx),
 		codecs,
-	).Execute(context.Background(), execution.Invocation{
+	).Execute(ctx.ExecutionContext(), execution.Invocation{
 		Operation: operation,
 		Input:     request.Input,
 		Options: execution.Options{
@@ -69,12 +67,8 @@ func executeShortcutOperation(ctx *Context, request shortcutExecutionRequest) (a
 		}
 		return shortcutExecutionPlanValue(result.Plan)
 	}
-	if request.PageAll && request.LegacyPageAll != nil && request.LegacyPageAll.ForceTotal {
-		if data, ok := result.Data.(map[string]any); ok {
-			if items, ok := toAnySlice(data[request.LegacyPageAll.ListField]); ok {
-				data["Total"] = len(items)
-			}
-		}
+	if err := applyTaskResult(ctx, string(operation.ID), request.Input, result.Data); err != nil {
+		return nil, err
 	}
 	return result.Data, nil
 }
@@ -136,19 +130,4 @@ func shortcutJSONBodyInput(value map[string]any) execution.Payload {
 
 func shortcutEmptyJSONBodyInput() execution.Payload {
 	return shortcutJSONBodyInput(map[string]any{})
-}
-
-func toAnySlice(value any) ([]any, bool) {
-	switch items := value.(type) {
-	case []any:
-		return items, true
-	case []map[string]any:
-		out := make([]any, 0, len(items))
-		for _, item := range items {
-			out = append(out, item)
-		}
-		return out, true
-	default:
-		return nil, false
-	}
 }

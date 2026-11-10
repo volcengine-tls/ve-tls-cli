@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
 )
 
@@ -14,7 +17,12 @@ import (
 // and the real SSO adapter. Tests that need to inject fakes call
 // runWithLoginAdapterFactory directly.
 func Run(args []string, stdout, stderr io.Writer) int {
-	return runWithLoginAdapterFactory(args, stdout, stderr, newProductionLoginAdapter, newProductionSSOAdapter)
+	return RunContext(context.Background(), args, stdout, stderr)
+}
+
+// RunContext runs one invocation under the supplied cancellation context.
+func RunContext(parent context.Context, args []string, stdout, stderr io.Writer) int {
+	return runWithLoginAdapterFactoryContext(parent, args, stdout, stderr, newProductionLoginAdapter, newProductionSSOAdapter)
 }
 
 // runWithLoginAdapterFactory contains the full Run pipeline. The factory
@@ -23,13 +31,28 @@ func Run(args []string, stdout, stderr io.Writer) int {
 // pass fake factories for a single invocation so no process-level mutable state
 // is shared.
 func runWithLoginAdapterFactory(args []string, stdout, stderr io.Writer, factory loginAdapterFactory, ssoFactory ssoAdapterFactory) int {
+	return runWithLoginAdapterFactoryContext(context.Background(), args, stdout, stderr, factory, ssoFactory)
+}
+
+func runWithLoginAdapterFactoryContext(parent context.Context, args []string, stdout, stderr io.Writer, factory loginAdapterFactory, ssoFactory ssoAdapterFactory) int {
+	startedAt := time.Now()
 	invocation, exitCode, done := prepareRunInvocation(args, stdout, stderr)
 	if done {
 		return exitCode
 	}
+	invocation.ctx.initializeExecutionContext(parent, startedAt)
 	defer invocation.ctx.Close()
+	if invocation.ctx.TimeoutExplicit {
+		invocation.ctx.setExecutionTimeout(invocation.ctx.Timeout)
+	}
 
+	if exitCode, done = cancelBeforeRunStep(invocation, stdout, stderr); done {
+		return exitCode
+	}
 	if exitCode, done = preflightRunInvocation(invocation, stdout, stderr); done {
+		return exitCode
+	}
+	if exitCode, done = cancelBeforeRunStep(invocation, stdout, stderr); done {
 		return exitCode
 	}
 	out, dispatchExitCode, err, done := dispatchRunInvocation(invocation, stdout, stderr, factory, ssoFactory)
@@ -37,6 +60,19 @@ func runWithLoginAdapterFactory(args []string, stdout, stderr io.Writer, factory
 		return dispatchExitCode
 	}
 	return renderRunResult(invocation, stdout, stderr, out, dispatchExitCode, err)
+}
+
+func cancelBeforeRunStep(invocation *runInvocation, stdout, stderr io.Writer) (int, bool) {
+	err := invocation.ctx.ExecutionContext().Err()
+	if err == nil {
+		return 0, false
+	}
+	kind := "cancelled"
+	if errors.Is(err, context.DeadlineExceeded) {
+		kind = "deadline"
+	}
+	failure := &execution.Failure{Kind: "validation", Code: "InvalidRequest", Stage: "preflight", Outcome: execution.OutcomeNotSent, Cause: err}
+	return writeRunError(invocation.ctx, stdout, stderr, invocation.group, invocation.rest, failure, kind, "the invocation ended before sending", invocation.outputMode, 2), true
 }
 
 func knownFileDeliveryFormat(group string, rest []string, format output.Format) output.Format {
@@ -79,6 +115,25 @@ func emitsStructuredEnvelope(group string, rest []string) bool {
 }
 
 func writeRunError(ctx *Context, stdout, stderr io.Writer, group string, rest []string, err error, kind string, hint string, outputMode string, code int) int {
+	if defaultAgentErrorProtocol(group, rest) {
+		env := buildAPIErrorEnvelope(ctx, group, err, outputMode)
+		failure := env["error"].(map[string]any)
+		// Keep established typed/upstream classifications; the caller supplies
+		// the category for early errors that have no recognized classification.
+		if failure["kind"] != "unknown" {
+			return writeStructuredError(stdout, stderr, err, ctx.RequestID, ctx.StatusCode, group, env)
+		}
+		if kind != "" {
+			failure["kind"] = kind
+		}
+		if hint != "" {
+			failure["hint"] = hint
+		}
+		if writeErr := output.Write(stdout, env, output.FormatJSON); writeErr != nil {
+			return writeBrokenStdout(stderr, writeErr, env)
+		}
+		return code
+	}
 	if emitsStructuredEnvelope(group, rest) {
 		return writeStructuredError(stdout, stderr, err, "", 0, group, buildAPIErrorEnvelope(ctx, group, err, outputMode))
 	}
@@ -87,14 +142,13 @@ func writeRunError(ctx *Context, stdout, stderr io.Writer, group string, rest []
 }
 
 func writeFilterApplicationError(ctx *Context, stdout, stderr io.Writer, group string, rest []string, target any, outputMode string, err error) int {
-	if emitsStructuredEnvelope(group, rest) || hasStructuredEnvelopeOutput(target) {
+	if emitsStructuredEnvelope(group, rest) || defaultAgentErrorProtocol(group, rest) || hasStructuredEnvelopeOutput(target) {
 		if strings.TrimSpace(ctx.TraceDir) != "" {
 			_ = ctx.initTrace()
 		}
-		errorEnv := buildAPIErrorEnvelope(ctx, group, err, outputMode)
+		errorEnv := buildAPIErrorEnvelope(ctx, group, outputFailure(ctx, err, "projection", 3), outputMode)
 		if err2 := output.Write(stdout, errorEnv, output.FormatJSON); err2 != nil {
-			writeCLIError(stderr, err2, ctx.RequestID, ctx.StatusCode, "decode", "output write failed")
-			return 3
+			return writeBrokenStdout(stderr, err2, errorEnv)
 		}
 		return 3
 	}
@@ -272,9 +326,9 @@ func usageText() string {
 	var b strings.Builder
 	b.WriteString("Usage:\n")
 	if currentEdition() == cliEditionVolclog {
-		b.WriteString("  volclog [--profile <name>] [--region <region>] [--endpoint <url>] [--output json|jsonl] [--output-mode stdout|file] [--output-dir <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact <enabled>] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
+		b.WriteString("  volclog [--profile <name>] [--region <region>] [--endpoint <url>] [--output json|jsonl] [--output-mode stdout|file] [--output-dir <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact <on>] [--secrets-file <path>] [--timeout <duration>] [--non-interactive] [--allow-write] [--dry-run] <group> <command> [args]\n\n")
 	} else {
-		b.WriteString("  volclog [--profile <name>] [--region <region>] [--endpoint <url>] [--output json|jsonl|table] [--output-mode stdout|file] [--output-dir <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact <enabled>] [--secrets-file <path>] [--dry-run] <group> <command> [args]\n\n")
+		b.WriteString("  volclog [--profile <name>] [--region <region>] [--endpoint <url>] [--output json|jsonl|table] [--output-mode stdout|file] [--output-dir <path>] [--jmes-filter <expr>] [--trace-dir <path>] [--trace-redact <on>] [--secrets-file <path>] [--timeout <duration>] [--non-interactive] [--allow-write] [--dry-run] <group> <command> [args]\n\n")
 	}
 	b.WriteString("主入口（Agent / 自动化优先）:\n")
 	if currentEdition() == cliEditionVolclog {
@@ -282,7 +336,7 @@ func usageText() string {
 		b.WriteString("  用 workflow 执行 CLI 提供的高层编排能力；只有已明确 method/path 时才使用 raw。\n")
 		b.WriteString("  tool/workflow 走 JSON input/context；raw 走 method/path 与 transport flags。\n")
 		b.WriteString("  大结果优先使用 --output-mode file --output-dir <writable-dir>；--jmes-filter 命中 null 仍成功，缺字段或数组越界会报 filter matched no value。\n")
-		b.WriteString("  filter matched no value / invalid --jmes-filter 属于 decode，返回 exit 3。\n\n")
+		b.WriteString("  invalid --jmes-filter 属于 decode；执行成功后 filter matched no value 属于 output_failed，均返回 exit 3。\n\n")
 	} else {
 		b.WriteString("  用 tool 发现能力并查看契约；需要结构化执行时使用 tool exec。\n")
 		b.WriteString("  已明确 method/path 的原始 transport 调用使用 raw。\n")
@@ -290,8 +344,13 @@ func usageText() string {
 		b.WriteString("  大输出优先使用 --output-mode file --output-dir <writable-dir>。\n")
 		b.WriteString("  --jmes-filter 作用于完整 envelope；筛选结果字段时写 data.Total，筛选交付语义时写 summary.deliveryMode。\n")
 		b.WriteString("  命中存在但值为 null 的字段会输出 null；缺字段或数组越界会报 filter matched no value。\n")
-		b.WriteString("  filter matched no value / invalid --jmes-filter 属于 decode，返回 exit 3。\n")
+		b.WriteString("  invalid --jmes-filter 属于 decode；执行成功后 filter matched no value 属于 output_failed，均返回 exit 3。\n")
 		b.WriteString("  zsh/bash 下建议写成 --jmes-filter \"keys(@)\"；fish/PowerShell 下优先用单引号。\n\n")
+	}
+	if currentEdition() == cliEditionVolclog {
+		b.WriteString("  --jmes-filter 可与 --output-mode file 组合；筛选后的值以 JSON 写入文件，stdout 返回含 artifacts 路径的 JSON 交付信封。\n\n")
+	} else {
+		b.WriteString("  --jmes-filter 可与 --output-mode file 组合；筛选后的值以 JSON 写入文件，stdout 仅输出文件通知。\n\n")
 	}
 	for _, group := range cliGroups() {
 		if !group.Primary {

@@ -10,6 +10,7 @@ import (
 	tlssdk "github.com/volcengine/volc-sdk-golang/service/tls"
 	tlspb "github.com/volcengine/volc-sdk-golang/service/tls/pb"
 
+	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
 	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
@@ -32,25 +33,28 @@ type logIngestArgs struct {
 func logIngest(ctx *Context, args []string) (any, error) {
 	cfg, err := parseLogIngestArgs(args)
 	if err != nil {
-		return nil, err
+		return nil, validationFailure(err, "InvalidIngestInput")
 	}
-	body, err := util.ReadMaybeFile(cfg.Input)
+	body, err := ctx.readMaybeFile(cfg.Input)
 	if err != nil {
 		return nil, err
 	}
 	defaultTime := time.Now().UnixMilli()
 	logs, err := buildIngestLogs(cfg, body, defaultTime)
 	if err != nil {
-		return nil, err
+		return nil, validationFailure(err, "InvalidIngestInput")
 	}
+	totalBatches := len(logs) / cfg.BatchMaxCount
+	if len(logs)%cfg.BatchMaxCount != 0 {
+		totalBatches++
+	}
+	progress := newIngestProgress(len(logs), totalBatches)
+	ctx.Progress = progress
 	if len(logs) == 0 {
-		return map[string]any{
-			"topicId":      cfg.TopicID,
-			"inputFormat":  cfg.InputFormat,
-			"compressType": ingestCompressionSummary(cfg.CompressType),
-			"logs":         0,
-			"batches":      0,
-		}, nil
+		ctx.RequestID = ""
+		ctx.StatusCode = 0
+		ctx.RemoteOutcome = execution.OutcomeNotSent
+		return ingestResult(cfg, progress, 0, 0), nil
 	}
 
 	header := map[string]string{}
@@ -58,11 +62,15 @@ func logIngest(ctx *Context, args []string) (any, error) {
 	maybeSetHeader(header, "x-tls-hashkey", cfg.HashKey)
 
 	batches := 0
-	for start := 0; start < len(logs); start += cfg.BatchMaxCount {
-		end := start + cfg.BatchMaxCount
-		if end > len(logs) {
-			end = len(logs)
+	for start := 0; start < len(logs); {
+		end := len(logs)
+		if len(logs)-start > cfg.BatchMaxCount {
+			end = start + cfg.BatchMaxCount
 		}
+		progress["currentBatch"] = batches + 1
+		progress["currentBatchStartOffset"] = start
+		progress["currentBatchEndOffset"] = end
+		progress["currentBatchOutcome"] = execution.OutcomeNotSent
 		list := &tlspb.LogGroupList{
 			LogGroups: []*tlspb.LogGroup{
 				{
@@ -75,21 +83,31 @@ func logIngest(ctx *Context, args []string) (any, error) {
 		}
 		payload, err := util.MustJSON(list)
 		if err != nil {
-			return nil, err
+			ctx.RequestID = ""
+			ctx.StatusCode = 0
+			ctx.RemoteOutcome = execution.OutcomeNotSent
+			return ingestFailed(ctx, cfg, progress, err)
 		}
 		if _, err := doPutLogs(ctx, cfg.TopicID, requestFormatJSON, cloneStringMap(header), payload); err != nil {
-			return nil, err
+			outcome := execution.ErrorOutcome(err, ctx.RemoteOutcome)
+			if outcome == "" {
+				outcome = execution.OutcomeUnknown
+			}
+			progress["currentBatchOutcome"] = outcome
+			return ingestFailed(ctx, cfg, progress, err)
 		}
 		batches++
+		if !ctx.DryRun {
+			progress["confirmedBatches"] = batches
+			progress["confirmedLogs"] = end
+			progress["confirmedLogOffset"] = end
+			progress["currentBatchOutcome"] = execution.OutcomeSuccess
+			progress["lastConfirmedRequestId"] = ctx.RequestID
+		}
+		start = end
 	}
 
-	return map[string]any{
-		"topicId":      cfg.TopicID,
-		"inputFormat":  cfg.InputFormat,
-		"compressType": ingestCompressionSummary(cfg.CompressType),
-		"logs":         len(logs),
-		"batches":      batches,
-	}, nil
+	return ingestResult(cfg, progress, len(logs), batches), nil
 }
 
 func parseLogIngestArgs(args []string) (logIngestArgs, error) {
@@ -353,19 +371,27 @@ func parseIngestTimeValue(raw any, timeFormat string) (int64, error) {
 	}
 	switch normalizeIngestTimeFormat(timeFormat) {
 	case "auto":
-		return util.ParseUnixMillis(value)
+		v, err := util.ParseUnixMillis(value)
+		if err != nil {
+			return 0, errors.New("invalid ingest time value")
+		}
+		return v, nil
 	case "unix_ms":
-		return parseInt64String(value)
+		v, err := parseInt64String(value)
+		if err != nil {
+			return 0, errors.New("invalid ingest time value")
+		}
+		return v, nil
 	case "unix":
 		v, err := parseInt64String(value)
 		if err != nil {
-			return 0, err
+			return 0, errors.New("invalid ingest time value")
 		}
 		return v * 1000, nil
 	case "rfc3339":
 		t, err := time.Parse(time.RFC3339, value)
 		if err != nil {
-			return 0, err
+			return 0, errors.New("invalid ingest time value")
 		}
 		return t.UnixMilli(), nil
 	default:

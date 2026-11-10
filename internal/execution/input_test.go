@@ -43,9 +43,6 @@ func TestNormalizeInputSupportsFlatAndSectionedForms(t *testing.T) {
 		"path":  map[string]any{"ProjectId": "project-2"},
 		"query": map[string]any{"Limit": float64(10), "UnknownQuery": "kept"},
 		"body":  map[string]any{"Name": "sectioned", "UnknownBody": true},
-		// Sectioned input is authoritative in the legacy behavior. Extra
-		// top-level fields are ignored instead of being re-routed.
-		"ignored": "legacy-compatible",
 	}
 	got, err = NormalizeInput(op, sectioned)
 	if err != nil {
@@ -65,6 +62,10 @@ func TestNormalizeInputRejectsReservedUnknownAndAmbiguousFlatFields(t *testing.T
 		!strings.Contains(err.Error(), "reserved context/runtime fields: profile") {
 		t.Fatalf("reserved field error = %v", err)
 	}
+	for _, section := range inputSections {
+		schema := op.InputSchema[section].(map[string]any)
+		schema["additionalProperties"] = false
+	}
 	if _, err := NormalizeInput(op, map[string]any{"Unknown": "value"}); err == nil ||
 		err.Error() != "flat input contains unknown fields: Unknown" {
 		t.Fatalf("unknown field error = %v", err)
@@ -78,17 +79,14 @@ func TestNormalizeInputRejectsReservedUnknownAndAmbiguousFlatFields(t *testing.T
 	}
 }
 
-func TestNormalizeInputKeepsLegacyLooseBodyRuleForAdditionalPropertiesFalse(t *testing.T) {
+func TestNormalizeInputRejectsClosedBodyUnknownEvenWhenOnlyBodyDeclared(t *testing.T) {
 	op := requestTestOperation()
 	body := op.InputSchema["body"].(map[string]any)
 	body["additionalProperties"] = false
-
-	got, err := NormalizeInput(op, map[string]any{"Loose": "legacy"})
-	if err != nil {
-		t.Fatalf("NormalizeInput: %v", err)
-	}
-	if got.Body.JSON.(map[string]any)["Loose"] != "legacy" {
-		t.Fatalf("loose body field missing: %#v", got.Body.JSON)
+	op.InputSchema = contract.JSONSchema{"body": body}
+	if _, err := NormalizeInput(op, map[string]any{"Loose": "secret-canary"}); err == nil ||
+		!strings.Contains(err.Error(), "unknown fields: Loose") || strings.Contains(err.Error(), "secret-canary") {
+		t.Fatalf("closed body error = %v", err)
 	}
 }
 
@@ -105,7 +103,7 @@ func TestNormalizeInputWithoutSchemaKeepsFlatObjectAsBody(t *testing.T) {
 	}
 }
 
-func TestValidateInputAggregatesRequiredFieldsAndKeepsLegacyRequiredOnlyPolicy(t *testing.T) {
+func TestValidateInputAggregatesRequiredFieldsAndChecksTypes(t *testing.T) {
 	op := requestTestOperation()
 	body := op.InputSchema["body"].(map[string]any)
 	body["required"] = []any{"Name", "Nested"}
@@ -123,8 +121,6 @@ func TestValidateInputAggregatesRequiredFieldsAndKeepsLegacyRequiredOnlyPolicy(t
 		t.Fatalf("required error = %v", err)
 	}
 
-	// Legacy tool exec validates presence only. Types, enum values and ranges
-	// remain service-side validation until a separately reviewed behavior change.
 	err = ValidateInput(op, Input{
 		Path:  map[string]any{"ProjectId": "project-1"},
 		Query: map[string]any{"Limit": "not-a-number"},
@@ -133,26 +129,26 @@ func TestValidateInputAggregatesRequiredFieldsAndKeepsLegacyRequiredOnlyPolicy(t
 			"Nested": map[string]any{"Value": float64(1.5)},
 		}, Format: BodyFormatJSON},
 	})
-	if err != nil {
-		t.Fatalf("required-only validation changed: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "input.query.Limit") {
+		t.Fatalf("type validation error = %v", err)
 	}
 }
 
-func TestSectionedNonObjectAndNilRequiredValueAreTreatedAsMissing(t *testing.T) {
+func TestSectionedNonObjectAndNilRequiredValueAreRejected(t *testing.T) {
 	op := requestTestOperation()
+	if _, err := NormalizeInput(op, map[string]any{"path": "secret-canary"}); err == nil ||
+		!strings.Contains(err.Error(), "path") || strings.Contains(err.Error(), "secret-canary") {
+		t.Fatalf("non-object path error = %v", err)
+	}
 	got, err := NormalizeInput(op, map[string]any{
-		"path": "not-an-object",
-		"body": map[string]any{"Name": nil},
+		"path": map[string]any{"ProjectId": nil},
 	})
 	if err != nil {
 		t.Fatalf("NormalizeInput: %v", err)
 	}
-	if got.Path != nil {
-		t.Fatalf("non-object path = %#v, want nil/empty", got.Path)
-	}
-	err = ValidateInput(op, got)
-	if err == nil || err.Error() != "missing required field: input.path.ProjectId" {
-		t.Fatalf("required error = %v", err)
+	if err := ValidateInput(op, got); err == nil || !strings.Contains(err.Error(), "input.path.ProjectId") ||
+		strings.Contains(err.Error(), "missing required") {
+		t.Fatalf("null required field error = %v", err)
 	}
 }
 

@@ -143,8 +143,12 @@ func newConsoleLoginError(deviceCode bool, cause error) error {
 	if deviceCode {
 		flow = "device-code"
 	}
+	desc := "console login failed"
+	if diagnostic := console.DiagnoseError(cause); diagnostic.Message != "" {
+		desc += ": " + diagnostic.Message
+	}
 	return &safeCLIError{
-		desc:      "console login failed",
+		desc:      desc,
 		cause:     cause,
 		loginFlow: flow,
 	}
@@ -315,6 +319,10 @@ func runLoginWithFactory(ctx *Context, args []string, factory loginAdapterFactor
 		return nil, err
 	}
 	opts.Profile = profile
+	if ctx.NonInteractive {
+		opts.DeviceCode = true
+		opts.NoBrowser = true
+	}
 	if err := rejectFrozenOutputOptions(ctx); err != nil {
 		return nil, err
 	}
@@ -322,7 +330,7 @@ func runLoginWithFactory(ctx *Context, args []string, factory loginAdapterFactor
 	if err != nil {
 		return nil, err
 	}
-	result, err := adapter.runLogin(context.Background(), opts)
+	result, err := adapter.runLogin(ctx.ExecutionContext(), opts)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +364,7 @@ func runLogoutWithFactory(ctx *Context, args []string, factory loginAdapterFacto
 	if err != nil {
 		return nil, err
 	}
-	result, err := adapter.runLogout(context.Background(), resolved, all)
+	result, err := adapter.runLogout(ctx.ExecutionContext(), resolved, all)
 	if err != nil {
 		// On partial failure the helper returns the sessions cleared so far as
 		// an internal partial result for caller/test diagnostics. The standard
@@ -642,7 +650,7 @@ func newProductionLoginAdapter(ctx *Context) (*loginAdapter, error) {
 	svc := console.NewLoginService(&console.LoginServiceConfig{
 		Cache:        cache,
 		ProfileStore: productionConfigStore{},
-		Confirm:      newConfirmPrompt(os.Stdin, ctx.Stderr),
+		Confirm:      newInvocationConfirmPrompt(ctx.ExecutionContext(), ctx.NonInteractive, os.Stdin, ctx.Stderr),
 		Prompt:       ctx.Stderr,
 		Browser:      &browser.DefaultOpener{},
 	})

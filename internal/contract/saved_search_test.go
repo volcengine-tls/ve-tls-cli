@@ -17,33 +17,34 @@ func TestSavedSearchOperationsMatchWireAndExecutionContracts(t *testing.T) {
 	}
 
 	wants := map[OperationID]struct {
-		action   string
-		method   string
-		path     string
-		section  string
-		fields   []string
-		risk     string
-		recovery string
+		action         string
+		method         string
+		path           string
+		section        string
+		fields         []string
+		risk           string
+		recovery       string
+		recoverySource string
 	}{
 		"log.create-saved-search": {
 			action: "CreateSavedSearch", method: "POST", path: "/CreateSavedSearch",
 			section: "body", fields: []string{"TopicID", "DisplayName", "SearchQuery"},
-			risk: "high", recovery: "high-risk-retry",
+			risk: "high", recovery: "high-risk-retry", recoverySource: "unverified",
 		},
 		"log.delete-saved-search": {
 			action: "DeleteSavedSearch", method: "DELETE", path: "/DeleteSavedSearch",
 			section: "body", fields: []string{"SavedSearchID"},
-			risk: "high", recovery: "high-risk-retry",
+			risk: "high", recovery: "high-risk-retry", recoverySource: "unverified",
 		},
 		"log.describe-saved-search": {
 			action: "DescribeSavedSearch", method: "GET", path: "/DescribeSavedSearch",
 			section: "query", fields: []string{"SavedSearchID"},
-			risk: "low", recovery: "safe-retry",
+			risk: "low", recovery: "safe-retry", recoverySource: "reviewed-read-contract",
 		},
 		"log.describe-saved-searches": {
 			action: "DescribeSavedSearches", method: "GET", path: "/DescribeSavedSearches",
 			section: "query", fields: []string{"TopicId"},
-			risk: "low", recovery: "safe-retry",
+			risk: "low", recovery: "safe-retry", recoverySource: "reviewed-read-contract",
 		},
 	}
 
@@ -70,8 +71,8 @@ func TestSavedSearchOperationsMatchWireAndExecutionContracts(t *testing.T) {
 		if operation.Output.Policy != "full" || !operation.Output.IsEnvelopeOutput {
 			t.Fatalf("%s output=%+v, want full envelope", id, operation.Output)
 		}
-		if operation.Risk.Level != want.risk || operation.Risk.ErrorRecovery != want.recovery {
-			t.Fatalf("%s risk=%+v, want level=%q recovery=%q", id, operation.Risk, want.risk, want.recovery)
+		if operation.Risk.Level != want.risk || operation.Risk.ErrorRecovery != want.recovery || operation.Risk.RecoverySource != want.recoverySource {
+			t.Fatalf("%s risk=%+v, want level=%q recovery=%q source=%q", id, operation.Risk, want.risk, want.recovery, want.recoverySource)
 		}
 		if operation.Pagination != nil {
 			t.Fatalf("%s pagination=%+v, want nil: saved-search operations have no pagination", id, operation.Pagination)

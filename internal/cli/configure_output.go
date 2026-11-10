@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"sort"
 	"strings"
@@ -124,7 +123,7 @@ func buildProfileOutput(ctx *Context, name string, p config.Profile) map[string]
 			out["expires_at"] = ""
 			out["refresh_required"] = true
 			if reader, rerr := dynamicAuthStatusReader(mode, ctx.cfgPath, name, ctx.cfg, ctx.authFactory); rerr == nil && reader != nil {
-				if st, serr := reader.Status(context.Background(), name); serr == nil {
+				if st, serr := reader.Status(ctx.ExecutionContext(), name); serr == nil {
 					if st.Provider != "" {
 						out["provider"] = st.Provider
 					}

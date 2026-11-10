@@ -54,9 +54,7 @@ func TestOutputRuntimeForcedFileWritesFullEnvelope(t *testing.T) {
 		"--method", "GET",
 		"--path", "/DescribeProjects",
 	})
-	if want := "结果已写入文件。"; !strings.Contains(notice, want) {
-		t.Fatalf("expected forced-file notice %q, got %q", want, notice)
-	}
+	assertFileDeliveryNotice(t, notice, outFile, "file_forced")
 	fileEnv := outputRuntimeReadEnvelopeFile(t, outFile)
 
 	fileSummary := outputRuntimeSummary(t, fileEnv)
@@ -108,9 +106,7 @@ func TestOutputRuntimeAutoFileWritesFullEnvelope(t *testing.T) {
 		"--context", "file://" + ctxFile,
 		"--input", "file://" + reqFile,
 	})
-	if want := "结果过大，已写入文件。"; !strings.Contains(notice, want) {
-		t.Fatalf("expected auto-file notice %q, got %q", want, notice)
-	}
+	assertFileDeliveryNotice(t, notice, artifactPath, "file_auto")
 	fileEnv := outputRuntimeReadEnvelopeFile(t, artifactPath)
 	fileSummary := outputRuntimeSummary(t, fileEnv)
 	if got := fileSummary["deliveryMode"]; got != "file_auto" {
@@ -439,8 +435,8 @@ func TestWorkflowExecTopLevelJMESFilterMissUsesEnvelope(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected error object, got %#v", out["error"])
 	}
-	if got := errObj["kind"]; got != "decode" {
-		t.Fatalf("expected decode kind, got %#v", got)
+	if got := errObj["kind"]; got != "output_failed" {
+		t.Fatalf("expected output_failed kind, got %#v", got)
 	}
 	if !strings.Contains(asStringOrEmpty(errObj["message"]), "matched no value") {
 		t.Fatalf("unexpected error message: %#v", errObj["message"])
@@ -550,15 +546,14 @@ func TestOutputRuntimeFilterDisablesAutoFile(t *testing.T) {
 	}
 }
 
-func TestOutputRuntimeFilterRejectsForcedFile(t *testing.T) {
+func TestOutputRuntimeFilterWritesForcedFile(t *testing.T) {
 	t.Setenv("VOLCENGINE_ACCESS_KEY_ID", "ak")
 	t.Setenv("VOLCENGINE_ACCESS_KEY_SECRET", "sk")
 	t.Setenv("VOLCENGINE_REGION", "cn-beijing")
 	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{
+	notice, outFile := runOutputRuntimeNotice(t, []string{
 		"--dry-run",
 		"--output-mode", "file",
 		"--output-dir", t.TempDir(),
@@ -566,26 +561,18 @@ func TestOutputRuntimeFilterRejectsForcedFile(t *testing.T) {
 		"raw",
 		"--method", "GET",
 		"--path", "/DescribeProjects",
-	}, &stdout, &stderr)
-	if code == 0 {
-		t.Fatalf("expected forced file + filter rejection stdout=%q stderr=%q", stdout.String(), stderr.String())
+	})
+	assertFileDeliveryNotice(t, notice, outFile, "file_forced")
+	raw, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("read filtered file: %v", err)
 	}
-	if strings.TrimSpace(stderr.String()) != "" {
-		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	var delivery string
+	if err := json.Unmarshal(raw, &delivery); err != nil {
+		t.Fatalf("invalid filtered file json: %v content=%q", err, raw)
 	}
-	var out map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
-		t.Fatalf("invalid stdout json: %v stdout=%q", err, stdout.String())
-	}
-	errObj, ok := out["error"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected error object, got %#v", out["error"])
-	}
-	if got := errObj["kind"]; got != "incompatible_flags" {
-		t.Fatalf("expected incompatible_flags kind, got %#v", got)
-	}
-	if msg, _ := errObj["message"].(string); !strings.Contains(msg, "--jmes-filter") {
-		t.Fatalf("expected filter/file error, got %#v", errObj)
+	if delivery != "file_forced" {
+		t.Fatalf("deliveryMode=%q, want file_forced", delivery)
 	}
 }
 
@@ -660,16 +647,12 @@ func TestOutputRuntimeAutoFileStdoutNotice(t *testing.T) {
 		t.Fatalf("write request: %v", err)
 	}
 
-	notice, _ := runOutputRuntimeNotice(t, []string{
+	notice, path := runOutputRuntimeNotice(t, []string{
 		"tool", "exec", "log.search-logs",
 		"--context", "file://" + ctxFile,
 		"--input", "file://" + reqFile,
 	})
-	for _, want := range []string{"结果过大，已写入文件。", "文件: "} {
-		if !strings.Contains(notice, want) {
-			t.Fatalf("missing %q in notice %q", want, notice)
-		}
-	}
+	assertFileDeliveryNotice(t, notice, path, "file_auto")
 }
 
 func TestOutputRuntimeForcedFileStdoutNotice(t *testing.T) {
@@ -679,7 +662,7 @@ func TestOutputRuntimeForcedFileStdoutNotice(t *testing.T) {
 	t.Setenv("VOLCENGINE_ENDPOINT", "https://tls-cn-beijing.volces.com")
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 
-	notice, _ := runOutputRuntimeNotice(t, []string{
+	notice, path := runOutputRuntimeNotice(t, []string{
 		"--dry-run",
 		"--output-mode", "file",
 		"--output-dir", t.TempDir(),
@@ -687,11 +670,7 @@ func TestOutputRuntimeForcedFileStdoutNotice(t *testing.T) {
 		"--method", "GET",
 		"--path", "/DescribeProjects",
 	})
-	for _, want := range []string{"结果已写入文件。", "文件: "} {
-		if !strings.Contains(notice, want) {
-			t.Fatalf("missing %q in notice %q", want, notice)
-		}
-	}
+	assertFileDeliveryNotice(t, notice, path, "file_forced")
 }
 
 func TestOutputRuntimeNoPreviewEnvelopeWhenSpilled(t *testing.T) {
@@ -729,13 +708,22 @@ func TestOutputRuntimeNoPreviewEnvelopeWhenSpilled(t *testing.T) {
 		t.Fatalf("write request: %v", err)
 	}
 
-	notice, _ := runOutputRuntimeNotice(t, []string{
+	notice, path := runOutputRuntimeNotice(t, []string{
 		"tool", "exec", "log.search-logs",
 		"--context", "file://" + ctxFile,
 		"--input", "file://" + reqFile,
 	})
-	if strings.Contains(notice, `"status"`) || strings.Contains(notice, `"summary"`) {
-		t.Fatalf("expected fixed text notice instead of preview envelope, got %q", notice)
+	assertFileDeliveryNotice(t, notice, path, "file_auto")
+	if currentEdition() == cliEditionVolclogHuman {
+		if strings.Contains(notice, `"status"`) || strings.Contains(notice, `"summary"`) {
+			t.Fatalf("expected fixed text notice instead of preview envelope, got %q", notice)
+		}
+	} else {
+		for _, payloadField := range []string{`"TopicId"`, `"Query"`, `"StartTime"`, `"EndTime"`} {
+			if strings.Contains(notice, payloadField) {
+				t.Fatalf("file delivery contains request payload field %q: %q", payloadField, notice)
+			}
+		}
 	}
 }
 
@@ -769,15 +757,7 @@ func runOutputRuntimeNotice(t *testing.T, args []string) (string, string) {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
 	notice := stdout.String()
-	const prefix = "文件: "
-	idx := strings.LastIndex(notice, prefix)
-	if idx < 0 {
-		t.Fatalf("missing file notice in stdout: %q", notice)
-	}
-	path := strings.TrimSpace(notice[idx+len(prefix):])
-	if path == "" {
-		t.Fatalf("missing file path in notice: %q", notice)
-	}
+	path := parseNoticePath(t, notice)
 	return notice, path
 }
 

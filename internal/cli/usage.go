@@ -64,9 +64,9 @@ Configure Set Flags:
 
 Examples:
   tlsctl configure set --profile default --ak <ak> --sk <sk> --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
-  tlsctl configure set --profile tenant-a-sg --ak <ak> --sk <sk> --region ap-southeast-1 --endpoint https://tls-ap-singapore-1.volces.com
+  tlsctl configure set --profile tenant-a-sg --ak <ak> --sk <sk> --region ap-southeast-1 --endpoint https://tls-ap-southeast-1.volces.com
   tlsctl configure set --profile abc-bj --cred-ref ma-abc-root --ak <ak> --sk <sk> --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
-  tlsctl configure set --profile abc-sg --cred-ref ma-abc-root --region ap-southeast-1 --endpoint https://tls-ap-singapore-1.volces.com
+  tlsctl configure set --profile abc-sg --cred-ref ma-abc-root --region ap-southeast-1 --endpoint https://tls-ap-southeast-1.volces.com
   tlsctl configure set --profile abc-sg --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure set --profile ram-1 --mode ramrolearn --ak <ak> --sk <sk> --account-id 2100000000 --role-name TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure set --profile oidc-1 --mode oidc --oidc-token-file /var/run/secrets/token --role-trn trn:iam::2100000000:role/TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com

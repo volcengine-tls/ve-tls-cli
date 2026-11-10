@@ -242,6 +242,7 @@ func TestRetryHonorsRetryAfterAndInjectedSleeper(t *testing.T) {
 			HTTPClient:  newClient(rt),
 			MaxAttempts: 3,
 			Sleeper:     sleeper.sleep,
+			Jitter:      func() time.Duration { return 0 },
 		}
 
 		factory := func(ctx context.Context) (*http.Request, error) {
@@ -1254,6 +1255,7 @@ func TestRetryAfterNegativeUsesDefaultBackoffNotCap(t *testing.T) {
 				HTTPClient:    newClient(rt),
 				MaxAttempts:   2,
 				Sleeper:       sleeper.sleep,
+				Jitter:        func() time.Duration { return 0 },
 				MaxRetryAfter: 5 * time.Second,
 			}
 			factory := func(ctx context.Context) (*http.Request, error) {

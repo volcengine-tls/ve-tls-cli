@@ -27,5 +27,9 @@ func RebuildLegacyToolV1(catalog Catalog, operation Operation) (LegacyToolV1, er
 		SupportsDryRun:   operation.Runtime.SupportsDryRun,
 		SupportsAll:      operation.Pagination != nil,
 		IsEnvelopeOutput: operation.Output.IsEnvelopeOutput,
+		RecoverySource:   operation.Risk.RecoverySource,
+		RecoveryNotes:    operation.Risk.RecoveryNotes,
+		DocURL:           operation.Docs.URL,
+		DocURLSource:     operation.Docs.URLSource,
 	}, nil
 }

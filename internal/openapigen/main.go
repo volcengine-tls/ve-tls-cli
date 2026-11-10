@@ -99,6 +99,7 @@ func main() {
 	mergeInternalOnly := flag.Bool("merge-internal-operations-only", false, "merge internal operation overrides into the checked-in catalog without external source inputs")
 	supplementalOperationsPath := flag.String("supplemental-operation-overrides", "contracts/overrides/supplemental_operations.json", "path to supplemental public or internal operation overrides")
 	mergeSupplementalOnly := flag.Bool("merge-supplemental-operations-only", false, "merge supplemental operation overrides into the checked-in catalog without external source inputs")
+	refreshPoliciesOnly := flag.Bool("refresh-contract-policies-only", false, "refresh recovery policies and input sections from the checked-in catalog and lock")
 	lockRoot := flag.String("lock-root", ".", "root used to make generation lock input paths relative")
 	groupKeyMapping := flag.String("group-key-mapping", "contracts/agentic-stage1/group_key_mapping.yaml", "path to group key mapping yaml")
 	swaggerTagMapping := flag.String("swagger-tag-mapping", "repos/日志服务/_swagger_tag_mapping.yaml", "path to swagger tag title mapping yaml")
@@ -107,11 +108,28 @@ func main() {
 	toolRecoveryOverridesPath := flag.String("tool-recovery-overrides", "contracts/overrides/recovery.yaml", "path to tool error recovery override yaml")
 	toolOutputPolicyOverridesPath := flag.String("tool-output-policy-overrides", "contracts/overrides/output_policy.yaml", "path to tool output policy override yaml")
 	toolUsageConstraintsPath := flag.String("tool-usage-constraints-overrides", "contracts/overrides/usage_constraints.yaml", "path to tool usage constraints override yaml")
+	toolDocumentationPath := flag.String("tool-documentation-overrides", "contracts/overrides/documentation.json", "path to official documentation URL overrides")
 	contractVersion := flag.String("contract-version", "v1", "operation contract version")
 	flag.Parse()
 
-	if *mergeInternalOnly && *mergeSupplementalOnly {
-		fatal(errors.New("--merge-internal-operations-only and --merge-supplemental-operations-only cannot be used together"))
+	modeCount := 0
+	for _, enabled := range []bool{*mergeInternalOnly, *mergeSupplementalOnly, *refreshPoliciesOnly} {
+		if enabled {
+			modeCount++
+		}
+	}
+	if modeCount > 1 || (*refreshPoliciesOnly && strings.TrimSpace(*spec) != "") {
+		fatal(errors.New("source generation and merge-only/refresh-only modes are mutually exclusive"))
+	}
+	if *refreshPoliciesOnly {
+		recoveryPath, usagePath, documentationPath, err := policyInputPaths(*lockRoot, []string{*toolRecoveryOverridesPath, *toolUsageConstraintsPath, *toolDocumentationPath})
+		if err != nil {
+			fatal(err)
+		}
+		if err := refreshContractPoliciesOnly(*outOperationCatalog, *outOperationCatalogLock, *lockRoot, recoveryPath, usagePath, documentationPath); err != nil {
+			fatal(err)
+		}
+		return
 	}
 	if *mergeInternalOnly {
 		if err := mergeInternalOperationsIntoCheckedInCatalog(
@@ -119,6 +137,9 @@ func main() {
 			*outOperationCatalogLock,
 			*internalOperationsPath,
 			*lockRoot,
+			*toolRecoveryOverridesPath,
+			*toolUsageConstraintsPath,
+			*toolDocumentationPath,
 		); err != nil {
 			fatal(err)
 		}
@@ -130,6 +151,9 @@ func main() {
 			*outOperationCatalogLock,
 			*supplementalOperationsPath,
 			*lockRoot,
+			*toolRecoveryOverridesPath,
+			*toolUsageConstraintsPath,
+			*toolDocumentationPath,
 		); err != nil {
 			fatal(err)
 		}
@@ -179,20 +203,39 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	policies, err := loadRecoveryPolicies(*toolRecoveryOverridesPath)
+	if err != nil {
+		fatal(err)
+	}
+	usage, err := loadUsageConstraints(*toolUsageConstraintsPath)
+	if err != nil {
+		fatal(err)
+	}
+	docs, err := loadDocumentationOverrides(*toolDocumentationPath)
+	if err != nil {
+		fatal(err)
+	}
+	operationCatalog, err = applyContractPolicies(operationCatalog, policies, usage, docs, false)
+	if err != nil {
+		fatal(err)
+	}
 
 	lock, err := buildOperationCatalogLock(*lockRoot, "source", operationCatalog, map[string]string{
 		"api_doc_root":                      *apiDocRoot,
 		"contract_catalog":                  "internal/contract/catalog.go",
 		"contract_digest":                   "internal/contract/digest.go",
+		"contract_legacy":                   "internal/contract/legacy.go",
 		"contract_schema":                   "internal/contract/schema.go",
 		"contract_types":                    "internal/contract/types.go",
 		"generator_catalog_v2":              "internal/openapigen/catalog_v2.go",
+		"generator_contract_policies":       "internal/openapigen/contract_policies.go",
 		"generator_internal_operations":     "internal/openapigen/internal_operations.go",
 		"generator_supplemental_operations": "internal/openapigen/supplemental_operations.go",
 		"generator_main":                    "internal/openapigen/main.go",
 		"generator_source_operations":       "internal/openapigen/source_operations.go",
 		"group_key_mapping":                 *groupKeyMapping,
 		"override_internal_operations":      *internalOperationsPath,
+		"override_documentation":            *toolDocumentationPath,
 		"override_supplemental_operations":  *supplementalOperationsPath,
 		"override_output_policy":            *toolOutputPolicyOverridesPath,
 		"override_recovery":                 *toolRecoveryOverridesPath,
@@ -263,7 +306,7 @@ func buildToolCatalogOverrides(riskPath, recoveryPath, outputPolicyPath, usageCo
 	if err != nil {
 		return toolCatalogOverrides{}, err
 	}
-	usage, err := loadToolCatalogOverrideMap(usageConstraintsPath)
+	usage, err := loadUsageConstraints(usageConstraintsPath)
 	if err != nil {
 		return toolCatalogOverrides{}, err
 	}
@@ -1003,21 +1046,22 @@ func defaultToolContextSchema() map[string]any {
 	execSchema := defaultToolExecutionSchema()
 	execProps, _ := execSchema["properties"].(map[string]any)
 	return map[string]any{
-		"type": "object",
+		"type":                 "object",
+		"additionalProperties": false,
 		"properties": map[string]any{
 			"region": map[string]any{
 				"type":           "string",
 				"description":    "Override the TLS region for this tool execution.",
 				"when_to_use":    "Set this when the target resource is not in your configured default region.",
 				"default":        "Use the configured default region or environment when omitted.",
-				"runtime_effect": "Writes ctx.defaults.Region before the request is built.",
+				"runtime_effect": "Sets the runtime region ahead of profile and environment defaults; a different global --region is a conflict.",
 			},
 			"profile": map[string]any{
 				"type":           "string",
 				"description":    "Select the named local profile to use for this tool execution.",
 				"when_to_use":    "Set this when you want tool exec to read credentials and defaults from a specific saved profile.",
 				"default":        "Use the active CLI profile when omitted.",
-				"runtime_effect": "Loads credentials and defaults from the selected profile. If global --profile is also set, conflicting selectors fail fast instead of silently overriding each other.",
+				"runtime_effect": "An explicit profile ignores credential and default target environment values. A different global --profile is a conflict.",
 			},
 			"secrets_file": map[string]any{
 				"type":           "string",
@@ -1031,13 +1075,13 @@ func defaultToolContextSchema() map[string]any {
 				"description":    "Override the TLS API endpoint for this tool execution.",
 				"when_to_use":    "Set this when you need to call a custom endpoint, private endpoint, or a non-default region endpoint.",
 				"default":        "Use the configured endpoint for the selected region/profile.",
-				"runtime_effect": "Writes ctx.defaults.Endpoint before the request is built.",
+				"runtime_effect": "Sets the runtime endpoint ahead of profile and environment defaults; a different global --endpoint is a conflict.",
 			},
 			"trace": map[string]any{
 				"description":    "Control request/response tracing for tool execution.",
 				"when_to_use":    "Set this when you need transport traces for debugging, auditing, or acceptance verification.",
 				"default":        false,
-				"runtime_effect": "Enables trace capture, chooses the trace directory, and normalizes legacy strict/default redact inputs to the current on/off setting.",
+				"runtime_effect": "Selects the trace directory; false or enabled:false disables global trace. Redaction stays on; on/true/1/yes/enabled/strict/default are accepted, off and other values are rejected.",
 				"oneOf": []any{
 					map[string]any{
 						"type":        "boolean",
@@ -1048,12 +1092,16 @@ func defaultToolContextSchema() map[string]any {
 						"description": "String form sets the trace directory directly.",
 					},
 					map[string]any{
-						"type":        "object",
-						"description": "Object form enables tracing and lets you control directory and redaction behavior.",
+						"type":                 "object",
+						"description":          "Object form enables tracing and lets you control directory and redaction behavior.",
+						"additionalProperties": false,
 						"properties": map[string]any{
 							"enabled": map[string]any{"type": "boolean"},
 							"dir":     map[string]any{"type": "string"},
-							"redact":  map[string]any{"type": "string"},
+							"redact": map[string]any{
+								"type": "string",
+								"enum": defaultToolTraceRedactValues(),
+							},
 						},
 					},
 				},
@@ -1066,22 +1114,41 @@ func defaultToolContextSchema() map[string]any {
 				"runtime_effect": "Compared advisory-only during tool exec; mismatch adds a warning but does not block execution.",
 			},
 			"execution": map[string]any{
-				"type":           "object",
-				"description":    "Nested execution controls for tool exec.",
-				"when_to_use":    "Set this when you need dry-run, projection, artifact output, or page.all behavior.",
-				"default":        map[string]any{},
-				"runtime_effect": "The tool runtime reads this nested object from context.execution; do not pass execution as a separate file.",
-				"properties":     execProps,
+				"type":                 "object",
+				"description":          "Nested execution controls for tool exec.",
+				"when_to_use":          "Set this when you need dry-run, projection, artifact output, or page.all behavior.",
+				"default":              map[string]any{},
+				"runtime_effect":       "The tool runtime reads this nested object from context.execution; do not pass execution as a separate file.",
+				"properties":           execProps,
+				"additionalProperties": false,
 			},
 		},
 	}
 }
 
+func defaultToolTraceRedactValues() []any {
+	return []any{"on", "true", "1", "yes", "enabled", "strict", "default"}
+}
+
 func defaultToolExecutionSchema() map[string]any {
 	return map[string]any{
-		"type":        "object",
-		"description": "Execution controls that must be nested under context.execution in the --context JSON file.",
+		"type":                 "object",
+		"description":          "Execution controls that must be nested under context.execution in the --context JSON file.",
+		"additionalProperties": false,
 		"properties": map[string]any{
+			"non_interactive": map[string]any{
+				"type":        "boolean",
+				"description": "Disable prompts; false cannot cancel automatic non-TTY mode.",
+			},
+			"allow_write": map[string]any{
+				"type":        "boolean",
+				"description": "CLI write gate, not IAM; reviewed reads including POST log.search are exempt. Omission follows the global flag or defaults false; explicit false conflicts with global true.",
+			},
+			"timeout": map[string]any{
+				"type":        "string",
+				"minLength":   1,
+				"description": "Positive Go duration for the whole invocation from start, e.g. 30s; no overall default. Separate from profile HTTP timeout; equal global values may repeat.",
+			},
 			"projection": map[string]any{
 				"description": "Filter the raw tool result before the CLI envelope is built.",
 				"oneOf": []any{
@@ -1091,21 +1158,20 @@ func defaultToolExecutionSchema() map[string]any {
 					},
 					map[string]any{
 						"type":        "array",
-						"description": "Array form; the runtime uses the first non-empty expression.",
-						"items":       map[string]any{"type": "string"},
+						"description": "Array form; the runtime validates every item recursively and uses the first non-empty expression.",
+						"items": map[string]any{"oneOf": []any{
+							map[string]any{"type": "string"},
+							defaultToolProjectionObjectSchema(),
+							map[string]any{"type": "array", "description": "Legacy nested arrays use the same recursive projection validation."},
+						}},
 					},
-					map[string]any{
-						"type":        "object",
-						"description": "Object form with an explicit jmes field.",
-						"properties": map[string]any{
-							"jmes": map[string]any{"type": "string"},
-						},
-					},
+					defaultToolProjectionObjectSchema(),
 				},
 			},
 			"page": map[string]any{
-				"type":        "object",
-				"description": "Pagination execution controls.",
+				"type":                 "object",
+				"description":          "Pagination execution controls. If page_all is also set, both values must agree.",
+				"additionalProperties": false,
 				"properties": map[string]any{
 					"all": map[string]any{
 						"type":        "boolean",
@@ -1115,10 +1181,10 @@ func defaultToolExecutionSchema() map[string]any {
 			},
 			"page_all": map[string]any{
 				"type":        "boolean",
-				"description": "Compatibility alias for page.all. Prefer the nested page.all form in new context files.",
+				"description": "Compatibility alias for page.all; both values must agree when specified together. Prefer the nested form in new context files.",
 			},
 			"artifact": map[string]any{
-				"description": "Write tool output to a file-oriented artifact flow instead of stdout-only output.",
+				"description": "Write tool output to a file-oriented artifact flow; output_mode and output.mode must specify the same output intent when present.",
 				"oneOf": []any{
 					map[string]any{
 						"type":        "boolean",
@@ -1126,15 +1192,28 @@ func defaultToolExecutionSchema() map[string]any {
 					},
 					map[string]any{
 						"type":        "string",
-						"description": "String form enables artifact mode and uses the string as the output path.",
+						"description": "A non-empty string enables artifact mode and specifies the output path; an empty string is unspecified.",
 					},
 					map[string]any{
-						"type":        "object",
-						"description": "Object form enables artifact mode with an explicit path field.",
+						"type":                 "object",
+						"description":          "Object form enables artifact mode with optional path and dir fields; non-empty aliases must agree.",
+						"additionalProperties": false,
 						"properties": map[string]any{
 							"path": map[string]any{"type": "string"},
+							"dir":  map[string]any{"type": "string"},
 						},
 					},
+				},
+			},
+			"output_mode": defaultToolOutputModeSchema(),
+			"output": map[string]any{
+				"type":                 "object",
+				"description":          "Output aliases; non-empty mode, path, and dir must agree with corresponding artifact or output_mode settings.",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"mode": defaultToolOutputModeSchema(),
+					"path": map[string]any{"type": "string"},
+					"dir":  map[string]any{"type": "string"},
 				},
 			},
 			"dry_run": map[string]any{
@@ -1142,6 +1221,22 @@ func defaultToolExecutionSchema() map[string]any {
 				"description": "Validate and render the request without issuing a mutating remote call.",
 			},
 		},
+	}
+}
+
+func defaultToolProjectionObjectSchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"description":          "Object form with an explicit jmes field.",
+		"additionalProperties": false,
+		"properties":           map[string]any{"jmes": map[string]any{"type": "string"}},
+	}
+}
+
+func defaultToolOutputModeSchema() map[string]any {
+	return map[string]any{
+		"type":        "string",
+		"description": "An empty string is unspecified; stdout, file, or artifact select output. Values are case-insensitive and surrounding whitespace is ignored. file and artifact both select artifact output; conflicting aliases are rejected.",
 	}
 }
 
@@ -1172,13 +1267,8 @@ func inferToolOutputPolicy(action, method string) string {
 }
 
 func inferToolErrorRecovery(action, method string) string {
-	if strings.TrimSpace(strings.ToLower(method)) == "get" {
-		return "safe-retry"
-	}
-	if strings.Contains(strings.ToLower(action), "create") || strings.Contains(strings.ToLower(action), "modify") || strings.Contains(strings.ToLower(action), "delete") {
-		return "high-risk-retry"
-	}
-	return "retry"
+	_, _ = action, method
+	return "high-risk-retry"
 }
 
 func inferToolUsageConstraints(action, group, path string) string {

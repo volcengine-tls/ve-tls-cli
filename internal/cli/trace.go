@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -67,6 +68,9 @@ func (c *Context) initTrace() error {
 	}
 	if c.traceW != nil {
 		return nil
+	}
+	if err := validateTraceRedactValue(c.TraceRedact); err != nil {
+		return err
 	}
 	dir := filepath.Clean(c.TraceDir)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -233,9 +237,14 @@ func normalizeTraceRedactValue(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "", "on", "true", "1", "yes", "enabled", "strict", "default":
 		return "on"
-	case "off", "false", "0", "no", "disabled":
-		return "off"
 	default:
-		return "on"
+		return ""
 	}
+}
+
+func validateTraceRedactValue(raw string) error {
+	if normalizeTraceRedactValue(raw) == "" {
+		return errors.New("trace redaction cannot be disabled; use on (or true/1/yes/enabled/strict/default); disable capture with trace=false or omit --trace-dir")
+	}
+	return nil
 }

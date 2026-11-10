@@ -1233,6 +1233,89 @@ func TestToolDescribeCompactAvoidsDuplicatingExecutionProperties(t *testing.T) {
 	}
 }
 
+func TestToolDescribeCompactRetainsContextAndOutputControls(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"tool", "describe", "topic.describe-topics", "--view", "compact"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if len(stdout.Bytes()) > 8*1024 {
+		t.Fatalf("compact describe exceeds 8192-byte budget: %d", len(stdout.Bytes()))
+	}
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("invalid stdout json: %v", err)
+	}
+	object := func(raw any) map[string]any {
+		t.Helper()
+		value, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("expected object, got %#v", raw)
+		}
+		return value
+	}
+	props := func(raw any) map[string]any {
+		t.Helper()
+		return object(object(raw)["properties"])
+	}
+	checkTypes := func(fields map[string]any, expected map[string]string) {
+		t.Helper()
+		for name, want := range expected {
+			field := object(fields[name])
+			if field["type"] != want {
+				t.Fatalf("%s type=%#v, want %q", name, field["type"], want)
+			}
+		}
+	}
+	checkAccepts := func(raw any, expected ...string) {
+		t.Helper()
+		field := object(raw)
+		forms, ok := field["accepts"].([]any)
+		if !ok {
+			t.Fatalf("missing accepts: %#v", field)
+		}
+		for _, want := range expected {
+			found := false
+			for _, form := range forms {
+				if form == want {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("accepts=%#v missing %q", forms, want)
+			}
+		}
+	}
+	context := props(got["context_schema"])
+	checkTypes(context, map[string]string{
+		"profile": "string", "secrets_file": "string", "region": "string", "endpoint": "string",
+		"contract_digest": "string", "execution": "object",
+	})
+	for _, name := range []string{"profile", "secrets_file", "region", "endpoint", "contract_digest", "execution", "trace"} {
+		if strings.TrimSpace(asStringOrEmpty(object(context[name])["runtime_effect"])) == "" {
+			t.Fatalf("%s runtime effect is missing", name)
+		}
+	}
+	checkAccepts(context["trace"], "boolean", "string", "object{dir:string, enabled:boolean, redact:string}")
+	if object(context["execution"])["schema_ref"] != "execution_schema" {
+		t.Fatal("context.execution lost execution_schema reference")
+	}
+	if object(context["profile"])["default"] != "active CLI profile" || object(context["trace"])["default"] != false {
+		t.Fatal("important profile or trace default missing")
+	}
+
+	execution := props(got["execution_schema"])
+	checkTypes(execution, map[string]string{"dry_run": "boolean", "output_mode": "string", "output": "object", "page": "object", "page_all": "boolean"})
+	checkAccepts(execution["artifact"], "boolean", "string", "object{dir:string, path:string}")
+	checkAccepts(execution["projection"], "string", "array", "object{jmes:string}")
+	checkTypes(props(execution["output"]), map[string]string{"mode": "string", "dir": "string", "path": "string"})
+	checkTypes(props(execution["page"]), map[string]string{"all": "boolean"})
+	mode := object(props(execution["output"])["mode"])
+	if !strings.Contains(asStringOrEmpty(mode["description"]), "output_mode") {
+		t.Fatalf("output.mode must point to output_mode semantics: %#v", mode)
+	}
+}
+
 func TestToolDescribeCompactKeepsUsefulOptionalInputFields(t *testing.T) {
 	for _, tc := range []struct {
 		id      string
@@ -1478,9 +1561,93 @@ func TestToolDescribeContextRuntimeEffectsMatchCurrentSelectorAndTraceSemantics(
 		t.Fatalf("expected trace field map, got %#v", ctxProps["trace"])
 	}
 	traceRuntimeEffect := asStringOrEmpty(traceField["runtime_effect"])
-	for _, want := range []string{"trace directory", "legacy strict/default", "on/off"} {
+	for _, want := range []string{"trace directory", "false or enabled:false", "on/true/1/yes/enabled/strict/default", "rejected"} {
 		if !strings.Contains(traceRuntimeEffect, want) {
 			t.Fatalf("expected trace runtime_effect to mention %q, got %#v", want, traceField["runtime_effect"])
+		}
+	}
+}
+
+func TestToolDescribeFullControlSchemaMatchesContextValidation(t *testing.T) {
+	out, err := runTool(nil, []string{"describe", "topic.describe-topics", "--view", "full"})
+	if err != nil {
+		t.Fatalf("runTool describe failed: %v", err)
+	}
+	object := func(raw any) map[string]any {
+		t.Helper()
+		value, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("expected schema object, got %#v", raw)
+		}
+		return value
+	}
+	props := func(raw any) map[string]any {
+		t.Helper()
+		return object(object(raw)["properties"])
+	}
+	closed := func(raw any) {
+		t.Helper()
+		if object(raw)["additionalProperties"] != false {
+			t.Fatalf("expected closed object, got %#v", raw)
+		}
+	}
+	variant := func(raw any, kind string) map[string]any {
+		t.Helper()
+		variants, ok := object(raw)["oneOf"].([]any)
+		if !ok {
+			t.Fatalf("missing oneOf: %#v", raw)
+		}
+		for _, rawVariant := range variants {
+			candidate := object(rawVariant)
+			if candidate["type"] == kind {
+				return candidate
+			}
+		}
+		t.Fatalf("missing %s variant: %#v", kind, raw)
+		return nil
+	}
+	result := object(out)
+	context, execution := object(result["context_schema"]), object(result["execution_schema"])
+	closed(context)
+	closed(execution)
+	ctxProps, execProps := props(context), props(execution)
+	closed(ctxProps["execution"])
+	closed(variant(ctxProps["trace"], "object"))
+	artifact := variant(execProps["artifact"], "object")
+	closed(artifact)
+	if object(props(artifact)["dir"])["type"] != "string" {
+		t.Fatal("artifact.dir must be string")
+	}
+	output := object(execProps["output"])
+	closed(output)
+	for _, field := range []string{"mode", "dir", "path"} {
+		if object(props(output)[field])["type"] != "string" {
+			t.Fatalf("output.%s must be string", field)
+		}
+	}
+	if object(execProps["output_mode"])["type"] != "string" {
+		t.Fatal("output_mode must be string")
+	}
+	closed(execProps["page"])
+	projection := object(execProps["projection"])
+	closed(variant(projection, "object"))
+	items := object(variant(projection, "array")["items"])
+	for _, kind := range []string{"string", "object", "array"} {
+		candidate := variant(items, kind)
+		if kind == "object" {
+			closed(candidate)
+		}
+	}
+	for field, expected := range map[string][]string{
+		"profile":  {"explicit profile", "environment", "--profile", "conflict"},
+		"region":   {"runtime", "--region", "conflict"},
+		"endpoint": {"runtime", "--endpoint", "conflict"},
+	} {
+		description, _ := object(ctxProps[field])["runtime_effect"].(string)
+		for _, want := range expected {
+			if !strings.Contains(description, want) {
+				t.Fatalf("%s runtime_effect must mention %q: %q", field, want, description)
+			}
 		}
 	}
 }

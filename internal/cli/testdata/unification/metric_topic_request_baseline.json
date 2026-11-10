@@ -144,10 +144,14 @@
       }
     },
     "pagination": {
+      "complete": true,
+      "itemCount": 0,
       "merged": true,
       "mode": "page_all",
       "pageCount": 1,
-      "pageSize": 17
+      "pageSize": 17,
+      "resumable": false,
+      "stopReason": "total_reached"
     }
   },
   "list_common_flags": {

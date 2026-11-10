@@ -38,6 +38,7 @@ func NewCatalog(
 		normalizedOperations[i] = operation
 		if operation.InputSchema != nil {
 			normalizedOperations[i].InputSchema = cloneSchema(operation.InputSchema)
+			closeDeclaredInputSections(normalizedOperations[i].InputSchema)
 		}
 		if operation.Pagination != nil {
 			pagination := *operation.Pagination
@@ -59,6 +60,23 @@ func NewCatalog(
 		return Catalog{}, err
 	}
 	return catalog, nil
+}
+
+// Only transport section roots are closed. Nested objects and intentionally
+// open or unspecified sections retain their source semantics.
+func closeDeclaredInputSections(input JSONSchema) {
+	for _, name := range []string{"path", "query", "header", "body"} {
+		section, ok := input[name].(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, declared := section["properties"]; !declared {
+			continue
+		}
+		if _, explicit := section["additionalProperties"]; !explicit {
+			section["additionalProperties"] = false
+		}
+	}
 }
 
 func LoadEmbedded() (Catalog, error) {

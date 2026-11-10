@@ -1,4 +1,20 @@
 traps:
+  - trap: cli-write-gate-is-not-iam
+    symptom: a TLS write or unknown raw GET returns permission and WritePermissionRequired
+    why: the CLI requires explicit write permission for writes and unknown raw operations; this is separate from IAM
+    fix: only for a user-authorized action use --allow-write; tool/workflow may instead use context.execution.allow_write=true, but raw has no context; reviewed reads and dry-runs need no flag
+  - trap: invocation-timeout-is-not-http-timeout
+    symptom: a multi-page or multi-batch call exhausts its timeout even though an individual HTTP request is fast
+    why: --timeout and context.execution.timeout bound the whole invocation from its start and do not reset per page or batch
+    fix: choose a positive Go duration for the overall task and separately configure the profile HTTP timeout; preserve partial or unknown outcomes
+  - trap: noninteractive-auth-requires-explicit-selection
+    symptom: login returns interaction_required or SSO cannot choose among multiple accounts or roles
+    why: non-TTY runs cannot prompt and there is no force override for session replacement
+    fix: use another profile or an interactive terminal for replacement; provide the required SSO choice when multiple candidates exist
+  - trap: trace-redaction-cannot-be-disabled
+    symptom: trace-redact off or an unknown redaction value fails validation
+    why: on and its enabled aliases are the only accepted values
+    fix: use on or a supported enabled alias; to disable tracing set context.trace=false or enabled=false
   - trap: page-all-is-not-compression
     symptom: payload gets larger after enabling page.all
     why: page.all increases completeness and payload size
@@ -11,10 +27,10 @@ traps:
     symptom: --jmes-filter 'error' prints null on a successful call
     why: the envelope field exists and its value is null, so the filter matched successfully
     fix: treat literal null as a valid projection result; only investigate when the CLI returns filter matched no value
-  - trap: jmes-filter-does-not-mix-with-file-delivery
-    symptom: a run combines --jmes-filter with file delivery and fails before execution
-    why: --jmes-filter is a stdout projection on the complete envelope, while file delivery writes the full result to disk
-    fix: use stdout when projecting with --jmes-filter; remove the filter if the goal is file delivery
+  - trap: jmes-filter-file-contains-selected-json
+    symptom: a filtered file is read as a complete envelope or the stdout delivery envelope is treated as the business result
+    why: --jmes-filter selects from the complete success envelope; file delivery writes the selected value as one JSON document, default stdout is a JSON delivery envelope, and human stdout retains the Chinese notice
+    fix: read the selected JSON from artifacts[].path in the default stdout envelope or from the human notice; omit the filter for a full envelope only when the unfiltered artifact is an envelope
   - trap: deliverymode-belongs-to-runtime
     symptom: skill logic tries to pre-decide stdout vs file_auto for log.search or export flows
     why: surface choice belongs to the skill, but deliveryMode is a CLI runtime decision
@@ -44,9 +60,9 @@ traps:
     why: the CLI validates contract shape and runtime constraints, not business meaning
     fix: if no local validation/decode/filesystem error occurred, debug the query semantics, time window, and target resource before blaming the CLI
   - trap: env-creds-override-profile
-    symptom: a stateless sandbox run selects profile A but appears to use another account
-    why: process-wide environment credentials override local profile resolution
-    fix: remove broad env injection and switch to a host-generated one-shot secrets file plus an explicit non-secret profile selector
+    symptom: a run leaves profile selection implicit and uses environment credentials instead of the active profile
+    why: environment precedence applies only when profile selection is implicit; an explicit profile keeps its identity
+    fix: "use --profile/context.profile to select a saved identity, or omit profile to use environment credentials; choose --secrets-file/context.secrets_file separately, never together with profile"
   - trap: profile-and-secrets-file-are-exclusive
     symptom: a run sets profile and secrets-file together and fails fast before the request is sent
     why: profile and secrets-file are both runtime selectors, so the CLI rejects ambiguous credential selection instead of silently overriding

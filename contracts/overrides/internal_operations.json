@@ -46,7 +46,11 @@
       },
       "runtime": {"supports_dry_run": true},
       "output": {"policy": "envelope", "is_envelope_output": true},
-      "docs": {"summary": "Describe metric topics", "source": "internal operation override", "usage_constraints": "Internal operation used by the human shortcut executor."},
+      "docs": {
+        "summary": "Describe metric topics",
+        "source": "internal operation override",
+        "usage_constraints": "Internal operation used by the human shortcut executor."
+      },
       "risk": {"level": "low", "error_recovery": "safe-retry"}
     },
     {
@@ -75,7 +79,11 @@
       },
       "runtime": {"supports_dry_run": true},
       "output": {"policy": "envelope", "is_envelope_output": true},
-      "docs": {"summary": "Describe a metric topic", "source": "internal operation override", "usage_constraints": "Internal operation used by the human shortcut executor."},
+      "docs": {
+        "summary": "Describe a metric topic",
+        "source": "internal operation override",
+        "usage_constraints": "Internal operation used by the human shortcut executor."
+      },
       "risk": {"level": "low", "error_recovery": "safe-retry"}
     },
     {
@@ -120,7 +128,11 @@
       },
       "runtime": {"supports_dry_run": true},
       "output": {"policy": "full", "is_envelope_output": true},
-      "docs": {"summary": "Create a metric topic", "source": "internal operation override", "usage_constraints": "Internal operation used by the human shortcut executor."},
+      "docs": {
+        "summary": "Create a metric topic",
+        "source": "internal operation override",
+        "usage_constraints": "Internal operation used by the human shortcut executor."
+      },
       "risk": {"level": "high", "error_recovery": "high-risk-retry"}
     },
     {
@@ -155,7 +167,11 @@
       },
       "runtime": {"supports_dry_run": true},
       "output": {"policy": "full", "is_envelope_output": true},
-      "docs": {"summary": "Modify a metric topic", "source": "internal operation override", "usage_constraints": "Internal operation used by the human shortcut executor."},
+      "docs": {
+        "summary": "Modify a metric topic",
+        "source": "internal operation override",
+        "usage_constraints": "Internal operation used by the human shortcut executor."
+      },
       "risk": {"level": "high", "error_recovery": "high-risk-retry"}
     },
     {
@@ -184,7 +200,11 @@
       },
       "runtime": {"supports_dry_run": true},
       "output": {"policy": "full", "is_envelope_output": true},
-      "docs": {"summary": "Delete a metric topic", "source": "internal operation override", "usage_constraints": "Internal operation used by the human shortcut executor."},
+      "docs": {
+        "summary": "Delete a metric topic",
+        "source": "internal operation override",
+        "usage_constraints": "Internal operation used by the human shortcut executor."
+      },
       "risk": {"level": "high", "error_recovery": "high-risk-retry"}
     },
     {
@@ -233,7 +253,11 @@
       },
       "runtime": {"supports_dry_run": true},
       "output": {"policy": "envelope", "is_envelope_output": true},
-      "docs": {"summary": "Describe collector rules", "source": "internal operation override", "usage_constraints": "Internal operation used by the human shortcut executor."},
+      "docs": {
+        "summary": "Describe collector rules",
+        "source": "internal operation override",
+        "usage_constraints": "Internal operation used by the human shortcut executor."
+      },
       "risk": {"level": "low", "error_recovery": "safe-retry"}
     }
   ]

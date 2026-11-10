@@ -135,6 +135,7 @@ func TestConfigureValidationErrorsPointToScopedHelp(t *testing.T) {
 		args     []string
 		wantKind string
 		wantHint string
+		frozen   bool
 	}{
 		{
 			name:     "set",
@@ -153,6 +154,7 @@ func TestConfigureValidationErrorsPointToScopedHelp(t *testing.T) {
 			args:     []string{"configure", "sso"},
 			wantKind: "validation",
 			wantHint: "volclog configure sso --help",
+			frozen:   true,
 		},
 		{
 			name:     "missing flag value",
@@ -178,12 +180,9 @@ func TestConfigureValidationErrorsPointToScopedHelp(t *testing.T) {
 			if code != 1 {
 				t.Fatalf("exit=%d, want 1; stdout=%q stderr=%q", code, stdout, stderr)
 			}
-			var payload errPayload
-			if err := json.Unmarshal([]byte(stderr), &payload); err != nil {
-				t.Fatalf("decode stderr: %v; stderr=%q", err, stderr)
-			}
+			payload := c4InvocationFailure(t, stdout, stderr, tc.frozen)
 			if payload.Kind != tc.wantKind {
-				t.Fatalf("kind=%q, want %q; stderr=%q", payload.Kind, tc.wantKind, stderr)
+				t.Fatalf("kind=%q, want %q; stdout=%q stderr=%q", payload.Kind, tc.wantKind, stdout, stderr)
 			}
 			if !strings.Contains(payload.Hint, tc.wantHint) {
 				t.Fatalf("hint=%q, want scoped help %q", payload.Hint, tc.wantHint)

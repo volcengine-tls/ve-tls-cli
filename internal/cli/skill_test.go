@@ -55,7 +55,14 @@ func TestSkillInstallRequiresDir(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "volclog skill install --dir /path/to/agent/skills") {
+	if currentEdition() == cliEditionVolclog {
+		payload := c4InvocationFailure(t, stdout.String(), stderr.String(), false)
+		if payload.Kind != "usage" || !strings.Contains(payload.Hint, "volclog skill --help") {
+			t.Fatalf("unexpected skill install failure: %#v", payload)
+		}
+		return
+	}
+	if stderr.Len() != 0 || !strings.Contains(stdout.String(), "volclog skill install --dir /path/to/agent/skills") {
 		t.Fatalf("unexpected usage text: %s", stdout.String())
 	}
 }

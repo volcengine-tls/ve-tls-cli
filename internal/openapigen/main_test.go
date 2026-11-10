@@ -1,11 +1,134 @@
 package main
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
 )
+
+func TestCommittedControlSchemasMatchGenerator(t *testing.T) {
+	embedded, err := contract.LoadEmbedded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := contract.NewCatalog(embedded.ContractVersion, contract.JSONSchema(defaultToolContextSchema()), contract.JSONSchema(defaultToolExecutionSchema()), embedded.Operations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, pair := range map[string][2]contract.JSONSchema{
+		"context":   {embedded.ContextSchema, expected.ContextSchema},
+		"execution": {embedded.ExecutionSchema, expected.ExecutionSchema},
+	} {
+		got, err := json.Marshal(pair[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, err := json.Marshal(pair[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != string(want) {
+			t.Fatalf("committed %s schema differs from generator", name)
+		}
+	}
+}
+
+func TestDefaultToolControlSchemasMatchContextValidation(t *testing.T) {
+	object := func(raw any) map[string]any {
+		t.Helper()
+		value, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("expected schema object, got %#v", raw)
+		}
+		return value
+	}
+	props := func(raw any) map[string]any {
+		t.Helper()
+		return object(object(raw)["properties"])
+	}
+	closed := func(raw any) {
+		t.Helper()
+		if value := object(raw)["additionalProperties"]; value != false {
+			t.Fatalf("expected closed object, got %#v", raw)
+		}
+	}
+	variant := func(raw any, kind string) map[string]any {
+		t.Helper()
+		variants, ok := object(raw)["oneOf"].([]any)
+		if !ok {
+			t.Fatalf("missing oneOf: %#v", raw)
+		}
+		for _, rawVariant := range variants {
+			candidate := object(rawVariant)
+			if candidate["type"] == kind {
+				return candidate
+			}
+		}
+		t.Fatalf("missing %s variant: %#v", kind, raw)
+		return nil
+	}
+
+	context := defaultToolContextSchema()
+	execution := defaultToolExecutionSchema()
+	closed(context)
+	closed(execution)
+	ctxProps, execProps := props(context), props(execution)
+	closed(ctxProps["execution"])
+	closed(variant(ctxProps["trace"], "object"))
+	artifact := variant(execProps["artifact"], "object")
+	closed(artifact)
+	for _, field := range []string{"path", "dir"} {
+		if object(props(artifact)[field])["type"] != "string" {
+			t.Fatalf("artifact.%s must be string", field)
+		}
+	}
+	output := object(execProps["output"])
+	closed(output)
+	for _, field := range []string{"mode", "path", "dir"} {
+		if object(props(output)[field])["type"] != "string" {
+			t.Fatalf("output.%s must be string", field)
+		}
+	}
+	closed(execProps["page"])
+	projection := object(execProps["projection"])
+	closed(variant(projection, "object"))
+	items := object(variant(projection, "array")["items"])
+	for _, kind := range []string{"string", "object", "array"} {
+		candidate := variant(items, kind)
+		if kind == "object" {
+			closed(candidate)
+			if object(props(candidate)["jmes"])["type"] != "string" {
+				t.Fatalf("projection item jmes must be string: %#v", candidate)
+			}
+		}
+	}
+	for _, raw := range []any{execProps["output_mode"], props(output)["mode"]} {
+		field := object(raw)
+		if field["type"] != "string" {
+			t.Fatalf("output mode must be string: %#v", field)
+		}
+		description, _ := field["description"].(string)
+		for _, expected := range []string{"empty", "stdout", "file", "artifact", "case-insensitive", "whitespace"} {
+			if !strings.Contains(description, expected) {
+				t.Fatalf("output mode description must mention %q: %q", expected, description)
+			}
+		}
+	}
+	for field, expected := range map[string][]string{
+		"profile":  {"explicit profile", "environment", "--profile", "conflict"},
+		"region":   {"runtime", "--region", "conflict"},
+		"endpoint": {"runtime", "--endpoint", "conflict"},
+	} {
+		description, _ := object(ctxProps[field])["runtime_effect"].(string)
+		for _, want := range expected {
+			if !strings.Contains(description, want) {
+				t.Fatalf("%s runtime_effect must mention %q: %q", field, want, description)
+			}
+		}
+	}
+}
 
 func TestBuildSourceOperationsFallsBackToRawSwaggerTagForGroup(t *testing.T) {
 	doc := swaggerDoc{
@@ -288,7 +411,7 @@ func TestBuildOperationCatalogContextRuntimeEffectsMatchCurrentSelectorAndTraceS
 		t.Fatalf("context field trace malformed: %+v", ctxProps["trace"])
 	}
 	traceRuntimeEffect, _ := traceField["runtime_effect"].(string)
-	for _, want := range []string{"trace directory", "legacy strict/default", "on/off"} {
+	for _, want := range []string{"trace directory", "false or enabled:false", "on/true/1/yes/enabled/strict/default", "rejected"} {
 		if !strings.Contains(traceRuntimeEffect, want) {
 			t.Fatalf("trace runtime_effect missing %q: %q", want, traceRuntimeEffect)
 		}

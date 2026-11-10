@@ -33,8 +33,8 @@ type Payload struct {
 var inputSections = []string{"path", "query", "header", "body"}
 
 // NormalizeInput converts the CLI's flat or sectioned JSON object into the
-// executor's typed input. Sectioned input remains authoritative and permissive
-// to preserve the legacy tool-exec contract.
+// executor's typed input. Unqualified fields are routed only when their target
+// section is unambiguous under the operation's schema.
 func NormalizeInput(operation contract.Operation, raw map[string]any) (Input, error) {
 	if reserved := reservedInputKeys(raw); len(reserved) > 0 {
 		return Input{}, fmt.Errorf(
@@ -43,7 +43,7 @@ func NormalizeInput(operation contract.Operation, raw map[string]any) (Input, er
 		)
 	}
 	if hasInputSections(raw) {
-		return sectionedInput(operation, raw), nil
+		return sectionedInput(operation, raw)
 	}
 	if len(operation.InputSchema) == 0 {
 		return Input{Body: Payload{
@@ -53,19 +53,17 @@ func NormalizeInput(operation contract.Operation, raw map[string]any) (Input, er
 
 	present := make([]string, 0, len(inputSections))
 	properties := make(map[string]map[string]any, len(inputSections))
-	hasBody := false
-	bodyAllowsLooseFields := false
+	open := make([]string, 0, len(inputSections))
 	for _, section := range inputSections {
 		schema, ok := schemaMap(operation.InputSchema[section])
-		if !ok || len(schema) == 0 {
+		if !ok {
 			continue
 		}
 		present = append(present, section)
 		props, _ := schemaMap(schema["properties"])
 		properties[section] = props
-		if section == "body" {
-			hasBody = true
-			bodyAllowsLooseFields = schemaAllowsLooseFields(schema)
+		if schemaAllowsLooseFields(schema) {
+			open = append(open, section)
 		}
 	}
 	if len(present) == 0 {
@@ -81,11 +79,14 @@ func NormalizeInput(operation contract.Operation, raw map[string]any) (Input, er
 		matches := matchingInputSections(properties, key)
 		switch len(matches) {
 		case 0:
-			if hasBody && (len(present) == 1 || bodyAllowsLooseFields) {
-				assignInputSection(normalized, "body", key, value)
-				continue
+			switch len(open) {
+			case 0:
+				unknown = append(unknown, key)
+			case 1:
+				assignInputSection(normalized, open[0], key, value)
+			default:
+				ambiguous = append(ambiguous, fmt.Sprintf("%s(%s)", key, strings.Join(open, ",")))
 			}
-			unknown = append(unknown, key)
 		case 1:
 			assignInputSection(normalized, matches[0], key, value)
 		default:
@@ -120,10 +121,31 @@ func NormalizeInput(operation contract.Operation, raw map[string]any) (Input, er
 	}, nil
 }
 
-func sectionedInput(operation contract.Operation, raw map[string]any) Input {
-	path, _ := schemaMap(raw["path"])
-	query, _ := schemaMap(raw["query"])
-	header, _ := schemaMap(raw["header"])
+func sectionedInput(operation contract.Operation, raw map[string]any) (Input, error) {
+	unknown := make([]string, 0)
+	for key := range raw {
+		switch key {
+		case "path", "query", "header", "body":
+		default:
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return Input{}, fmt.Errorf("sectioned input contains unknown fields: %s", strings.Join(unknown, ", "))
+	}
+	sections := make(map[string]map[string]any, 3)
+	for _, section := range inputSections[:3] {
+		value, exists := raw[section]
+		if !exists {
+			continue
+		}
+		object, ok := schemaMap(value)
+		if !ok || object == nil {
+			return Input{}, fmt.Errorf("input.%s must be an object", section)
+		}
+		sections[section] = cloneAnyMap(object)
+	}
 	body, bodyExists := raw["body"]
 	payload := Payload{
 		Format: wireBodyFormat(operation.Wire.RequestFormat), Present: bodyExists,
@@ -132,11 +154,11 @@ func sectionedInput(operation contract.Operation, raw map[string]any) Input {
 		payload.JSON = cloneJSONValue(body)
 	}
 	return Input{
-		Path:   cloneAnyMap(path),
-		Query:  cloneAnyMap(query),
-		Header: cloneAnyMap(header),
+		Path:   sections["path"],
+		Query:  sections["query"],
+		Header: sections["header"],
 		Body:   payload,
-	}
+	}, nil
 }
 
 func wireBodyFormat(requestFormat string) BodyFormat {
@@ -173,11 +195,18 @@ func assignInputSection(dst map[string]map[string]any, section, key string, valu
 }
 
 func schemaAllowsLooseFields(schema map[string]any) bool {
-	if schema["additionalProperties"] != nil {
+	if types, exists := schema["type"]; exists && !schemaTypeIncludes(types, "object") {
+		return false
+	}
+	value, exists := schema["additionalProperties"]
+	if !exists {
 		return true
 	}
-	properties, _ := schemaMap(schema["properties"])
-	return len(properties) == 0
+	if allowed, ok := value.(bool); ok {
+		return allowed
+	}
+	_, ok := schemaMap(value)
+	return ok
 }
 
 func reservedInputKeys(raw map[string]any) []string {
@@ -244,6 +273,13 @@ func cloneJSONValue(value any) any {
 
 func missingRequiredError(missing []string) error {
 	sort.Strings(missing)
+	unique := missing[:0]
+	for _, path := range missing {
+		if len(unique) == 0 || unique[len(unique)-1] != path {
+			unique = append(unique, path)
+		}
+	}
+	missing = unique
 	if len(missing) == 1 {
 		return fmt.Errorf("missing required field: %s", missing[0])
 	}

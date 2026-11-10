@@ -52,7 +52,7 @@ func TestRawServerErrorIsWrappedInEnvelope(t *testing.T) {
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"raw", "--method", "POST", "--path", "/CreateTopic", "--body", `{"TopicName":"demo"}`}, &stdout, &stderr)
+	code := Run([]string{"--allow-write", "raw", "--method", "POST", "--path", "/CreateTopic", "--body", `{"TopicName":"demo"}`}, &stdout, &stderr)
 	if code != 2 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -76,7 +76,7 @@ func TestRawServerErrorIsWrappedInEnvelope(t *testing.T) {
 	if errObj["statusCode"] != float64(http.StatusConflict) {
 		t.Fatalf("unexpected statusCode: %v", errObj["statusCode"])
 	}
-	if errObj["kind"] != "server" {
+	if errObj["kind"] != "conflict" {
 		t.Fatalf("unexpected kind: %v", errObj["kind"])
 	}
 	if errObj["source"] != "upstream" {
@@ -105,7 +105,7 @@ func TestRawServerErrorWithNestedJSONMessageAddsUpstreamDetails(t *testing.T) {
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"raw", "--method", "POST", "--path", "/CreateTopic", "--body", `{"TopicName":"demo"}`}, &stdout, &stderr)
+	code := Run([]string{"--allow-write", "raw", "--method", "POST", "--path", "/CreateTopic", "--body", `{"TopicName":"demo"}`}, &stdout, &stderr)
 	if code != 2 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -192,7 +192,7 @@ func TestShortcutServerErrorIsWrappedInEnvelope(t *testing.T) {
 	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"project", "create", "--project-name", "demo"}, &stdout, &stderr)
+	code := Run([]string{"--allow-write", "project", "create", "--project-name", "demo"}, &stdout, &stderr)
 	if code != 2 {
 		t.Fatalf("unexpected exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -216,7 +216,7 @@ func TestShortcutServerErrorIsWrappedInEnvelope(t *testing.T) {
 	if errObj["statusCode"] != float64(http.StatusConflict) {
 		t.Fatalf("unexpected statusCode: %v", errObj["statusCode"])
 	}
-	if errObj["kind"] != "server" {
+	if errObj["kind"] != "conflict" {
 		t.Fatalf("unexpected kind: %v", errObj["kind"])
 	}
 }

@@ -46,19 +46,20 @@ type Invocation struct {
 }
 
 type Result struct {
-	OperationID contract.OperationID
-	Data        any
-	RequestID   string
-	StatusCode  int
-	Pagination  *PaginationResult
-	Plan        *DryRunPlan
+	OperationID   contract.OperationID
+	Data          any
+	RequestID     string
+	StatusCode    int
+	RemoteOutcome string
+	Pagination    *PaginationResult
+	Plan          *DryRunPlan
 }
 
 type PaginationResult struct {
-	Mode      string `json:"mode"`
-	PageCount int    `json:"pageCount"`
-	PageSize  int    `json:"pageSize,omitempty"`
-	Merged    bool   `json:"merged"`
+	Completeness
+	Mode     string `json:"mode"`
+	PageSize int    `json:"pageSize,omitempty"`
+	Merged   bool   `json:"merged"`
 }
 
 type DryRunPaginationPlan struct {
@@ -78,6 +79,7 @@ type DryRunPlan struct {
 	Checks          []PreflightCheck      `json:"checks"`
 	Valid           bool                  `json:"valid"`
 	RequestPreview  map[string]any        `json:"request_preview"`
+	RedactedFields  []string              `json:"redacted_fields,omitempty"`
 	PageAll         *DryRunPaginationPlan `json:"page_all,omitempty"`
 }
 
@@ -93,6 +95,8 @@ func (e *HTTPError) Error() string {
 	}
 	return string(e.Body)
 }
+
+func (e *HTTPError) RemoteOutcome() string { return OutcomeFailed }
 
 func resultForResponse(operationID contract.OperationID, response Response) Result {
 	return Result{

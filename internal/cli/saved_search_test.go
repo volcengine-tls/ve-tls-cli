@@ -120,7 +120,8 @@ func TestSavedSearchFullDescribeIncludesScopeNoPaginationAndRetryGuidance(t *tes
 				if !strings.Contains(constraints, "do not retry automatically") {
 					t.Fatalf("%s usage_constraints missing ambiguous-failure retry guidance: %q", tt.id, constraints)
 				}
-			} else if asStringOrEmpty(payload["recovery"]) != tt.recovery {
+			}
+			if asStringOrEmpty(payload["recovery"]) != tt.recovery {
 				t.Fatalf("%s recovery=%#v, want %q", tt.id, payload["recovery"], tt.recovery)
 			}
 			if asStringOrEmpty(payload["risk"]) != tt.risk {
@@ -133,6 +134,91 @@ func TestSavedSearchFullDescribeIncludesScopeNoPaginationAndRetryGuidance(t *tes
 			if !ok || asStringOrEmpty(output["policy"]) != "full" || output["is_envelope"] != true {
 				t.Fatalf("%s output=%#v, want full envelope", tt.id, payload["output"])
 			}
+		})
+	}
+}
+
+func TestSavedSearchDescribeRecoveryProvenance(t *testing.T) {
+	for _, tt := range []struct {
+		id, recovery, source string
+	}{
+		{"log.create-saved-search", "high-risk-retry", "unverified"},
+		{"log.delete-saved-search", "high-risk-retry", "unverified"},
+		{"log.describe-saved-search", "safe-retry", "reviewed-read-contract"},
+		{"log.describe-saved-searches", "safe-retry", "reviewed-read-contract"},
+	} {
+		for _, view := range []string{"compact", "full"} {
+			t.Run(tt.id+"/"+view, func(t *testing.T) {
+				got := c5Describe(t, tt.id, view)
+				if got["recovery"] != tt.recovery || got["recovery_source"] != tt.source {
+					t.Fatalf("recovery=%#v source=%#v, want %q / %q", got["recovery"], got["recovery_source"], tt.recovery, tt.source)
+				}
+			})
+		}
+	}
+}
+
+func TestSavedSearchToolExecWritePermissionAndReadAccess(t *testing.T) {
+	for _, tt := range []struct {
+		name, id, input, method, path, query, response string
+		write                                          bool
+		body                                           map[string]any
+	}{
+		{
+			name: "create", id: "log.create-saved-search",
+			input:  `{"TopicID":"topic-1","DisplayName":"saved query","SearchQuery":"*"}`,
+			method: http.MethodPost, path: "/CreateSavedSearch", write: true,
+			body:     map[string]any{"TopicID": "topic-1", "DisplayName": "saved query", "SearchQuery": "*"},
+			response: `{"SavedSearchID":"savedsearch-1692687047134"}`,
+		},
+		{
+			name: "delete", id: "log.delete-saved-search",
+			input:  `{"SavedSearchID":"savedsearch-1692687047134"}`,
+			method: http.MethodDelete, path: "/DeleteSavedSearch", write: true,
+			body: map[string]any{"SavedSearchID": "savedsearch-1692687047134"}, response: `{}`,
+		},
+		{
+			name: "describe", id: "log.describe-saved-search",
+			input:  `{"SavedSearchID":"savedsearch-1692687047134"}`,
+			method: http.MethodGet, path: "/DescribeSavedSearch", query: "SavedSearchID=savedsearch-1692687047134",
+			response: `{"SavedSearch":{"SavedSearchID":"savedsearch-1692687047134"}}`,
+		},
+		{
+			name: "list", id: "log.describe-saved-searches", input: `{"TopicId":"topic-1"}`,
+			method: http.MethodGet, path: "/DescribeSavedSearches", query: "TopicId=topic-1",
+			response: `{"SavedSearches":[]}`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, calls := outcomeCLIServer(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != tt.method || r.URL.Path != tt.path || r.URL.RawQuery != tt.query {
+					t.Errorf("request = %s %s?%s, want %s %s?%s", r.Method, r.URL.Path, r.URL.RawQuery, tt.method, tt.path, tt.query)
+				}
+				if tt.write {
+					var body map[string]any
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Errorf("decode request body: %v", err)
+					}
+					if !reflect.DeepEqual(body, tt.body) {
+						t.Errorf("request body=%#v, want %#v", body, tt.body)
+					}
+				}
+				_, _ = w.Write([]byte(tt.response))
+			})
+			args := []string{"tool", "exec", tt.id, "--input", tt.input}
+			if tt.write {
+				code, envelope := outcomeCLIRun(t, args)
+				if code != 1 || calls.Load() != 0 {
+					t.Fatalf("denied write: exit=%d calls=%d envelope=%#v", code, calls.Load(), envelope)
+				}
+				assertOutcomeCLIEnvelope(t, envelope, "not_sent", "success", "permission", "WritePermissionRequired")
+				args = append([]string{"--allow-write"}, args...)
+			}
+			code, envelope := outcomeCLIRun(t, args)
+			if code != 0 || calls.Load() != 1 {
+				t.Fatalf("allowed request: exit=%d calls=%d envelope=%#v", code, calls.Load(), envelope)
+			}
+			assertOutcomeCLIEnvelope(t, envelope, "success", "success", "", "")
 		})
 	}
 }
@@ -166,6 +252,7 @@ func TestSavedSearchToolExecSendsWireRequestAndPassesThroughServer4xx(t *testing
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{
+		"--allow-write",
 		"tool", "exec", "log.create-saved-search",
 		"--input", `{"TopicID":"topic-1","DisplayName":"saved query","SearchQuery":"*"}`,
 	}, &stdout, &stderr)
@@ -191,5 +278,28 @@ func TestSavedSearchToolExecSendsWireRequestAndPassesThroughServer4xx(t *testing
 		errorObject["code"] != "SavedSearchAlreadyExist" ||
 		errorObject["message"] != "saved query already exists" {
 		t.Fatalf("unexpected upstream error passthrough: %#v", errorObject)
+	}
+}
+
+func TestSavedSearchDeletePassesThroughServer400(t *testing.T) {
+	_, calls := outcomeCLIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/DeleteSavedSearch" || r.URL.RawQuery != "" {
+			t.Errorf("request = %s %s?%s, want DELETE /DeleteSavedSearch without query", r.Method, r.URL.Path, r.URL.RawQuery)
+		}
+		w.Header().Set("x-tls-requestid", "req-saved-search-400")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"ErrorCode":"SavedSearchNotExist","ErrorMessage":"saved query does not exist"}`))
+	})
+	code, envelope := outcomeCLIRun(t, []string{
+		"--allow-write", "tool", "exec", "log.delete-saved-search",
+		"--input", `{"SavedSearchID":"savedsearch-1692687047134"}`,
+	})
+	if code != 2 || calls.Load() != 1 || envelope["status"] != "failed" || envelope["requestId"] != "req-saved-search-400" {
+		t.Fatalf("exit=%d calls=%d envelope=%#v", code, calls.Load(), envelope)
+	}
+	failure, ok := envelope["error"].(map[string]any)
+	if !ok || failure["statusCode"] != float64(http.StatusBadRequest) || failure["source"] != "upstream" ||
+		failure["code"] != "SavedSearchNotExist" || failure["message"] != "saved query does not exist" {
+		t.Fatalf("unexpected upstream error passthrough: %#v", envelope["error"])
 	}
 }

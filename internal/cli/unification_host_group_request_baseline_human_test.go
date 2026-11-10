@@ -341,7 +341,7 @@ func captureHostGroupListAllFirstRequestBaseline(t *testing.T, args []string) ma
 		t.Fatalf("host-group list --all response has type %T, want object", out)
 	}
 	hostGroups, ok := response["HostGroupHostsRulesInfos"].([]any)
-	if !ok || len(hostGroups) != 0 || response["Total"] != 0 {
+	if !ok || len(hostGroups) != 0 || response["Total"] != json.Number("0") {
 		t.Fatalf("host-group list --all response mismatch: %#v", response)
 	}
 	if len(transport.requests) != 1 {

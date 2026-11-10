@@ -58,6 +58,37 @@ func requestObjectTemplateSeeded(
 	path string,
 	seed map[string]any,
 ) (map[string]any, error) {
+	projected, selectedSeed, decisions, changed, err := projectTemplateConditions(schema, mode, path, seed)
+	if err != nil {
+		return nil, err
+	}
+	template, err := requestObjectTemplateBase(projected, mode, path, selectedSeed)
+	if err != nil {
+		return nil, err
+	}
+	if changed {
+		for _, decision := range decisions {
+			matched, err := matchesTemplateCondition(decision.condition, template, path)
+			if err != nil {
+				return nil, err
+			}
+			if matched != decision.matched {
+				return nil, fmt.Errorf("%s template condition changed after projection", path)
+			}
+		}
+		if err := validateRequestValue(template, projected, path); err != nil {
+			return nil, fmt.Errorf("generated request template: %w", err)
+		}
+	}
+	return template, nil
+}
+
+func requestObjectTemplateBase(
+	schema map[string]any,
+	mode TemplateMode,
+	path string,
+	seed map[string]any,
+) (map[string]any, error) {
 	properties, err := templateProperties(schema, path)
 	if err != nil {
 		return nil, err

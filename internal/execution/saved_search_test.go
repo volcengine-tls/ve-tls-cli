@@ -158,7 +158,7 @@ func TestSavedSearchRequiredFieldsRejectMissingAndNullLocally(t *testing.T) {
 		{
 			name: "create null DisplayName", id: "log.create-saved-search",
 			raw:  map[string]any{"TopicID": "topic-1", "DisplayName": nil, "SearchQuery": "*"},
-			want: "missing required field: input.body.DisplayName",
+			want: "input.body.DisplayName does not match the declared type",
 		},
 		{
 			name: "create missing SearchQuery", id: "log.create-saved-search",
@@ -173,7 +173,7 @@ func TestSavedSearchRequiredFieldsRejectMissingAndNullLocally(t *testing.T) {
 		{
 			name: "delete null SavedSearchID", id: "log.delete-saved-search",
 			raw:  map[string]any{"SavedSearchID": nil},
-			want: "missing required field: input.body.SavedSearchID",
+			want: "input.body.SavedSearchID does not match the declared type",
 		},
 		{
 			name: "describe missing SavedSearchID", id: "log.describe-saved-search",
@@ -183,7 +183,7 @@ func TestSavedSearchRequiredFieldsRejectMissingAndNullLocally(t *testing.T) {
 		{
 			name: "describe null SavedSearchID", id: "log.describe-saved-search",
 			raw:  map[string]any{"SavedSearchID": nil},
-			want: "missing required field: input.query.SavedSearchID",
+			want: "input.query.SavedSearchID does not match the declared type",
 		},
 		{
 			name: "list missing TopicId", id: "log.describe-saved-searches",
@@ -193,7 +193,7 @@ func TestSavedSearchRequiredFieldsRejectMissingAndNullLocally(t *testing.T) {
 		{
 			name: "list null TopicId", id: "log.describe-saved-searches",
 			raw:  map[string]any{"TopicId": nil},
-			want: "missing required field: input.query.TopicId",
+			want: "input.query.TopicId does not match the declared type",
 		},
 	}
 
@@ -218,10 +218,11 @@ func TestSavedSearchRequiredFieldsRejectMissingAndNullLocally(t *testing.T) {
 func TestSavedSearchFieldNamesRemainCaseSensitive(t *testing.T) {
 	operations := savedSearchOperations(t)
 	for _, tt := range []struct {
-		name string
-		id   contract.OperationID
-		raw  map[string]any
-		want string
+		name           string
+		id             contract.OperationID
+		raw            map[string]any
+		want           string
+		normalizeError bool
 	}{
 		{
 			name: "create TopicId is not TopicID",
@@ -229,26 +230,40 @@ func TestSavedSearchFieldNamesRemainCaseSensitive(t *testing.T) {
 			raw: map[string]any{
 				"TopicId": "topic-1", "DisplayName": "saved query", "SearchQuery": "*",
 			},
-			want: "missing required field: input.body.TopicID",
+			want: "flat input contains unknown fields: TopicId", normalizeError: true,
 		},
 		{
 			name: "list TopicID is not TopicId",
 			id:   "log.describe-saved-searches",
 			raw:  map[string]any{"TopicID": "topic-1"},
-			want: "flat input contains unknown fields: TopicID",
+			want: "flat input contains unknown fields: TopicID", normalizeError: true,
+		},
+		{
+			name: "create sectioned TopicId is not TopicID",
+			id:   "log.create-saved-search",
+			raw: map[string]any{"body": map[string]any{
+				"TopicId": "topic-1", "DisplayName": "saved query", "SearchQuery": "*",
+			}},
+			want: "input.body.TopicId is not allowed by the schema",
+		},
+		{
+			name: "list sectioned TopicID is not TopicId",
+			id:   "log.describe-saved-searches",
+			raw:  map[string]any{"query": map[string]any{"TopicID": "topic-1"}},
+			want: "input.query.TopicID is not allowed by the schema",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			operation := operations[tt.id]
 			input, err := NormalizeInput(operation, tt.raw)
-			if err != nil {
-				if tt.id == "log.create-saved-search" {
-					t.Fatalf("NormalizeInput unexpectedly rejected body-only unknown field: %v", err)
-				}
-				if err.Error() != tt.want {
+			if tt.normalizeError {
+				if err == nil || err.Error() != tt.want {
 					t.Fatalf("NormalizeInput error = %v, want %q", err, tt.want)
 				}
 				return
+			}
+			if err != nil {
+				t.Fatalf("NormalizeInput: %v", err)
 			}
 			if err := ValidateInput(operation, input); err == nil || err.Error() != tt.want {
 				t.Fatalf("ValidateInput error = %v, want %q", err, tt.want)

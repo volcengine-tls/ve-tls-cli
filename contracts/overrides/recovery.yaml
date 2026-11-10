@@ -1,3 +1,322 @@
-# Tool catalog error recovery policy overrides.
-# Format:
-#   <tool_id>: <safe-retry|retry|high-risk-retry>
+# Explicit operation recovery policies, applied after all operation merges.
+# safe-retry marks a reviewed read or non-persistent purpose; it does not
+# establish service idempotency or enable automatic retries.
+# high-risk-retry means outcome reconciliation is required before any retry.
+# Catalog comments record its request fields and response policy/items field;
+# the catalog does not supply a complete response schema.
+
+account.active: high-risk-retry
+# GET /GetAccountStatus; summary=GetAccountStatus; source=账号管理
+# request: no input sections declared; response: output=stream; response fields unspecified
+account.get: safe-retry
+alarm.create-alarm: high-risk-retry
+alarm.create-alarm-content-template: high-risk-retry
+alarm.create-alarm-notify-group: high-risk-retry
+alarm.create-alarm-webhook-integration: high-risk-retry
+alarm.delete-alarm: high-risk-retry
+alarm.delete-alarm-content-template: high-risk-retry
+alarm.delete-alarm-notify-group: high-risk-retry
+alarm.delete-alarm-webhook-integration: high-risk-retry
+# GET /DescribeAlarmContentTemplates; summary=DescribeAlarmContentTemplates; source=告警管理
+# request: query=[ASC,AlarmContentTemplateId,AlarmContentTemplateName,OrderField,PageNumber,PageSize]; response: output=envelope; items=AlarmContentTemplates
+alarm.describe-alarm-content-templates: safe-retry
+# GET /DescribeAlarmNotifyGroups; summary=DescribeAlarmNotifyGroups; source=告警管理
+# request: query=[AlarmNotifyGroupId,AlarmNotifyGroupName,IamProjectName,PageNumber,PageSize,ReceiverName]; response: output=envelope; items=AlarmNotifyGroups
+alarm.describe-alarm-notify-groups: safe-retry
+# GET /DescribeAlarmWebhookIntegrations; summary=DescribeAlarmWebhookIntegrations; source=告警管理
+# request: query=[PageNumber,PageSize,WebhookID,WebhookName,WebhookType]; response: output=envelope; items=WebhookIntegrations
+alarm.describe-alarm-webhook-integrations: safe-retry
+# GET /DescribeAlarms; summary=DescribeAlarms; source=告警管理
+# request: query=[AlarmDisabled,AlarmId,AlarmName,IamProjectName,PageNumber,PageSize,ProjectId,ProjectName,Severity,Status,TopicId,TopicName]; response: output=envelope; items=Alarms
+alarm.describe-alarms: safe-retry
+alarm.modify-alarm: high-risk-retry
+alarm.modify-alarm-content-template: high-risk-retry
+alarm.modify-alarm-notify-group: high-risk-retry
+alarm.modify-alarm-webhook-integration: high-risk-retry
+app.create: high-risk-retry
+app.delete: high-risk-retry
+# GET /DescribeApp; summary=DescribeApp; source=log-service server API
+# request: query=[AppId]; response: output=full; response fields unspecified
+app.describe: safe-retry
+# GET /DescribeApps; summary=DescribeApps; source=log-service server API
+# request: query=[AppID,AppName,AppType,ForkedTemplateId,ForkedTemplateName,Order,PageNumber,PageSize,ProductName,SortBy,Tags]; response: output=full; items=apps
+app.describe-apps: safe-retry
+# GET /DescribeTemplate; summary=DescribeTemplate; source=log-service server API
+# request: query=[TemplateId]; response: output=full; response fields unspecified
+app.describe-template: safe-retry
+# GET /DescribeTemplates; summary=DescribeTemplates; source=log-service server API
+# request: query=[AllowOnlyOnce,Contributor,Order,PageNumber,PageSize,SortBy,Tags,TemplateId,TemplateName,TemplateType]; response: output=full; items=Templates
+app.describe-templates: safe-retry
+app.modify: high-risk-retry
+collector.apply-rule-to-host-groups: high-risk-retry
+collector.create: high-risk-retry
+collector.delete-rule: high-risk-retry
+collector.delete-rule-from-host-groups: high-risk-retry
+# GET /DescribeBoundHostGroups; summary=DescribeBoundHostGroups; source=采集配置管理
+# request: query=[PageNumber,PageSize,RuleId]; response: output=envelope; items=HostGroupInfos
+collector.describe-bound-host-groups: safe-retry
+# GET /DescribeRuleV2; summary=DescribeRuleV2; source=采集配置管理
+# request: query=[RuleId]; response: output=envelope; response fields unspecified
+collector.describe-rule-v2: safe-retry
+# GET /DescribeRules; summary=DescribeRules; source=采集配置管理
+# request: query=[Hidden,IamProjectName,LogType,PageNumber,PageSize,Pause,ProjectId,ProjectName,RuleId,RuleName,RuleType,TopicId,TopicName]; response: output=envelope; items=RuleInfos
+collector.describe-rules: safe-retry
+# GET /DescribeRulesV2; summary=Describe collector rules; source=internal operation override
+# request: query=[Hidden,IamProjectName,LogType,PageNumber,PageSize,Pause,ProjectId,ProjectName,RuleId,RuleName,RuleType,TopicId,TopicName]; response: output=envelope; items=Rules
+collector.describe-rules-v2: safe-retry
+# POST /ExtractLogSample; summary=ExtractLogSample; source=log-service rule API
+# request: body=[BeginRegex,LogRegex,LogSample]; response: output=full; response fields unspecified
+collector.extract: safe-retry
+# POST /GenerateBeginRegex; summary=GenerateBeginRegex; source=log-service regex API
+# request: body=[LogSample]; response: output=full; response fields unspecified
+collector.generate-begin-regex: safe-retry
+# POST /GenerateLogRegex; summary=GenerateLogRegex; source=log-service regex API
+# request: body=[End,LogSample,Multiline,Start]; response: output=full; response fields unspecified
+collector.generate-log-regex: safe-retry
+collector.modify-rule: high-risk-retry
+# POST /ParsePath; summary=ParsePath; source=log-service rule API
+# request: body=[PathSample,Regex]; response: output=full; response fields unspecified
+collector.parse-path: safe-retry
+# POST /ParseTime; summary=ParseTime; source=log-service rule API
+# request: body=[EnableNanosecond,TimeFormat,TimeSample,TimeZone]; response: output=full; response fields unspecified
+collector.parse-time: safe-retry
+# POST /SplitWithQuote; summary=SplitWithQuote; source=log-service rule API
+# request: body=[Delimiter,LogSample,Quote]; response: output=full; response fields unspecified
+collector.split: safe-retry
+consumer-group.consume: high-risk-retry
+consumer-group.create: high-risk-retry
+consumer-group.delete: high-risk-retry
+consumer-group.describe-check-point: high-risk-retry
+# GET /DescribeConsumerGroups; summary=DescribeConsumerGroups; source=消费组管理
+# request: query=[ConsumerGroupName,IamProjectName,OrderByProject,PageNumber,PageSize,ProjectId,ProjectName,TopicId,TopicName]; response: output=envelope; items=ConsumerGroups
+consumer-group.describe-consumer-groups: safe-retry
+consumer-group.modify-checkpoint: high-risk-retry
+consumer-group.modify-consumer-group: high-risk-retry
+consumer-group.reset: high-risk-retry
+etl.create: high-risk-retry
+etl.delete: high-risk-retry
+# GET /DescribeETLTask; summary=DescribeETLTask; source=数据加工
+# request: query=[TaskId]; response: output=envelope; response fields unspecified
+etl.describe-e-t-l-task: safe-retry
+# GET /DescribeETLTasks; summary=DescribeETLTasks; source=数据加工
+# request: query=[IamProjectName,PageNumber,PageSize,ProjectId,ProjectName,SourceTopicId,SourceTopicName,Status,TaskId,TaskName]; response: output=envelope; items=Tasks
+etl.describe-e-t-l-tasks: safe-retry
+etl.modify-e-t-l-task: high-risk-retry
+etl.modify-e-t-l-task-status: high-risk-retry
+host-group.create: high-risk-retry
+host-group.delete-abnormal-hosts: high-risk-retry
+host-group.delete-host: high-risk-retry
+host-group.delete-host-group: high-risk-retry
+# GET /DescribeHostGroupRules; summary=DescribeHostGroupRules; source=机器组管理
+# request: query=[HostGroupId,PageNumber,PageSize]; response: output=envelope; items=RuleInfos
+host-group.describe-host-group-rules: safe-retry
+# GET /DescribeHostGroupV2; summary=DescribeHostGroupV2; source=机器组管理
+# request: query=[HostGroupId]; response: output=envelope; response fields unspecified
+host-group.describe-host-group-v2: safe-retry
+# GET /DescribeHostGroupsV2; summary=DescribeHostGroupsV2; source=机器组管理
+# request: query=[AutoUpdate,Hidden,HostGroupId,HostGroupName,HostIdentifier,IamProjectName,PageNumber,PageSize,ServiceLogging]; response: output=envelope; response fields unspecified
+host-group.describe-host-groups-v2: safe-retry
+# GET /DescribeHosts; summary=DescribeHosts; source=机器组管理
+# request: query=[HeartbeatStatus,HostGroupId,Ip,PageNumber,PageSize]; response: output=envelope; items=HostInfos
+host-group.describe-hosts: safe-retry
+host-group.modify-host-group: high-risk-retry
+host-group.modify-host-groups-auto-update: high-risk-retry
+import.create: high-risk-retry
+import.delete: high-risk-retry
+# GET /DescribeImportTask; summary=DescribeImportTask; source=数据导入
+# request: query=[TaskId]; response: output=envelope; response fields unspecified
+import.describe-import-task: safe-retry
+# GET /DescribeImportTasks; summary=DescribeImportTasks; source=数据导入
+# request: query=[IamProjectName,PageNumber,PageSize,ProjectId,ProjectName,SourceType,Status,TaskId,TaskName,TopicId,TopicName]; response: output=envelope; items=TaskInfo
+import.describe-import-tasks: safe-retry
+import.modify: high-risk-retry
+index.create: high-risk-retry
+index.delete: high-risk-retry
+# GET /DescribeIndex; summary=DescribeIndex; source=索引管理
+# request: query=[TopicId]; response: output=envelope; response fields unspecified
+index.describe: safe-retry
+index.modify: high-risk-retry
+kafka-proxy.close-kafka-consumer: high-risk-retry
+# GET /DescribeKafkaConsumer; summary=DescribeKafkaConsumer; source=Kafka 协议消费
+# request: query=[TopicId]; response: output=envelope; response fields unspecified
+kafka-proxy.describe: safe-retry
+kafka-proxy.open-kafka-consumer: high-risk-retry
+log-app.create: high-risk-retry
+log-app.delete: high-risk-retry
+# GET /DescribeLogApp; summary=DescribeLogApp; source=log-service server API
+# request: query=[LogAppId,NeedLogAppTopics]; response: output=full; response fields unspecified
+log-app.describe: safe-retry
+# GET /DescribeLogAppDashboard; summary=DescribeLogAppDashboard; source=log-service server API
+# request: query=[LogAppId,TemplateId]; response: output=full; response fields unspecified
+log-app.describe-dashboard: safe-retry
+# GET /DescribeLogAppDashboardTemplates; summary=DescribeLogAppDashboardTemplates; source=log-service server API
+# request: query=[LogAppId,LogAppTabIndex]; response: output=full; response fields unspecified
+log-app.describe-dashboard-templates: safe-retry
+# GET /DescribeLogApps; summary=DescribeLogApps; source=log-service server API
+# request: query=[CsAccountChannel,LogAppId,LogAppName,LogAppType,PageNumber,PageSize,ProjectId,ProjectName,Status]; response: output=full; items=LogApps
+log-app.describe-log-apps: safe-retry
+# GET /DescribeLogAppMarket; summary=DescribeLogAppMarket; source=log-service server API
+# request: query=[LogAppType]; response: output=full; response fields unspecified
+log-app.describe-market: safe-retry
+# POST /DescribeLogAppSession; summary=DescribeLogAppSession; source=log-service server API
+# request: body=[EndTime,LogAppId,SessionId,StartTime]; response: output=full; response fields unspecified
+log-app.describe-session: safe-retry
+# POST /DescribeLogAppSessions; summary=DescribeLogAppSessions; source=log-service server API
+# request: body=[LogAppId,Query]; response: output=full; response fields unspecified
+log-app.describe-sessions: safe-retry
+log-app.describe-trace: high-risk-retry
+log-app.modify: high-risk-retry
+# POST /SearchLogAppSpans; summary=SearchLogAppSpans; source=log-service server API
+# request: body=[EndTime,LogAppId,Query,StartTime]; response: output=full; response fields unspecified
+log-app.search-spans: safe-retry
+# POST /SearchLogAppTraces; summary=SearchLogAppTraces; source=log-service server API
+# request: body=[LogAppId,Query]; response: output=full; response fields unspecified
+log-app.search-traces: safe-retry
+log-back-flow.create: high-risk-retry
+log-back-flow.delete: high-risk-retry
+# GET /DescribeLogBackFlowTasks; summary=DescribeLogBackFlowTasks; source=数据回流
+# request: query=[EtlTaskID,PageNumber,PageSize,ShipperId,Status,TaskId,TaskName,TopicIDList]; response: output=envelope; items=LogBackFlowTasks
+log-back-flow.describe: safe-retry
+log-back-flow.modify: high-risk-retry
+log.cancel-download-task: high-risk-retry
+log.consume: high-risk-retry
+log.create-download-task: high-risk-retry
+log.describe-cursor: high-risk-retry
+log.describe-cursor-time: high-risk-retry
+# GET /DescribeDownloadTasks; summary=DescribeDownloadTasks; source=日志管理
+# request: query=[PageNumber,PageSize,TaskName,TopicId]; response: output=envelope; items=Tasks
+log.describe-download-tasks: safe-retry
+# GET /DescribeDownloadUrl; summary=DescribeDownloadUrl; source=日志管理
+# request: query=[TaskId]; response: output=envelope; response fields unspecified
+log.describe-download-url: safe-retry
+# POST /DescribeHistogramV1; summary=DescribeHistogramV1; source=日志管理
+# request: body=[EndTime,Interval,Query,RegionTopics,StartTime,TopicId]; response: output=full; response fields unspecified
+log.describe-histogram-v1: safe-retry
+# POST /DescribeLatestLog; summary=DescribeLatestLog; source=log-service log API
+# request: body=[topicId]; response: output=full; response fields unspecified
+log.describe-latest-log: safe-retry
+# POST /DescribeLogContext; summary=DescribeLogContext; source=日志管理
+# request: body=[ContextFlow,NextLogs,PackageOffset,PrevLogs,Source,TopicId]; response: output=full; response fields unspecified
+log.describe-log-context: safe-retry
+# POST /PreviewDelimiterLog; summary=PreviewDelimiterLog; source=log-service log API
+# request: body=[delimiter,log,topicId]; response: output=full; response fields unspecified
+log.preview: safe-retry
+log.put: high-risk-retry
+# POST /SearchLogs; summary=SearchLogs; source=日志管理
+# request: body=[AccurateQuery,Context,EndTime,HighLight,Limit,MustComplete,Offset,Query,RegionTopics,Sort,StartTime,TopicId]; response: output=full; response fields unspecified
+log.search: safe-retry
+log.track: high-risk-retry
+metric-topic.create: high-risk-retry
+metric-topic.delete: high-risk-retry
+# GET /DescribeMetricTopic; summary=Describe a metric topic; source=internal operation override
+# request: query=[TopicId]; response: output=envelope; response fields unspecified
+metric-topic.describe-metric-topic: safe-retry
+# GET /DescribeMetricTopics; summary=Describe metric topics; source=internal operation override
+# request: query=[Description,Favourite,FuzzySearchKey,IsFullName,OrderByProject,PageNumber,PageSize,ProjectId,ProjectName,Region,Tags,TopicId,TopicName]; response: output=envelope; items=Topics
+metric-topic.describe-metric-topics: safe-retry
+metric-topic.modify: high-risk-retry
+processor.batch-bind-topics: high-risk-retry
+processor.bind-topic-processor: high-risk-retry
+processor.create-processor: high-risk-retry
+processor.delete-processor: high-risk-retry
+# GET /DescribeProcessor; summary=DescribeProcessor; source=数据处理器
+# request: query=[ProcessorId]; response: output=envelope; response fields unspecified
+processor.describe-processor: safe-retry
+# GET /DescribeProcessorBindings; summary=DescribeProcessorBindings; source=数据处理器
+# request: query=[PageNumber,PageSize,ProjectId]; response: output=envelope; items=Items
+processor.describe-processor-bindings: safe-retry
+# GET /DescribeProcessorByTopic; summary=DescribeProcessorByTopic; source=数据处理器
+# request: query=[TopicId]; response: output=envelope; response fields unspecified
+processor.describe-processor-by-topic: safe-retry
+# GET /DescribeProcessorFunctions; summary=DescribeProcessorFunctions; source=数据处理器
+# request: query=[ProcessorDSLType,ProcessorType]; response: output=envelope; response fields unspecified
+processor.describe-processor-functions: safe-retry
+# GET /DescribeProcessors; summary=DescribeProcessors; source=数据处理器
+# request: query=[IamProjectName,OrderByProject,PageNumber,PageSize,ProcessorDSLType,ProcessorId,ProcessorName,ProcessorStatus,ProcessorType,ProjectId,ProjectName]; response: output=envelope; items=Items
+processor.describe-processors: safe-retry
+# GET /DescribeTopicsByProcessor; summary=DescribeTopicsByProcessor; source=数据处理器
+# request: query=[PageNumber,PageSize,ProcessorId]; response: output=envelope; response fields unspecified
+processor.describe-topics-by-processor: safe-retry
+# POST /ExecProcessor; summary=ExecProcessor; source=log-service processor API
+# request: body=[DSLContent,ExecAction,LogSample,ProcessorDSLType,ProcessorType]; response: output=full; response fields unspecified
+processor.exec-processor: safe-retry
+processor.modify-processor: high-risk-retry
+processor.operate-processor: high-risk-retry
+processor.unbind-topic-processor: high-risk-retry
+project.create: high-risk-retry
+project.delete: high-risk-retry
+# GET /DescribeProject; summary=DescribeProject; source=日志项目管理
+# request: query=[ProjectId,TopicTypes]; response: output=envelope; response fields unspecified
+project.describe-project: safe-retry
+# GET /DescribeProjects; summary=DescribeProjects; source=日志项目管理
+# request: query=[Description,Favourite,FuzzySearchKey,IamProjectName,IsFullName,PageNumber,PageSize,ProjectId,ProjectName,Tags,TopicTypes]; response: output=envelope; items=Projects
+project.describe-projects: safe-retry
+project.modify: high-risk-retry
+schedule-sql-task.create: high-risk-retry
+schedule-sql-task.delete: high-risk-retry
+# GET /DescribeScheduleSqlTask; summary=DescribeScheduleSqlTask; source=定时 SQL 分析
+# request: query=[TaskId]; response: output=envelope; response fields unspecified
+schedule-sql-task.describe-schedule-sql-task: safe-retry
+# GET /DescribeScheduleSqlTasks; summary=DescribeScheduleSqlTasks; source=定时 SQL 分析
+# request: query=[IamProjectName,PageNumber,PageSize,ProjectId,ProjectName,SourceTopicName,Status,TaskId,TaskName,TopicId]; response: output=envelope; items=Tasks
+schedule-sql-task.describe-schedule-sql-tasks: safe-retry
+schedule-sql-task.modify: high-risk-retry
+shard.create: high-risk-retry
+# GET /DescribeShards; summary=DescribeShards; source=分区管理
+# request: query=[PageNumber,PageSize,TopicId]; response: output=envelope; items=Shards
+shard.describe: safe-retry
+shard.merge: high-risk-retry
+shipper.create: high-risk-retry
+shipper.delete: high-risk-retry
+# GET /DescribeShipper; summary=DescribeShipper; source=数据投递
+# request: query=[ShipperId]; response: output=envelope; response fields unspecified
+shipper.describe-shipper: safe-retry
+# GET /DescribeShippers; summary=DescribeShippers; source=数据投递
+# request: query=[IamProjectName,PageNumber,PageSize,ProjectId,ProjectName,ShipperId,ShipperName,ShipperType,TopicId,TopicName]; response: output=envelope; items=Shippers
+shipper.describe-shippers: safe-retry
+shipper.modify: high-risk-retry
+tag.add: high-risk-retry
+# POST /ListTagsForResources; summary=ListTagsForResources; source=标签管理
+# request: body=[MaxResults,NextToken,ResourceType,ResourcesIds,TagFilters]; response: output=full; response fields unspecified
+tag.list: safe-retry
+tag.remove: high-risk-retry
+tag.tag-resources: high-risk-retry
+tag.untag-resources: high-risk-retry
+topic.create: high-risk-retry
+topic.delete: high-risk-retry
+# GET /DescribeTopic; summary=DescribeTopic; source=日志主题管理
+# request: query=[TopicId]; response: output=envelope; response fields unspecified
+topic.describe-topic: safe-retry
+# GET /DescribeTopics; summary=DescribeTopics; source=日志主题管理
+# request: query=[Cursor,Description,Favourite,FuzzySearchKey,IsFullName,OrderByProject,PageNumber,PageSize,ProjectId,ProjectName,Region,Tags,TopicId,TopicName]; response: output=envelope; items=Topics
+topic.describe-topics: safe-retry
+topic.modify: high-risk-retry
+trace.create: high-risk-retry
+trace.delete: high-risk-retry
+trace.delete-scores: high-risk-retry
+# GET /DescribeTraceScores; summary=DescribeTraceScores; source=log-service server API
+# request: query=[PageNumber,PageSize,ScoreScope,SessionId,SpanIds,TopicId,TraceId]; response: output=full; items=TraceScores
+trace.describe-scores: safe-retry
+# POST /DescribeTrace; summary=DescribeTrace; source=Trace 存储
+# request: body=[TraceId,TraceInstanceId,UnionTraceInstanceIds]; response: output=full; response fields unspecified
+trace.describe-trace: safe-retry
+# GET /DescribeTraceInstance; summary=DescribeTraceInstance; source=Trace 存储
+# request: query=[TraceInstanceId]; response: output=envelope; response fields unspecified
+trace.describe-trace-instance: safe-retry
+# GET /DescribeTraceInstances; summary=DescribeTraceInstances; source=Trace 存储
+# request: query=[CsAccountChannel,IamProjectName,PageNumber,PageSize,ProjectId,ProjectName,Status,TraceInstanceId,TraceInstanceName]; response: output=envelope; items=TraceInstances
+trace.describe-trace-instances: safe-retry
+trace.modify: high-risk-retry
+trace.modify-scores: high-risk-retry
+# POST /SearchTraces; summary=SearchTraces; source=Trace 存储
+# request: body=[Query,TraceInstanceId]; response: output=full; response fields unspecified
+trace.search: safe-retry
+# POST /SearchSpans; summary=SearchSpans; source=log-service server API
+# request: body=[EndTime,Query,StartTime,TraceInstanceId]; response: output=full; response fields unspecified
+trace.search-spans: safe-retry
+
+# SavedSearch: reviewed server-source reads; write idempotency is unverified.
+log.create-saved-search: high-risk-retry
+log.delete-saved-search: high-risk-retry
+log.describe-saved-search: safe-retry
+log.describe-saved-searches: safe-retry

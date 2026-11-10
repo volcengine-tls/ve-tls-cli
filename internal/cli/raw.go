@@ -3,8 +3,6 @@ package cli
 import (
 	"errors"
 	"strings"
-
-	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 func runRaw(ctx *Context, args []string) (any, error) {
@@ -83,7 +81,7 @@ func runRaw(ctx *Context, args []string) (any, error) {
 		path = "/" + path
 	}
 
-	body, err := util.ReadMaybeFile(bodyArg)
+	body, err := ctx.readMaybeFile(bodyArg)
 	if err != nil {
 		return nil, err
 	}

@@ -51,6 +51,7 @@ func TestRawOutputModeFileReturnsEnvelope(t *testing.T) {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 	path := parseNoticePath(t, stdout.String())
+	assertFileDeliveryNotice(t, stdout.String(), path, "file_forced")
 	if path == "" {
 		t.Fatalf("missing artifact path in notice: %q", stdout.String())
 	}
@@ -78,6 +79,7 @@ func TestRawDryRunWithTraceAddsTracePathToEnvelope(t *testing.T) {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 	path := parseNoticePath(t, stdout.String())
+	assertFileDeliveryNotice(t, stdout.String(), path, "file_forced")
 	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read envelope file: %v", err)
@@ -101,14 +103,65 @@ func TestRawDryRunWithTraceAddsTracePathToEnvelope(t *testing.T) {
 
 func parseNoticePath(t *testing.T, stdout string) string {
 	t.Helper()
-	const prefix = "文件: "
-	idx := strings.LastIndex(stdout, prefix)
-	if idx < 0 {
-		t.Fatalf("missing file notice in stdout: %q", stdout)
+	if currentEdition() == cliEditionVolclogHuman {
+		for _, prefix := range []string{
+			"结果已写入文件。\n文件: ",
+			"结果过大，已写入文件。\n文件: ",
+		} {
+			if strings.HasPrefix(stdout, prefix) && strings.HasSuffix(stdout, "\n") {
+				path := strings.TrimSuffix(strings.TrimPrefix(stdout, prefix), "\n")
+				if path != "" && !strings.Contains(path, "\n") {
+					return path
+				}
+			}
+		}
+		t.Fatalf("invalid human file notice: %q", stdout)
 	}
-	path := strings.TrimSpace(stdout[idx+len(prefix):])
-	if path == "" {
-		t.Fatalf("missing file path in stdout: %q", stdout)
+	if currentEdition() != cliEditionVolclog {
+		t.Fatalf("unexpected edition %q", currentEdition())
+	}
+
+	var env map[string]any
+	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
+		t.Fatalf("invalid file delivery JSON: %v stdout=%q", err, stdout)
+	}
+	data, hasData := env["data"]
+	if env["status"] != "success" || !hasData || data != nil {
+		t.Fatalf("expected successful file delivery without result data: %#v", env)
+	}
+	artifacts, ok := env["artifacts"].([]any)
+	if !ok || len(artifacts) == 0 {
+		t.Fatalf("missing file delivery artifacts: %#v", env["artifacts"])
+	}
+	artifact, ok := artifacts[0].(map[string]any)
+	if !ok {
+		t.Fatalf("invalid first artifact: %#v", artifacts[0])
+	}
+	path, ok := artifact["path"].(string)
+	if !ok || strings.TrimSpace(path) == "" {
+		t.Fatalf("missing first artifact path: %#v", artifact)
+	}
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat delivery artifact %q: %v", path, err)
+	}
+	if size, ok := artifact["sizeBytes"].(float64); !ok || size != float64(fileInfo.Size()) {
+		t.Fatalf("artifact sizeBytes=%#v, want %d", artifact["sizeBytes"], fileInfo.Size())
+	}
+	summary, ok := env["summary"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing delivery summary: %#v", env["summary"])
+	}
+	if mode := summary["deliveryMode"]; mode != "file_forced" && mode != "file_auto" {
+		t.Fatalf("unexpected deliveryMode: %#v", mode)
+	}
+	if total, ok := summary["totalBytes"].(float64); !ok || total != float64(len(stdout)) {
+		t.Fatalf("delivery totalBytes=%#v, want stdout length %d", summary["totalBytes"], len(stdout))
+	}
+	for _, unwanted := range []string{`"request_preview"`, `"preview"`, `"omitted"`, "结果已写入文件。", "结果过大，已写入文件。", "文件: "} {
+		if strings.Contains(stdout, unwanted) {
+			t.Fatalf("file delivery contains preview or human notice %q: %q", unwanted, stdout)
+		}
 	}
 	return path
 }

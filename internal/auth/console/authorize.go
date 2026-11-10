@@ -48,6 +48,41 @@ type Authorizer interface {
 	Authorize(ctx context.Context) (code string, redirectURI string, err error)
 }
 
+type callbackErrorKind uint8
+
+const (
+	callbackOAuthError callbackErrorKind = iota + 1
+	callbackMissingCode
+	callbackStateMismatch
+)
+
+// callbackError is the typed, secret-free representation of a callback
+// validation failure. oauthCode retains the provider's raw code for internal
+// inspection, while Error only renders allowlisted OAuth codes.
+type callbackError struct {
+	kind      callbackErrorKind
+	oauthCode string
+}
+
+func (e *callbackError) Error() string {
+	if e == nil {
+		return "authorization failed"
+	}
+	switch e.kind {
+	case callbackOAuthError:
+		if _, ok := allowedOAuthErrorCodes[e.oauthCode]; ok {
+			return "authorization failed: oauth error " + e.oauthCode
+		}
+		return "authorization failed: oauth error returned by provider"
+	case callbackMissingCode:
+		return "authorization failed: missing authorization code"
+	case callbackStateMismatch:
+		return "authorization failed: state mismatch"
+	default:
+		return "authorization failed"
+	}
+}
+
 // LocalAuthorizer runs the same-device (loopback callback) authorization flow.
 //
 // The callback listener is created and bound before the redirect URI and
@@ -194,13 +229,16 @@ func (a *LocalAuthorizer) Authorize(ctx context.Context) (code string, redirectU
 
 	// 8. Validate the callback result without echoing secret material.
 	if result.Error != "" {
-		return "", "", errors.New("authorization failed: oauth error returned by provider")
+		return "", "", &callbackError{
+			kind:      callbackOAuthError,
+			oauthCode: result.Error,
+		}
 	}
 	if strings.TrimSpace(result.Code) == "" {
-		return "", "", errors.New("authorization failed: missing authorization code")
+		return "", "", &callbackError{kind: callbackMissingCode}
 	}
 	if result.State != a.state {
-		return "", "", errors.New("authorization failed: state mismatch")
+		return "", "", &callbackError{kind: callbackStateMismatch}
 	}
 
 	code = result.Code

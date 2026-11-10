@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
-	"github.com/volcengine-tls/ve-tls-cli/internal/util"
 )
 
 func runTopic(ctx *Context, args []string) (any, error) {
@@ -36,7 +35,7 @@ func runTopic(ctx *Context, args []string) (any, error) {
 
 func topicList(ctx *Context, args []string) (any, error) {
 	args, all := extractBoolFlag(args, "--all")
-	query, err := parseTopicListQuery(args, true)
+	query, err := parseTopicListQuery(args, true, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -49,8 +48,7 @@ func topicList(ctx *Context, args []string) (any, error) {
 			},
 			PageAll: true,
 			LegacyPageAll: &legacyPageAllPolicy{
-				ListField:  "Topics",
-				ForceTotal: true,
+				ListField: "Topics",
 			},
 		})
 	}
@@ -279,7 +277,7 @@ func topicCreate(ctx *Context, args []string) (any, error) {
 	}
 	var req map[string]any
 	if strings.TrimSpace(requestArg) != "" {
-		m, err := util.ReadJSONObjectMaybeFile(requestArg)
+		m, err := ctx.readJSONObjectMaybeFile(requestArg)
 		if err != nil {
 			return nil, err
 		}
@@ -334,14 +332,14 @@ func topicCreate(ctx *Context, args []string) (any, error) {
 		req["TimeFormat"] = timeFormat
 	}
 	if strings.TrimSpace(encryptArg) != "" {
-		m, err := util.ReadJSONObjectMaybeFile(encryptArg)
+		m, err := ctx.readJSONObjectMaybeFile(encryptArg)
 		if err != nil {
 			return nil, err
 		}
 		req["EncryptConf"] = m
 	}
 	if strings.TrimSpace(tagsArg) != "" {
-		a, err := util.ReadJSONArrayMaybeFile(tagsArg)
+		a, err := ctx.readJSONArrayMaybeFile(tagsArg)
 		if err != nil {
 			return nil, err
 		}
@@ -540,7 +538,7 @@ func topicModify(ctx *Context, args []string) (any, error) {
 
 	var req map[string]any
 	if strings.TrimSpace(requestArg) != "" {
-		m, err := util.ReadJSONObjectMaybeFile(requestArg)
+		m, err := ctx.readJSONObjectMaybeFile(requestArg)
 		if err != nil {
 			return nil, err
 		}
@@ -593,7 +591,7 @@ func topicModify(ctx *Context, args []string) (any, error) {
 		req["TimeFormat"] = timeFormat
 	}
 	if strings.TrimSpace(encryptArg) != "" {
-		m, err := util.ReadJSONObjectMaybeFile(encryptArg)
+		m, err := ctx.readJSONObjectMaybeFile(encryptArg)
 		if err != nil {
 			return nil, err
 		}

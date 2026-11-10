@@ -38,7 +38,7 @@ func newContextExecutionTransport(raw rawExecutionContext) execution.Transport {
 
 func (t contextExecutionTransport) Do(ctx context.Context, request execution.Request) (execution.Response, error) {
 	if isNilRawExecutionContext(t.raw) {
-		return execution.Response{}, errors.New("nil raw execution context")
+		return execution.Response{}, &execution.Failure{Outcome: execution.OutcomeNotSent, Stage: "resolve_client", Cause: errors.New("nil raw execution context")}
 	}
 	var (
 		response tlsapi.Response
@@ -46,7 +46,7 @@ func (t contextExecutionTransport) Do(ctx context.Context, request execution.Req
 	)
 	path, pathErr := execution.AppendMultiQuery(request.Path, request.QueryMulti)
 	if pathErr != nil {
-		return execution.Response{}, pathErr
+		return execution.Response{}, &execution.Failure{Kind: "validation", Code: "InvalidRequest", Outcome: execution.OutcomeNotSent, Stage: "build_request", Message: "failed to build request query", Cause: pathErr}
 	}
 	if contextual, ok := t.raw.(contextualRawExecutionContext); ok {
 		// Context.doRaw delegates to runtime.Transport, which already owns the

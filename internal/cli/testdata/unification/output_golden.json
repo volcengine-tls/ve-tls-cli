@@ -43,9 +43,18 @@
       "status": "success",
       "summary": {
         "deliveryMode": "file_forced",
+        "deliveryOutcome": "success",
         "dryRun": true,
         "itemCount": 0,
         "outputMode": "file",
+        "remoteOutcome": "not_sent",
+        "target": {
+          "authMode": "ak",
+          "credentialSource": "environment",
+          "endpoint": "https://tls-output-baseline.invalid",
+          "profile": "default",
+          "region": "cn-output-baseline"
+        },
         "totalBytes": "\u003cFILE_BYTES\u003e"
       }
     },
@@ -79,17 +88,30 @@
     "requestId": "req-output-baseline-page-2",
     "status": "success",
     "summary": {
+      "completeness": {
+        "complete": true,
+        "itemCount": 3,
+        "pageCount": 2,
+        "resumable": false,
+        "stopReason": "total_reached"
+      },
       "deliveryMode": "stdout",
+      "deliveryOutcome": "success",
       "dryRun": false,
       "itemCount": 3,
       "outputMode": "stdout",
       "pagination": {
+        "complete": true,
+        "itemCount": 3,
         "merged": true,
         "mode": "page_all",
         "pageCount": 2,
-        "pageSize": 2
+        "pageSize": 2,
+        "resumable": false,
+        "stopReason": "total_reached"
       },
-      "totalBytes": 599
+      "remoteOutcome": "success",
+      "totalBytes": 933
     }
   },
   "run_failed_invalid_input": {
@@ -112,9 +134,11 @@
       "status": "failed",
       "summary": {
         "deliveryMode": "stdout",
+        "deliveryOutcome": "success",
         "dryRun": false,
         "itemCount": 0,
         "outputMode": "stdout",
+        "remoteOutcome": "not_sent",
         "totalBytes": 0
       }
     }
@@ -169,10 +193,19 @@
     "status": "success",
     "summary": {
       "deliveryMode": "stdout",
+      "deliveryOutcome": "success",
       "dryRun": true,
       "itemCount": 0,
       "outputMode": "stdout",
-      "totalBytes": 1110
+      "remoteOutcome": "not_sent",
+      "target": {
+        "authMode": "ak",
+        "credentialSource": "environment",
+        "endpoint": "https://tls-output-baseline.invalid",
+        "profile": "default",
+        "region": "cn-output-baseline"
+      },
+      "totalBytes": 1387
     }
   },
   "table_eligibility_matrix": {

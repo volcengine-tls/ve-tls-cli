@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"context"
+	"errors"
 	"os"
 	"strings"
 	"time"
@@ -64,6 +64,7 @@ func collectDoctorRuntimeState(ctx *Context) (*doctorRuntimeState, error) {
 	}
 
 	profileName := strings.TrimSpace(ctx.Profile)
+	explicitProfile := profileName != ""
 	profileSource := "flag"
 	if profileName == "" {
 		profileName = strings.TrimSpace(cfg.CurrentProfile)
@@ -76,12 +77,17 @@ func collectDoctorRuntimeState(ctx *Context) (*doctorRuntimeState, error) {
 
 	envRegion := strings.TrimSpace(os.Getenv("VOLCENGINE_REGION"))
 	envEndpoint := strings.TrimSpace(os.Getenv("VOLCENGINE_ENDPOINT"))
+	if explicitProfile {
+		envRegion, envEndpoint = "", ""
+	}
 	runtimeRegion := strings.TrimSpace(ctx.RuntimeRegion)
 	runtimeEndpoint := strings.TrimSpace(ctx.RuntimeEndpoint)
 
 	var profile config.Profile
 	if resolved, ok := cfg.GetProfile(profileName); ok {
 		profile = resolved
+	} else if explicitProfile {
+		return nil, errors.New("profile not found: " + profileName)
 	}
 	mode, _ := config.NormalizeAuthMode(profile.Mode)
 	isDynamic := config.IsProviderAuthMode(mode)
@@ -97,14 +103,14 @@ func collectDoctorRuntimeState(ctx *Context) (*doctorRuntimeState, error) {
 		credStatus = config.CredentialStatus{Mode: mode, Source: "profile"}
 		if reader, readerErr := dynamicAuthStatusReader(mode, cfgPath, profileName, cfg, ctx.authFactory); readerErr == nil && reader != nil {
 			dynamicReader = reader
-			if status, statusErr := reader.Status(context.Background(), profileName); statusErr == nil {
+			if status, statusErr := reader.Status(ctx.ExecutionContext(), profileName); statusErr == nil {
 				dynamicStatus = status
 				credStatus.Present = status.Present
 			}
 		}
 	} else {
 		credStatus = config.ResolveProfileCredentialStatus(cfg, profile)
-		if envCredStatus := config.ResolveEnvCredentialStatus(); envCredStatus.Present {
+		if envCredStatus := config.ResolveEnvCredentialStatus(); envCredStatus.Present && !explicitProfile {
 			credStatus = envCredStatus
 			staticUsesEnvIdentity = true
 		}
