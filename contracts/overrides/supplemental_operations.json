@@ -68,8 +68,6 @@
             }
           },
           "required": [
-            "BeginRegex",
-            "LogRegex",
             "LogSample"
           ]
         }
@@ -641,7 +639,9 @@
           "required": [
             "DSLContent",
             "ExecAction",
-            "LogSample"
+            "LogSample",
+            "ProcessorType",
+            "ProcessorDSLType"
           ]
         }
       },
@@ -2144,7 +2144,6 @@
           },
           "required": [
             "AppName",
-            "AppType",
             "TemplateId"
           ],
           "type": "object"
@@ -2680,7 +2679,6 @@
           },
           "required": [
             "LogAppName",
-            "LogAppType",
             "ProjectId"
           ],
           "type": "object"
@@ -2827,8 +2825,7 @@
             }
           },
           "required": [
-            "LogAppId",
-            "TemplateId"
+            "LogAppId"
           ],
           "type": "object"
         }
@@ -3019,9 +3016,6 @@
               "type": "string"
             }
           },
-          "required": [
-            "LogAppType"
-          ],
           "type": "object"
         }
       },
@@ -3078,10 +3072,7 @@
             }
           },
           "required": [
-            "LogAppId",
-            "SessionId",
-            "StartTime",
-            "EndTime"
+            "LogAppId"
           ],
           "type": "object"
         }
@@ -3220,8 +3211,7 @@
             }
           },
           "required": [
-            "LogAppId",
-            "TraceId"
+            "LogAppId"
           ],
           "type": "object"
         }
@@ -5147,8 +5137,7 @@
           },
           "required": [
             "ResourceType",
-            "ResourcesList",
-            "Tags"
+            "ResourcesList"
           ],
           "type": "object"
         }
@@ -5304,8 +5293,7 @@
           },
           "required": [
             "ResourceType",
-            "ResourcesIds",
-            "Tags"
+            "ResourcesIds"
           ],
           "type": "object"
         }
@@ -5475,6 +5463,2465 @@
       "risk": {
         "level": "high",
         "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "log.create-saved-search",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "CreateSavedSearch",
+      "resource": "saved-search",
+      "verb": "create",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/CreateSavedSearch",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "TopicID": {
+              "type": "string",
+              "description": "TLS topic ID. The JSON body key is TopicID, with an uppercase ID.",
+              "minLength": 1
+            },
+            "DisplayName": {
+              "type": "string",
+              "description": "Saved query name, validated by the service; internal reserved prefixes are not allowed.",
+              "minLength": 3,
+              "maxLength": 64
+            },
+            "SearchQuery": {
+              "type": "string",
+              "description": "Query or SQL expression to save; it is stored without executing the query.",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "TopicID",
+            "DisplayName",
+            "SearchQuery"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "Create a saved query for a topic",
+        "source": "log-service saved-search API",
+        "usage_constraints": "Server-source contract; not yet covered by the public OpenAPI reference. Availability and IAM permissions depend on the deployed service. Saved queries are shared metadata scoped to a Topic, not per-user favorites. Body keys are case-sensitive: TopicID, DisplayName, SearchQuery. The default per-topic limit is 10 and may be configured by the service. The response contains SavedSearchID. No idempotency token is supported. Do not retry automatically after an ambiguous failure; use log.describe-saved-searches with query.TopicId to reconcile DisplayName and SearchQuery first. SavedSearchAlreadyExist is reported as HTTP 409."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "log.delete-saved-search",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "DeleteSavedSearch",
+      "resource": "saved-search",
+      "verb": "delete",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "DELETE",
+        "path": "/DeleteSavedSearch",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "SavedSearchID": {
+              "type": "string",
+              "description": "Saved query ID returned by CreateSavedSearch, for example savedsearch-1692687047134.",
+              "pattern": "^savedsearch-[0-9]{13}$",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "SavedSearchID"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "Delete a saved query",
+        "source": "log-service saved-search API",
+        "usage_constraints": "Server-source contract; not yet covered by the public OpenAPI reference. Availability and IAM permissions depend on the deployed service. Deleting a saved query affects the shared Topic resource. Send SavedSearchID in the JSON body, not the query string. The server resolves its Topic and checks Topic IAM permissions. A repeated delete returns HTTP 400 SavedSearchNotExist rather than success. Do not retry automatically after an ambiguous failure; use log.describe-saved-search to reconcile whether the resource still exists."
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "log.describe-saved-search",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "DescribeSavedSearch",
+      "resource": "saved-search",
+      "verb": "describe",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeSavedSearch",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "SavedSearchID": {
+              "type": "string",
+              "description": "Saved query ID returned by CreateSavedSearch, for example savedsearch-1692687047134.",
+              "pattern": "^savedsearch-[0-9]{13}$",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "SavedSearchID"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "Describe a saved query",
+        "source": "log-service saved-search API",
+        "usage_constraints": "Server-source contract; not yet covered by the public OpenAPI reference. Availability and IAM permissions depend on the deployed service. Reads a saved query shared by its Topic under Topic IAM permissions. Send query.SavedSearchID with an uppercase ID. The response contains SavedSearch with SavedSearchID, TopicID, DisplayName, and SearchQuery. A missing resource returns HTTP 400 SavedSearchNotExist. This operation has no pagination; --page-all is not supported."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "log.describe-saved-searches",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "DescribeSavedSearches",
+      "resource": "saved-search",
+      "verb": "describe",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "GET",
+        "path": "/DescribeSavedSearches",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "TopicId": {
+              "type": "string",
+              "description": "TLS topic ID. The query parameter is TopicId, unlike the create body field TopicID.",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "TopicId"
+          ]
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "List saved queries for a topic",
+        "source": "log-service saved-search API",
+        "usage_constraints": "Server-source contract; not yet covered by the public OpenAPI reference. Availability and IAM permissions depend on the deployed service. Returns all saved queries shared by the Topic under Topic IAM permissions. Send query.TopicId; the response contains SavedSearches whose items use TopicID, SavedSearchID, DisplayName, and SearchQuery. There is no pagination or page-size parameter; --page-all is not supported. The default per-topic limit is 10 and may be configured by the service."
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry"
+      }
+    },
+    {
+      "id": "alarm.modify-alarm-content-template",
+      "group": "alarm",
+      "group_title": "告警管理",
+      "action": "ModifyAlarmContentTemplate",
+      "resource": "alarm-content-template",
+      "verb": "modify",
+      "family": "alarm",
+      "visibility": "public",
+      "wire": {
+        "method": "PUT",
+        "path": "/ModifyAlarmContentTemplate",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "AlarmContentTemplateId": {
+              "description": "告警通知模版ID",
+              "type": "string"
+            },
+            "AlarmContentTemplateName": {
+              "description": "告警通知内容模版名称。\n- 同一个账户下，通知组名称不可重复。\n- 只能包括小写字母、数字、中文和短划线（-）。\n- 必须以小写字母、中文或者数字开头和结尾。\n- 长度为3-63字符。",
+              "type": "string"
+            },
+            "DingTalk": {
+              "description": "钉钉通知内容模版",
+              "properties": {
+                "Content": {
+                  "description": "内容",
+                  "type": "string"
+                },
+                "Locale": {
+                  "description": "非定制内容语言的语言代码，支持中文(zh-CN)/英文(en-US)",
+                  "type": "string"
+                },
+                "Title": {
+                  "description": "标题",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "Email": {
+              "description": "email通知内容模版",
+              "properties": {
+                "Content": {
+                  "description": "邮件内容",
+                  "type": "string"
+                },
+                "Locale": {
+                  "description": "非定制内容语言的语言代码，支持中文(zh-CN)/英文(en-US)",
+                  "type": "string"
+                },
+                "Subject": {
+                  "description": "邮件主题",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "Lark": {
+              "description": "飞书通知内容模版",
+              "properties": {
+                "Content": {
+                  "description": "内容",
+                  "type": "string"
+                },
+                "Locale": {
+                  "description": "非定制内容语言的语言代码，支持中文(zh-CN)/英文(en-US)",
+                  "type": "string"
+                },
+                "Title": {
+                  "description": "标题",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "NeedValidContent": {
+              "description": "是否需要校验内容模版",
+              "type": "boolean"
+            },
+            "Sms": {
+              "description": "短信通知内容模版",
+              "properties": {
+                "Content": {
+                  "description": "短信通知内容",
+                  "type": "string"
+                },
+                "Locale": {
+                  "description": "非定制内容语言的语言代码，支持中文(zh-CN)/英文(en-US)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "Vms": {
+              "description": "语音通知内容模版",
+              "properties": {
+                "Content": {
+                  "description": "语音通知内容",
+                  "type": "string"
+                },
+                "Locale": {
+                  "description": "非定制内容语言的语言代码，支持中文(zh-CN)/英文(en-US)",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "WeChat": {
+              "description": "企业微信通知内容模版",
+              "properties": {
+                "Content": {
+                  "description": "内容",
+                  "type": "string"
+                },
+                "Locale": {
+                  "description": "非定制内容语言的语言代码，支持中文(zh-CN)/英文(en-US)",
+                  "type": "string"
+                },
+                "Title": {
+                  "description": "标题",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "Webhook": {
+              "description": "webhook告警通知模版",
+              "properties": {
+                "Content": {
+                  "description": "自定义通用Webhook请求body",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "AlarmContentTemplateId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ModifyAlarmContentTemplate",
+        "source": "告警管理",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/1317299",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
+      }
+    },
+    {
+      "id": "collector.apply-rule-to-host-groups",
+      "group": "collector",
+      "group_title": "采集配置管理",
+      "action": "ApplyRuleToHostGroups",
+      "resource": "apply-rule-to-host-groups",
+      "verb": "modify",
+      "family": "collector",
+      "visibility": "public",
+      "wire": {
+        "method": "PUT",
+        "path": "/ApplyRuleToHostGroups",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "HostGroupIds": {
+              "description": "机器组的ID列表。",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "RuleId": {
+              "description": "采集配置的ID。",
+              "type": "string"
+            }
+          },
+          "required": [
+            "RuleId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ApplyRuleToHostGroups",
+        "source": "采集配置管理",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/112204",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
+      }
+    },
+    {
+      "id": "collector.delete-rule-from-host-groups",
+      "group": "collector",
+      "group_title": "采集配置管理",
+      "action": "DeleteRuleFromHostGroups",
+      "resource": "rule-from-host-groups",
+      "verb": "delete",
+      "family": "collector",
+      "visibility": "public",
+      "wire": {
+        "method": "PUT",
+        "path": "/DeleteRuleFromHostGroups",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "HostGroupIds": {
+              "description": "机器组的ID列表。",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "RuleId": {
+              "description": "采集配置的ID。",
+              "type": "string"
+            }
+          },
+          "required": [
+            "RuleId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DeleteRuleFromHostGroups",
+        "source": "采集配置管理",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/112205",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
+      }
+    },
+    {
+      "id": "consumer-group.consume",
+      "group": "consumer-group",
+      "group_title": "消费组管理",
+      "action": "ConsumerHeartbeat",
+      "resource": "r-heartbeat",
+      "verb": "consume",
+      "family": "consumer-group",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/ConsumerHeartbeat",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "ConsumerGroupName": {
+              "description": "ConsumerGroupName 名称，在一个 topic 下唯一；命名规则同 CreateConsumerGroupReq.ConsumerGroupName。",
+              "type": "string"
+            },
+            "ConsumerName": {
+              "description": "ConsumerName Consumer名称，在一个consumerGroup中唯一",
+              "type": "string"
+            },
+            "ProjectID": {
+              "description": "ProjectID ConsumerGroup所绑定ProjectID",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ConsumerGroupName",
+            "ProjectID"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ConsumerHeartbeat",
+        "source": "消费组管理",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/1153141",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
+      }
+    },
+    {
+      "id": "consumer-group.create",
+      "group": "consumer-group",
+      "group_title": "消费组管理",
+      "action": "CreateConsumerGroup",
+      "resource": "consumer-group",
+      "verb": "create",
+      "family": "consumer-group",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/CreateConsumerGroup",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "ConsumerGroupName": {
+              "description": "ConsumerGroupName 名称，在一个 topic 下唯一；命名规则：\n- 正则：^[a-zA-Z0-9_\\\\p{Han}][a-zA-Z-_0-9\\\\p{Han}]{1,62}[a-zA-Z0-9_\\\\p{Han}]$\n- 长度：3~64；中间允许 '-'、'_'；首尾不允许 '-'\n- 不允许以保留前缀开头（如 tls_、tos_、tls-service-log_ 等）",
+              "type": "string"
+            },
+            "HeartbeatTTL": {
+              "description": "TTL ConsumerGroup的心跳存活时间",
+              "type": "integer"
+            },
+            "OrderedConsume": {
+              "description": "OrderedConsume 消费是否严格保序，与shard分裂相关",
+              "type": "boolean"
+            },
+            "ProjectID": {
+              "description": "ProjectID ConsumerGroup所绑定ProjectID",
+              "type": "string"
+            },
+            "TopicIDList": {
+              "description": "TopicID ConsumerGroup所要消费的TopicID",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "ConsumerGroupName",
+            "HeartbeatTTL",
+            "ProjectID",
+            "TopicIDList"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "CreateConsumerGroup",
+        "source": "消费组管理",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/1153137",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
+      }
+    },
+    {
+      "id": "consumer-group.describe-check-point",
+      "group": "consumer-group",
+      "group_title": "消费组管理",
+      "action": "DescribeCheckPoint",
+      "resource": "check-point",
+      "verb": "describe",
+      "family": "consumer-group",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/DescribeCheckPoint",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "ConsumerGroupName": {
+              "description": "ConsumerGroupName 名称，在一个 topic 下唯一；命名规则：\n- 正则：^[a-zA-Z0-9_\\\\p{Han}][a-zA-Z-_0-9\\\\p{Han}]{1,62}[a-zA-Z0-9_\\\\p{Han}]$\n- 长度：3~64；中间允许 '-'、'_'；首尾不允许 '-'\n- 不允许以保留前缀开头（如 tls_、tos_、tls-service-log_ 等）",
+              "type": "string"
+            },
+            "ProjectID": {
+              "description": "ProjectID consumerGroup所绑定的projectID",
+              "type": "string"
+            },
+            "ShardID": {
+              "description": "ShardID 需要获取checkpoint的shardID",
+              "type": "integer"
+            },
+            "TopicID": {
+              "description": "TopicID ConsumerGroup所绑定topicID",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ConsumerGroupName"
+          ],
+          "type": "object"
+        },
+        "query": {
+          "additionalProperties": false,
+          "properties": {
+            "ProjectId": {
+              "description": "项目ID。必填。",
+              "type": "string"
+            },
+            "ShardId": {
+              "description": "分区ID。必填，非负整数（从0开始）。",
+              "type": "string"
+            },
+            "TopicId": {
+              "description": "日志主题ID。必填。",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ProjectId",
+            "ShardId",
+            "TopicId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeCheckPoint",
+        "source": "消费组管理",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/1153142",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
+      }
+    },
+    {
+      "id": "consumer-group.modify-checkpoint",
+      "group": "consumer-group",
+      "group_title": "消费组管理",
+      "action": "ModifyCheckpoint",
+      "resource": "checkpoint",
+      "verb": "modify",
+      "family": "consumer-group",
+      "visibility": "public",
+      "wire": {
+        "method": "PUT",
+        "path": "/ModifyCheckpoint",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "Checkpoint": {
+              "description": "Checkpoint 想要设置的checkpoint",
+              "type": "string"
+            },
+            "ConsumerGroupName": {
+              "description": "ConsumerGroupName 名称，在一个 topic 下唯一；命名规则同 CreateConsumerGroupReq.ConsumerGroupName。",
+              "type": "string"
+            },
+            "ProjectID": {
+              "description": "ProjectID consumerGroup所绑定的projectID",
+              "type": "string"
+            },
+            "ShardID": {
+              "description": "ShardID 需要获取checkpoint的shardID",
+              "type": "integer"
+            },
+            "TopicID": {
+              "description": "TopicID ConsumerGroup所绑定topicID",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ConsumerGroupName",
+            "ProjectID",
+            "ShardID",
+            "TopicID"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ModifyCheckpoint",
+        "source": "消费组管理",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/1153143",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
+      }
+    },
+    {
+      "id": "consumer-group.reset",
+      "group": "consumer-group",
+      "group_title": "消费组管理",
+      "action": "ResetCheckpoint",
+      "resource": "checkpoint",
+      "verb": "reset",
+      "family": "consumer-group",
+      "visibility": "public",
+      "wire": {
+        "method": "PUT",
+        "path": "/ResetCheckPoint",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "ConsumerGroupName": {
+              "description": "ConsumerGroupName 名称，在一个 topic 下唯一；命名规则同 CreateConsumerGroupReq.ConsumerGroupName。",
+              "type": "string"
+            },
+            "Position": {
+              "description": "Checkpoint 想要设置的checkpoint",
+              "type": "string"
+            },
+            "ProjectID": {
+              "description": "ProjectID consumerGroup所绑定的projectID",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ConsumerGroupName",
+            "ProjectID"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ResetCheckpoint",
+        "source": "消费组管理",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/1154329",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
+      }
+    },
+    {
+      "id": "etl.create",
+      "group": "etl",
+      "group_title": "数据加工",
+      "action": "CreateETLTask",
+      "resource": "e-t-l-task",
+      "verb": "create",
+      "family": "etl",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/CreateETLTask",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "DSLType": {
+              "description": "DSL类型",
+              "enum": [
+                "NORMAL"
+              ],
+              "type": "string"
+            },
+            "Description": {
+              "description": "Description 加工任务描述信息。选填；限制：\n- 长度：<=64（按 rune 计数）\n- 禁止字符：< > ' \" \\\\\n- 禁止：emoji",
+              "type": "string"
+            },
+            "DistributeField": {
+              "description": "当任务类型为Distribute时，必填，指定根据该字段进行数据分发",
+              "type": "string"
+            },
+            "DistributeFieldType": {
+              "description": "当任务类型为Distribute时，必填，指定分发字段的类型",
+              "enum": [
+                "tag",
+                "log"
+              ],
+              "type": "string"
+            },
+            "DistributeLogs": {
+              "description": "指定分发的字段，默认分发所有字段",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "Enable": {
+              "description": "任务运行状态,1: 启动，0: 关闭",
+              "type": "boolean"
+            },
+            "FilterExpr": {
+              "description": "过滤表达式，仅对Distribute任务生效，默认不过滤",
+              "type": "string"
+            },
+            "FromTime": {
+              "description": "日志加工数据范围的开始时间",
+              "type": "integer"
+            },
+            "Name": {
+              "description": "TaskName 任务名称。必填；命名规则：\n- 正则：^[a-zA-Z0-9_\\\\p{Han}][a-zA-Z-_0-9\\\\p{Han}]{1,62}[a-zA-Z0-9_\\\\p{Han}]$\n- 长度：3~64；中间允许 '-'、'_'；首尾不允许 '-'\n- 不允许以保留前缀开头（如 tls_、tos_、tls-service-log_ 等）",
+              "type": "string"
+            },
+            "RoleTrn": {
+              "description": "自定义角色\nServiceTrn 与 RoleTrn 互斥（由 rest.CheckCrossTrn 校验）。",
+              "type": "string"
+            },
+            "Script": {
+              "description": "加工脚本",
+              "type": "string"
+            },
+            "ServiceTrn": {
+              "description": "服务信任角色\nServiceTrn 与 RoleTrn 互斥（由 rest.CheckCrossTrn 校验）。",
+              "type": "string"
+            },
+            "SourceTopicId": {
+              "description": "加工的原始topic id",
+              "type": "string"
+            },
+            "TargetResources": {
+              "description": "目标输出的topic",
+              "items": {
+                "properties": {
+                  "Alias": {
+                    "type": "string"
+                  },
+                  "Endpoint": {
+                    "type": "string"
+                  },
+                  "ProxyPoint": {
+                    "type": "string"
+                  },
+                  "Region": {
+                    "type": "string"
+                  },
+                  "RoleTrn": {
+                    "type": "string"
+                  },
+                  "ServiceTrn": {
+                    "type": "string"
+                  },
+                  "TopicId": {
+                    "description": "别名",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "Alias",
+                  "Region",
+                  "TopicId"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "TaskType": {
+              "description": "任务类型",
+              "enum": [
+                "Resident",
+                "Distribute",
+                "Reflux"
+              ],
+              "type": "string"
+            },
+            "ToTime": {
+              "description": "日志加工数据范围的结束时间",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "DSLType",
+            "Name",
+            "SourceTopicId",
+            "TargetResources",
+            "TaskType"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "CreateETLTask",
+        "source": "数据加工",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/1333727",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
+      }
+    },
+    {
+      "id": "etl.modify-e-t-l-task-status",
+      "group": "etl",
+      "group_title": "数据加工",
+      "action": "ModifyETLTaskStatus",
+      "resource": "e-t-l-task-status",
+      "verb": "modify",
+      "family": "etl",
+      "visibility": "public",
+      "wire": {
+        "method": "PUT",
+        "path": "/ModifyETLTaskStatus",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "Enable": {
+              "description": "任务运行状态",
+              "type": "boolean"
+            },
+            "TaskId": {
+              "description": "任务id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "TaskId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ModifyETLTaskStatus",
+        "source": "数据加工",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/1333735",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
+      }
+    },
+    {
+      "id": "host-group.modify-host-groups-auto-update",
+      "group": "host-group",
+      "group_title": "机器组管理",
+      "action": "ModifyHostGroupsAutoUpdate",
+      "resource": "host-groups-auto-update",
+      "verb": "modify",
+      "family": "host-group",
+      "visibility": "public",
+      "wire": {
+        "method": "PUT",
+        "path": "/ModifyHostGroupsAutoUpdate",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "AutoUpdate": {
+              "description": "是否支持自动更新",
+              "type": "boolean"
+            },
+            "HostGroupIds": {
+              "description": "机器组Id列表。",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "UpdateEndTime": {
+              "description": "升级结束时间",
+              "type": "string"
+            },
+            "UpdateStartTime": {
+              "description": "升级开始时间",
+              "type": "string"
+            }
+          },
+          "required": [
+            "HostGroupIds"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ModifyHostGroupsAutoUpdate",
+        "source": "机器组管理",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/130260",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
+      }
+    },
+    {
+      "id": "import.modify",
+      "group": "import",
+      "group_title": "数据导入",
+      "action": "ModifyImportTask",
+      "resource": "import-task",
+      "verb": "modify",
+      "family": "import",
+      "visibility": "public",
+      "wire": {
+        "method": "PUT",
+        "path": "/ModifyImportTask",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "Description": {
+              "description": "Description 任务描述。选填；限制：\n- 长度：<=64（按 rune 计数）\n- 禁止字符：< > ' \" \\\\\n- 禁止：emoji",
+              "type": "string"
+            },
+            "ImportSourceInfo": {
+              "description": "ImportSourceInfo 导入源端信息。必填；只能提供与 SourceType 对应的一种源信息。",
+              "properties": {
+                "EsSourceInfo": {
+                  "description": "EsSourceInfo ES 源信息。SourceType=es 时必填；Endpoint 需为合法 URL；QueryString 为空时默认使用 \"*\"。",
+                  "properties": {
+                    "endpoint": {
+                      "type": "string"
+                    },
+                    "import_mode": {
+                      "type": "string"
+                    },
+                    "index": {
+                      "type": "string"
+                    },
+                    "log_time_config": {
+                      "properties": {
+                        "log_time_field": {
+                          "type": "string"
+                        },
+                        "log_time_format": {
+                          "type": "string"
+                        },
+                        "log_time_zone": {
+                          "type": "string"
+                        },
+                        "query_end_time": {
+                          "type": "integer"
+                        },
+                        "query_start_time": {
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "max_import_time_delay_second": {
+                      "type": "integer"
+                    },
+                    "password": {
+                      "type": "string"
+                    },
+                    "query_string": {
+                      "type": "string"
+                    },
+                    "username": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "KafkaSourceInfo": {
+                  "description": "KafkaSourceInfo Kafka 源信息。SourceType=kafka 时必填。",
+                  "properties": {
+                    "encode": {
+                      "type": "string"
+                    },
+                    "group": {
+                      "type": "string"
+                    },
+                    "host": {
+                      "type": "string"
+                    },
+                    "initial_offset": {
+                      "type": "integer"
+                    },
+                    "instance_id": {
+                      "type": "string"
+                    },
+                    "is_need_auth": {
+                      "type": "boolean"
+                    },
+                    "mechanism": {
+                      "type": "string"
+                    },
+                    "password": {
+                      "type": "string"
+                    },
+                    "protocol": {
+                      "type": "string"
+                    },
+                    "time_source_default": {
+                      "type": "integer"
+                    },
+                    "topic": {
+                      "type": "string"
+                    },
+                    "username": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "TosSourceInfo": {
+                  "description": "TosSourceInfo TOS 源信息。SourceType=tos 时必填；压缩类型需为服务端支持的集合（none/snappy/lz4/gzip/tar.gz 等）。",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "compress_type": {
+                      "type": "string"
+                    },
+                    "import_archived": {
+                      "type": "boolean"
+                    },
+                    "prefix": {
+                      "type": "string"
+                    },
+                    "region": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "ProjectID": {
+              "description": "ProjectID 日志项目 ID。通常由服务端从上下文获取/校验；如通过请求体传入需为合法 UUID。",
+              "type": "string"
+            },
+            "SourceType": {
+              "description": "SourceType 导入源端类型。必填；需与 ImportSourceInfo 中提供的具体源信息匹配。\n取值示例：tos / es / kafka（以服务端 consts 定义为准）。",
+              "type": "string"
+            },
+            "Status": {
+              "description": "Status 任务状态。必填；取值含义：导入中-0、导入完成-1、导入异常-2、停止中-3、已停止-4、重启中-5。",
+              "type": "integer"
+            },
+            "TargetInfo": {
+              "description": "TargetInfo 输出端信息。必填；会按 TargetInfo 校验规则检查（部分规则受 ImportArchived 影响）。",
+              "properties": {
+                "ExtractRule": {
+                  "description": "ExtractRule 导入提取规则",
+                  "properties": {
+                    "BeginRegex": {
+                      "description": "第一行日志需要匹配的regex;\\n当且仅当采集的日志类型为multiline_log时有效;\\n必须是合法的正则表达式;",
+                      "type": "string"
+                    },
+                    "Delimiter": {
+                      "description": "分隔符;\\n当且仅当采集的日志类型为delimiter_log时有效",
+                      "type": "string"
+                    },
+                    "EnableNanosecond": {
+                      "description": "是否启用时间纳秒精度。 开启后解析日志时间时会解析并上报纳秒级时间",
+                      "type": "boolean"
+                    },
+                    "FilterKeyRegex": {
+                      "description": "过滤规则列表。\n- 当采集的日志类型为minimalist_log或multiline_log时, 最多能够配置1条过滤规则，并且过滤字段的名字key必须为__content__。\n- 当采集的日志类型为delimiter_log、json_log或fullregex_log时, 最多能够配置5条过滤规则，并且过滤字段的名字key不能重复、不能为空，命名规则同「索引配置」的key名称。过滤字段的日志内容需要匹配的regex必须是合法的正则表达式，并且长度限制是256个字符。",
+                      "items": {
+                        "properties": {
+                          "Key": {
+                            "description": "过滤字段的名字key。",
+                            "type": "string"
+                          },
+                          "Regex": {
+                            "description": "过滤字段的日志内容需要匹配的regex。",
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "Keys": {
+                      "description": "用户自定义的每个字段的名字key列表;当且仅当采集的日志类型为delimiter_log或fullregex_log时有效。\n- 最多能够配置100个名字key。\n- 命名规则同「索引配置」的key名称。\n- 当采集的日志类型为delimiter_log时, 不能配置非空、重复的名字key，不能全部配置为空的名字key。\n- 当采集的日志类型为fullregex_log时，不能配置重复的名字key， 不能配置空的名字key。",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "LogRegex": {
+                      "description": "整条日志需要匹配的regex;当且仅当采集的日志类型为fullregex_log时有效;必须是合法的正则表达式。",
+                      "type": "string"
+                    },
+                    "LogTemplate": {
+                      "description": "根据日志模板自动提取日志内容。",
+                      "properties": {
+                        "Format": {
+                          "description": "日志模板的格式。",
+                          "type": "string"
+                        },
+                        "Type": {
+                          "description": "日志模板的类型。\n- Nginx：Nginx类型的日志模板；",
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Quote": {
+                      "description": "引用符;当且仅当采集的日志类型为delimiter_log时有效",
+                      "type": "string"
+                    },
+                    "SkipLineCount": {
+                      "description": "当且仅当采集的日志类型为delimiter_log且导入类型为tos时有效",
+                      "type": "integer"
+                    },
+                    "TimeExtractRegex": {
+                      "description": "提取时间的正则表达式。 可以提取TimeKey字段中的时间值并解析为对应的采集时间",
+                      "type": "string"
+                    },
+                    "TimeFormat": {
+                      "description": "时间字段的格式。\n- TimeKey和TimeFormat必须成对出现。\n- 参考c语言的strftime函数对于format参数的说明：https://man7.org/linux/man-pages/man3/strftime.3.html",
+                      "type": "string"
+                    },
+                    "TimeKey": {
+                      "description": "时间字段的名字key。\n- TimeKey和TimeFormat必须成对出现。\n- 命名规则同「索引配置」的key名称。",
+                      "type": "string"
+                    },
+                    "TimeSample": {
+                      "description": "时间样例。\n用于判断填写的时间解析格式是否正确。",
+                      "type": "string"
+                    },
+                    "TimeZone": {
+                      "description": "时区\n支持机器时区（默认）和自定义时区\n自定义时区支持两种格式：GMT 和 UTC\nGMT格式： GMT+08：00， UTC格式： Asia/Shanghai",
+                      "type": "string"
+                    },
+                    "UnMatchLogKey": {
+                      "description": "当上传解析失败的日志时，解析失败的日志的key名称。\n- UnMatchUpLoadSwitch=true和UnMatchLogKey必须成对出现。\n- 命名规则同「索引配置」的key名称。",
+                      "type": "string"
+                    },
+                    "UnMatchUpLoadSwitch": {
+                      "description": "是否上传解析失败的日志。\n- UnMatchUpLoadSwitch=true和UnMatchLogKey必须成对出现。\n- true表示上传解析失败的日志，false表示不上传解析失败的日志。",
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                },
+                "LogSample": {
+                  "description": "LogSample 用户日志样例",
+                  "type": "string"
+                },
+                "LogType": {
+                  "description": "LogType 导入时指定的日志解析类型",
+                  "type": "string"
+                },
+                "Region": {
+                  "description": "Region 指定导入TLS的region信息",
+                  "type": "string"
+                },
+                "UserDefineRule": {
+                  "description": "UserDefineRule 用户自定义规则",
+                  "properties": {
+                    "Advanced": {
+                      "description": "扩展配置",
+                      "properties": {
+                        "CloseEOF": {
+                          "description": "读取至日志文件的末尾之后，是否释放该日志文件的句柄。默认为 false。",
+                          "type": "boolean"
+                        },
+                        "CloseInactive": {
+                          "description": "释放日志文件句柄的等待时间。当日志文件超过指定时间仍然没有写入新的日志时，释放该日志文件的句柄。\n单位为秒，取值范围为 1~300 秒，默认为 60 秒。",
+                          "type": "integer"
+                        },
+                        "CloseRemoved": {
+                          "description": "日志文件被移除之后，是否释放该日志文件的句柄。默认为 false。",
+                          "type": "boolean"
+                        },
+                        "CloseRenamed": {
+                          "description": "日志文件被重命名之后，是否释放该日志文件的句柄。默认为 false。",
+                          "type": "boolean"
+                        },
+                        "CloseTimeout": {
+                          "description": "LogCollector 监控日志文件的最大时长。单位为秒，默认为0秒，表示不限制 LogCollector 监控日志文件的时长。\nLogCollector 开始监控日志文件时开始计时，超出指定时长后，无论日志文件是否读取完毕，立即释放该日志文件的句柄，结束监控。",
+                          "type": "integer"
+                        },
+                        "MoreConfig": {
+                          "type": "string"
+                        },
+                        "NoLineTerminatorEOFMaxTime": {
+                          "description": "LogCollector 没有读到换行符时，最大等待时长。单位为秒，默认为5s。\nLogCollector 开始读取日志文件内容时开始计时，超出指定时长没有读到换行符时，将会发送缓冲区的日志。\n当文件落盘间隔较大时，一条完整的日志可能会被分割成两部分，分别落盘。可以根据您日志的落盘时间间隔调整此参数",
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "EnableHostGroupLabel": {
+                      "description": "是否添加机器组label字段",
+                      "type": "boolean"
+                    },
+                    "EnableHostname": {
+                      "description": "是否添加hostname字段",
+                      "type": "boolean"
+                    },
+                    "EnableRawLog": {
+                      "description": "是否上传原始日志。\n- true：上传原始日志。\n- false：不上传原始日志。",
+                      "type": "boolean"
+                    },
+                    "Fields": {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "添加常量字段\n- 最多能够添加5个常量字段\n- 键不能重复、不能为空，最多包含128个字符：字母（a-z、A-Z），数字（0-9 ），中划线（-），下划线（_），点（.），斜线（/），但是不能以下划线（_）开头\n- 值不能为空，长度最多为512KB",
+                      "properties": {},
+                      "type": "object"
+                    },
+                    "HostGroupLabelKey": {
+                      "description": "机器组label字段的名称",
+                      "type": "string"
+                    },
+                    "HostnameKey": {
+                      "description": "hostname字段的名称",
+                      "type": "string"
+                    },
+                    "IgnoreOlder": {
+                      "description": "日志服务默认忽略旧日志的时间, 单位：hour",
+                      "type": "integer"
+                    },
+                    "MultiCollectsType": {
+                      "description": "允许多次采集日志文件\n1、空：使用日志文件ID来唯一标识日志文件\n2、RuleID：使用采集规则ID+日志文件ID来唯一标识日志文件\n3、TopicIDRuleName：使用日志主题ID+采集规则Name+日志文件ID来唯一标识日志文件",
+                      "type": "string"
+                    },
+                    "ParsePathRule": {
+                      "description": "解析路径的规则。",
+                      "properties": {
+                        "Keys": {
+                          "description": "解析出来的路径字段的名字key列表。\n- 最多配置100个名字key\n- 不能配置重复的名字key。\n- 不能配置空的名字key。\n- 命名规则同「索引配置」的key名称。",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "PathSample": {
+                          "description": "路径样例。\n- 路径样例必须是一个绝对路径。\n- 路径样例不能包含通配符*、?、**。",
+                          "type": "string"
+                        },
+                        "Regex": {
+                          "description": "路径样例需要匹配的regex。\n- 必须是合法的正则表达式。",
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "Plugin": {
+                      "description": "插件配置",
+                      "properties": {
+                        "processors": {
+                          "items": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "properties": {},
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "RawLogKey": {
+                      "description": "原始日志字段名称。",
+                      "type": "string"
+                    },
+                    "ShardHashKey": {
+                      "description": "根据HashKey路由日志分区。",
+                      "properties": {
+                        "HashKey": {
+                          "description": "路由日志分区的HashKey。\n- 长度必须不大于32位；\n- 每个字符必须都是16进制（0~9、a~f、A~F）；\n- 不能是ffffffffffffffffffffffffffffffff，因为取值范围是：[00000000000000000000000000000000,ffffffffffffffffffffffffffffffff）；",
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "TailFiles": {
+                      "description": "第一次启动运行LogCollector的时候，全量采集还是增量采集日志文件\ntrue: 增量采集日志文件（仅仅采集新增的日志，忽略旧的已经存在的日志）\nfalse: 全量采集日志文件",
+                      "type": "boolean"
+                    },
+                    "TailSizeKb": {
+                      "description": "日志服务默认首次采集大小",
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "required": [
+                "LogType",
+                "Region"
+              ],
+              "type": "object"
+            },
+            "TaskId": {
+              "description": "TaskId 任务 ID。必填，UUID。",
+              "type": "string"
+            },
+            "TaskName": {
+              "description": "TaskName 任务名称。必填；命名规则：\n- 正则：^[a-zA-Z0-9_\\\\p{Han}][a-zA-Z-_0-9\\\\p{Han}]{1,62}[a-zA-Z0-9_\\\\p{Han}]$\n- 长度：3~64；中间允许 '-'、'_'；首尾不允许 '-'\n- 不允许以保留前缀开头（如 tls_、tos_、tls-service-log_ 等）",
+              "type": "string"
+            },
+            "TopicID": {
+              "description": "TopicID 目标日志主题 ID。必填，UUID。",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ImportSourceInfo",
+            "SourceType",
+            "TargetInfo",
+            "TaskId",
+            "TaskName",
+            "TopicID"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ModifyImportTask",
+        "source": "数据导入",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/1333764",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
+      }
+    },
+    {
+      "id": "log.describe-histogram-v1",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "DescribeHistogramV1",
+      "resource": "histogram-v1",
+      "verb": "describe",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/DescribeHistogramV1",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "EndTime": {
+              "description": "查询开始时间点。Unix时间戳格式，表示从1970-1-1 00:00:00 UTC计算起的秒数。",
+              "format": "int64",
+              "type": "integer"
+            },
+            "Interval": {
+              "description": "子区间间隔",
+              "format": "int64",
+              "type": "integer"
+            },
+            "Query": {
+              "description": "查询语句，语句长度最大为4096。查询语法与规则见: https://bytedance.feishu.cn/wiki/wikcn5MxzYyrm4IOhq04CMHF6Qg",
+              "type": "string"
+            },
+            "RegionTopics": {
+              "description": "多 Topic 查询使用",
+              "items": {
+                "properties": {
+                  "Region": {
+                    "type": "string"
+                  },
+                  "Topic": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "StartTime": {
+              "description": "查询开始时间点。Unix时间戳格式，表示从1970-1-1 00:00:00 UTC计算起的秒数。",
+              "format": "int64",
+              "type": "integer"
+            },
+            "TopicId": {
+              "description": "要检索的日志主题ID。",
+              "type": "string"
+            }
+          },
+          "required": [
+            "EndTime",
+            "StartTime",
+            "TopicId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeHistogramV1",
+        "source": "日志管理",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/1347899",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry",
+        "recovery_source": "reviewed-read-contract",
+        "recovery_notes": "Reviewed read or non-persistent purpose; this does not establish service idempotency or enable automatic retries."
+      }
+    },
+    {
+      "id": "log.describe-log-context",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "DescribeLogContext",
+      "resource": "log-context",
+      "verb": "describe",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/DescribeLogContext",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "ContextFlow": {
+              "description": "日志包序号",
+              "type": "string"
+            },
+            "NextLogs": {
+              "description": "下文日志条数, 默认值10，最大100条",
+              "type": "integer"
+            },
+            "PackageOffset": {
+              "description": "日志序号",
+              "format": "int64",
+              "type": "integer"
+            },
+            "PrevLogs": {
+              "description": "上文日志条数, 默认值10，最大100条",
+              "type": "integer"
+            },
+            "Source": {
+              "description": "采集ip",
+              "type": "string"
+            },
+            "TopicId": {
+              "description": "要检索的日志主题ID。",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ContextFlow",
+            "PackageOffset",
+            "TopicId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeLogContext",
+        "source": "日志管理",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/125689",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry",
+        "recovery_source": "reviewed-read-contract",
+        "recovery_notes": "Reviewed read or non-persistent purpose; this does not establish service idempotency or enable automatic retries."
+      }
+    },
+    {
+      "id": "log.search",
+      "group": "log",
+      "group_title": "日志管理",
+      "action": "SearchLogs",
+      "resource": "logs",
+      "verb": "search",
+      "family": "log",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/SearchLogs",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "AccurateQuery": {
+              "description": "是否使用精确查询",
+              "type": "boolean"
+            },
+            "Context": {
+              "description": "翻页加载更多日志时使用，透传上次返回的context值，获取后续的日志内容。",
+              "type": "string"
+            },
+            "EndTime": {
+              "description": "查询结束时间点。Unix时间戳格式，表示从1970-1-1 00:00:00 UTC计算起的秒数。必须大于 StartTime。",
+              "type": "integer"
+            },
+            "HighLight": {
+              "type": "boolean"
+            },
+            "Limit": {
+              "description": "返回的日志条数。取值范围为 0~1000000（不同用户限额可能不同，以服务端校验为准）；最多返回一定大小的日志数据。",
+              "maximum": 1000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "MustComplete": {
+              "description": "是否使用完全精确",
+              "type": "boolean"
+            },
+            "Offset": {
+              "description": "支持深翻页",
+              "type": "integer"
+            },
+            "Query": {
+              "description": "查询语句。最大长度默认为 4096（以服务端配置为准）；查询语法与规则见: https://www.volcengine.com/docs/6470/72009",
+              "maxLength": 4096,
+              "type": "string"
+            },
+            "RegionTopics": {
+              "description": "多 Topic 查询使用",
+              "items": {
+                "properties": {
+                  "Region": {
+                    "type": "string"
+                  },
+                  "Topic": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "Sort": {
+              "description": "按日志时间戳顺序返回日志，精确到秒:\n- desc：（默认值）按照时间逆序返回日志，新的日志在前。\n- asc：按照时间顺序返回日志，旧的日志在前。",
+              "enum": [
+                "desc",
+                "asc"
+              ],
+              "type": "string"
+            },
+            "StartTime": {
+              "description": "查询开始时间点。Unix时间戳格式，表示从1970-1-1 00:00:00 UTC计算起的秒数。",
+              "type": "integer"
+            },
+            "TopicId": {
+              "description": "要检索的日志主题ID。",
+              "type": "string"
+            }
+          },
+          "required": [
+            "EndTime",
+            "StartTime",
+            "TopicId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "SearchLogs",
+        "source": "日志管理",
+        "usage_constraints": "Unresolved documentation discrepancy: official SearchLogs documents Limit at most 1000, while the current catalog allows 0..1000000. The catalog bound is retained pending service verification; it is not a guarantee that the service accepts this range.",
+        "url": "https://www.volcengine.com/docs/6470/112195",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry",
+        "recovery_source": "reviewed-read-contract",
+        "recovery_notes": "Reviewed read or non-persistent purpose; this does not establish service idempotency or enable automatic retries."
+      }
+    },
+    {
+      "id": "processor.bind-topic-processor",
+      "group": "processor",
+      "group_title": "数据处理器",
+      "action": "BindTopicProcessor",
+      "resource": "bind-topic-processor",
+      "verb": "modify",
+      "family": "processor",
+      "visibility": "public",
+      "wire": {
+        "method": "PUT",
+        "path": "/BindTopicProcessor",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "ProcessorId": {
+              "description": "ProcessorID 加工任务 ID。必填；由服务端创建并返回。",
+              "type": "string"
+            },
+            "TopicId": {
+              "description": "TopicID 日志主题 ID。必填。",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ProcessorId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "BindTopicProcessor",
+        "source": "数据处理器",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/2249635",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
+      }
+    },
+    {
+      "id": "schedule-sql-task.create",
+      "group": "schedule-sql-task",
+      "group_title": "定时 SQL 分析",
+      "action": "CreateScheduleSqlTask",
+      "resource": "schedule-sql-task",
+      "verb": "create",
+      "family": "schedule-sql-task",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/CreateScheduleSqlTask",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "Description": {
+              "description": "Description 定时SQL任务描述信息。选填；限制：\n- 长度：<=64（按 rune 计数）\n- 禁止字符：< > ' \" \\\\\n- 禁止：emoji",
+              "type": "string"
+            },
+            "DestRegion": {
+              "description": "目标topic Region, 不填默认为当前region",
+              "type": "string"
+            },
+            "DestTopicID": {
+              "description": "目标topic ID",
+              "type": "string"
+            },
+            "MaxRetryTimes": {
+              "description": "默认重试次数",
+              "type": "integer"
+            },
+            "MaxTimeout": {
+              "description": "最大超时时间,单位秒",
+              "type": "integer"
+            },
+            "ProcessEndTime": {
+              "description": "定时SQL任务的调度的结束时间, 时间戳为为秒级, 不填代表无限执行",
+              "type": "integer"
+            },
+            "ProcessSqlDelay": {
+              "description": "查询SQL延迟",
+              "type": "integer"
+            },
+            "ProcessStartTime": {
+              "description": "定时SQL任务的调度的开始时间, 时间戳为秒级",
+              "type": "integer"
+            },
+            "ProcessTimeWindow": {
+              "description": "调度窗口表达式",
+              "type": "string"
+            },
+            "Query": {
+              "description": "查询语句",
+              "type": "string"
+            },
+            "RequestCycle": {
+              "description": "查询或分析请求的执行周期",
+              "properties": {
+                "CronTab": {
+                  "description": "Cron表达式",
+                  "type": "string"
+                },
+                "CronTimeZone": {
+                  "description": "Cron 时区,仅支持GMT时区",
+                  "type": "string"
+                },
+                "DayOfWeeks": {
+                  "description": "从0(星期天)开始数到6(星期六)",
+                  "type": "integer"
+                },
+                "Time": {
+                  "description": "执行的周期，或者定制执行的时间节点。单位为分钟，取值范围为1~1440。Second类型是传递秒",
+                  "type": "integer"
+                },
+                "Type": {
+                  "description": "可选值：Period-周期执行；Fixed-定期执行; CronTab - cron表达式。",
+                  "enum": [
+                    "Period",
+                    "Fixed",
+                    "CronTab",
+                    "Hourly",
+                    "Weekly",
+                    "Second"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "Time",
+                "Type"
+              ],
+              "type": "object"
+            },
+            "Status": {
+              "description": "任务运行状态,1: 启动，0: 关闭",
+              "enum": [
+                0,
+                1
+              ],
+              "type": "integer"
+            },
+            "TaskName": {
+              "description": "TaskName 任务名称。必填；命名规则：\n- 正则：^[a-zA-Z0-9_\\\\p{Han}][a-zA-Z-_0-9\\\\p{Han}]{1,62}[a-zA-Z0-9_\\\\p{Han}]$\n- 长度：3~64；中间允许 '-'、'_'；首尾不允许 '-'\n- 不允许以保留前缀开头（如 tls_、tos_、tls-service-log_ 等）",
+              "type": "string"
+            },
+            "TaskType": {
+              "description": "定时SQL任务类型，0: 日志到日志，1: 日志到指标",
+              "enum": [
+                0,
+                1
+              ],
+              "type": "integer"
+            },
+            "TopicID": {
+              "description": "源topic ID",
+              "type": "string"
+            },
+            "VmpTaskInfo": {
+              "description": "VmpTaskInfo 日志到指标任务的指标信息配置。TaskType=1 时使用；关键字段限制：\n- MetricName 正则：^[a-zA-Z_:][a-zA-Z0-9_:]*$\n- LabelName 正则：^[a-zA-Z_:][a-zA-Z0-9_:]*$",
+              "properties": {
+                "CustomMetricLabels": {
+                  "items": {
+                    "properties": {
+                      "Key": {
+                        "type": "string"
+                      },
+                      "Value": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "CustomTime": {
+                  "type": "string"
+                },
+                "MetricLabels": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "MetricNames": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "WorkSpaceId": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "DestTopicID",
+            "ProcessTimeWindow",
+            "Query",
+            "RequestCycle",
+            "TaskName",
+            "TopicID"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "CreateScheduleSqlTask",
+        "source": "定时 SQL 分析",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/1185506",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
+      }
+    },
+    {
+      "id": "shipper.create",
+      "group": "shipper",
+      "group_title": "数据投递",
+      "action": "CreateShipper",
+      "resource": "shipper",
+      "verb": "create",
+      "family": "shipper",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/CreateShipper",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "ContentInfo": {
+              "description": "投递日志的内容格式配置。",
+              "properties": {
+                "CsvInfo": {
+                  "description": "csv格式日志内容配置。",
+                  "properties": {
+                    "Delimiter": {
+                      "description": "分隔符，支持填入逗号、制表符、竖线、分号、空格。",
+                      "type": "string"
+                    },
+                    "EscapeChar": {
+                      "description": "转义符，字段内容包含分隔符时，使用转义符包裹该字段，当前仅支持单引号，双引号，空字符。",
+                      "type": "string"
+                    },
+                    "Keys": {
+                      "description": "每列key的名字。\n- 仅支持字母、数字和_-./，并且不支持以(_)开头。\n- 同一个索引中key名称唯一。\n- 长度为1-128。",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "NonFieldContent": {
+                      "description": "无效字段填充内容，长度为0-128。",
+                      "type": "string"
+                    },
+                    "PrintHeader": {
+                      "description": "首行是否打印key。",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "Delimiter",
+                    "EscapeChar",
+                    "Keys",
+                    "NonFieldContent",
+                    "PrintHeader"
+                  ],
+                  "type": "object"
+                },
+                "Format": {
+                  "description": "日志内容解析格式，当前投递 tos 支持 json/csv/parquet；投递 kafka 支持 original(原文)、json。",
+                  "enum": [
+                    "json",
+                    "csv",
+                    "parquet",
+                    "original"
+                  ],
+                  "type": "string"
+                },
+                "JsonInfo": {
+                  "description": "json格式日志内容配置。",
+                  "properties": {
+                    "Enable": {
+                      "description": "启用标志。",
+                      "type": "boolean"
+                    },
+                    "Escape": {
+                      "description": "是否转义",
+                      "type": "boolean"
+                    },
+                    "Keys": {
+                      "description": "投递日志字段，目前支持：\n__content__(必选)、__source__、__path__、__time__、__image_name__、__container_name__、__pod_name__、__pod_uid__、\n__namespace__、 __tag____client_ip__、__tag____receive_time__",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "Enable"
+                  ],
+                  "type": "object"
+                },
+                "ParquetInfo": {
+                  "description": "parquet格式日志内容配置。",
+                  "properties": {
+                    "Fields": {
+                      "items": {
+                        "properties": {
+                          "Key": {
+                            "type": "string"
+                          },
+                          "TransType": {
+                            "enum": [
+                              "string",
+                              "int32",
+                              "int64",
+                              "float",
+                              "double",
+                              "boolean"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "Key",
+                          "TransType"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "Fields"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "KafkaShipperInfo": {
+              "description": "投递到Kafka相关信息",
+              "properties": {
+                "Compress": {
+                  "description": "压缩格式，当前仅支持snappy,gzip,lz4,none。",
+                  "enum": [
+                    "snappy",
+                    "gzip",
+                    "lz4",
+                    "none"
+                  ],
+                  "type": "string"
+                },
+                "EndTime": {
+                  "description": "投递结束时间（毫秒时间戳）。可选；会在服务端转换为秒级时间戳参与校验；需满足 StartTime < EndTime（如两者均指定）。",
+                  "type": "integer"
+                },
+                "Instance": {
+                  "description": "kafka实例",
+                  "type": "string"
+                },
+                "KafkaTopic": {
+                  "description": "Kafka Topic",
+                  "type": "string"
+                },
+                "StartTime": {
+                  "description": "投递开始时间（毫秒时间戳）。可选；会在服务端转换为秒级时间戳参与校验。",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "Compress",
+                "Instance",
+                "KafkaTopic"
+              ],
+              "type": "object"
+            },
+            "RoleTrn": {
+              "description": "自定义角色\nServiceTrn 与 RoleTrn 互斥（由 rest.CheckCrossTrn 校验）。",
+              "type": "string"
+            },
+            "ServiceTrn": {
+              "description": "服务信任角色\nServiceTrn 与 RoleTrn 互斥（由 rest.CheckCrossTrn 校验）。",
+              "type": "string"
+            },
+            "ShipperEndTime": {
+              "description": "投递结束时间（毫秒时间戳）。可选；未指定时默认不结束；服务端会转换为秒级时间戳存储/执行。",
+              "type": "integer"
+            },
+            "ShipperName": {
+              "description": "同个project下的投递规则名称不能重复。\n名称输入限制：\n- 正则：^[a-zA-Z0-9_\\\\p{Han}][a-zA-Z-_0-9\\\\p{Han}]{1,62}[a-zA-Z0-9_\\\\p{Han}]$\n- 长度：3~64；中间允许 '-'、'_'；首尾不允许 '-'\n- 不允许以保留前缀开头（如 tls_、tos_、tls-service-log_ 等）",
+              "type": "string"
+            },
+            "ShipperStartTime": {
+              "description": "投递开始时间（毫秒时间戳）。可选；未指定时默认取当前时间；服务端会转换为秒级时间戳存储/执行。",
+              "type": "integer"
+            },
+            "ShipperType": {
+              "description": "枚举：tos-投递到Tos，kafka-投递到Kafka",
+              "enum": [
+                "tos",
+                "kafka"
+              ],
+              "type": "string"
+            },
+            "TopicId": {
+              "description": "Topic的ID。",
+              "type": "string"
+            },
+            "TosShipperInfo": {
+              "description": "投递到对象存储相关信息。",
+              "properties": {
+                "Bucket": {
+                  "description": "对象存储桶名称。\n- 只能包含数字、横线（-）、字母a-z。\n- 开始和结尾只能是数字或字母。\n- 长度在3-63个字符之内。",
+                  "type": "string"
+                },
+                "Compress": {
+                  "description": "压缩格式，当前仅支持snappy,gzip,lz4,none。",
+                  "enum": [
+                    "snappy",
+                    "gzip",
+                    "lz4",
+                    "none"
+                  ],
+                  "type": "string"
+                },
+                "EnablePartitionKV": {
+                  "type": "boolean"
+                },
+                "Endpoint": {
+                  "description": "代理集群接入目标域名，对外api不暴露此参数",
+                  "type": "string"
+                },
+                "Interval": {
+                  "description": "投递时间间隔，单位为秒，取值范围为300-900。",
+                  "type": "integer"
+                },
+                "MaxSize": {
+                  "description": "投递原文的单个对象最大容量，单位为MB，取值范围为5-256。",
+                  "type": "integer"
+                },
+                "PartitionFormat": {
+                  "description": "投递日志的分区规则。\n- 参考c语言的strftime函数对于format参数的说明：https://man7.org/linux/man-pages/man3/strptime.3.html\n- 不能以正斜线（/）或者反斜线（\\）开头",
+                  "type": "string"
+                },
+                "PartitionFromValue": {
+                  "properties": {
+                    "Key": {
+                      "type": "string"
+                    },
+                    "Position": {
+                      "enum": [
+                        "before_time",
+                        "after_time"
+                      ],
+                      "type": "string"
+                    },
+                    "Regex": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "Prefix": {
+                  "description": "投递对象存储桶中的前缀目录。\n- 不能以正斜线（/）或者反斜线（\\）开头，且不能使用连续的正斜线（/）。\n- 不能以..作为文件夹名称。\n- 同一存储桶中，文件夹不允许重名。",
+                  "type": "string"
+                },
+                "ProxyPoint": {
+                  "description": "代理集群接入点，对外api不暴露此参数",
+                  "type": "string"
+                },
+                "Region": {
+                  "description": "投递对象存储桶所在区域，对外api不暴露此参数",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "Bucket"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "ContentInfo",
+            "ShipperName",
+            "TopicId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "CreateShipper",
+        "source": "数据投递",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/1333747",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
+      }
+    },
+    {
+      "id": "trace.describe-trace",
+      "group": "trace",
+      "group_title": "Trace 存储",
+      "action": "DescribeTrace",
+      "resource": "trace",
+      "verb": "describe",
+      "family": "trace",
+      "visibility": "public",
+      "wire": {
+        "method": "POST",
+        "path": "/DescribeTrace",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "TraceId": {
+              "description": "Trace ID",
+              "type": "string"
+            },
+            "TraceInstanceId": {
+              "description": "Trace实例ID",
+              "type": "string"
+            },
+            "UnionTraceInstanceIds": {
+              "description": "联合查询的Trace实例列表",
+              "items": {
+                "properties": {
+                  "TraceInstanceId": {
+                    "description": "Trace实例ID",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "TraceInstanceId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "DescribeTrace",
+        "source": "Trace 存储",
+        "usage_constraints": "",
+        "url": "https://www.volcengine.com/docs/6470/2122518",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "low",
+        "error_recovery": "safe-retry",
+        "recovery_source": "reviewed-read-contract",
+        "recovery_notes": "Reviewed read or non-persistent purpose; this does not establish service idempotency or enable automatic retries."
       }
     }
   ]

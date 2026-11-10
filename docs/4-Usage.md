@@ -146,6 +146,33 @@ Without `--page-all`, a list with declared pagination still makes one request an
 
 Inspect `summary.completeness` even when pages were merged: `summary.pagination.merged=true` means pages were accumulated, not that the result is complete. The service's `data.Total` is preserved; `summary.itemCount` is the number collected. Completeness reports `complete`, `stopReason`, `pageCount`, `itemCount`, `resumable`, and, when available, `next`. Reaching a page budget or a later request failure returns nonzero while retaining collected data. When `next` is present, invoke its `operationId` and `input` as an ordinary `tool exec` request with the same runtime selectors and no `--page-all` or enabled page-all context; `next.pageAll` is `false`.
 
+### 3.3 Saved queries
+
+These four supplemental operations follow the server-code contract and are not yet covered by the public OpenAPI reference. See [Contract Override Provenance](https://github.com/volcengine-tls/ve-tls-cli/blob/main/contracts/overrides/README.md#savedsearch-alignment-baseline) for the source. Availability depends on the deployed service and IAM permissions. Saved queries are shared configuration scoped to a Topic.
+
+| Tool ID | Request parameters | Response fields |
+| --- | --- | --- |
+| `log.create-saved-search` | POST body: `TopicID`, `DisplayName`, `SearchQuery` | `SavedSearchID` |
+| `log.delete-saved-search` | DELETE body: `SavedSearchID` | Empty object |
+| `log.describe-saved-search` | GET query: `SavedSearchID` | `SavedSearch` |
+| `log.describe-saved-searches` | GET query: `TopicId` | `SavedSearches` array |
+
+```bash
+volclog tool describe log.create-saved-search --view full
+volclog --profile default --allow-write tool exec log.create-saved-search \
+  --input '{"body":{"TopicID":"<topic-id>","DisplayName":"errors","SearchQuery":"level:error"}}' --dry-run
+volclog --profile default tool exec log.describe-saved-searches \
+  --input '{"query":{"TopicId":"<topic-id>"}}'
+volclog --profile default tool exec log.describe-saved-search \
+  --input '{"query":{"SavedSearchID":"savedsearch-1692687047134"}}'
+volclog --profile default --allow-write tool exec log.delete-saved-search \
+  --input '{"body":{"SavedSearchID":"savedsearch-1692687047134"}}' --dry-run
+```
+
+Creation uses body key `TopicID`, listing uses query key `TopicId`, and returned items use `TopicID`; preserve the spelling. `DisplayName` is required and must be 3–64 characters, with name validation performed by the service. Creation stores the expression without executing it. The default limit is 10 saved queries per Topic and is configurable by the service. Listing returns every item in one response and does not support `--page-all`.
+
+Do not retry creation or deletion automatically after an ambiguous result; reconcile with a list or detail request first. Creation can return HTTP 409 `SavedSearchAlreadyExist`. Repeated deletion returns HTTP 400 `SavedSearchNotExist`; the CLI preserves the service error.
+
 ## 4. `workflow exec`
 
 `workflow exec` runs a CLI-provided higher-level workflow by its `<group.command>` identity. Workflows wrap one or more tools with orchestration logic; the public API tool surface remains available through `tool exec`.

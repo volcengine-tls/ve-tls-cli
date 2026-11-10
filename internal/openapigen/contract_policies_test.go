@@ -28,12 +28,12 @@ func TestRecoveryPolicyFileAndCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []contract.OperationID{"log.search", "trace.search", "tag.list", "log.preview"} {
+	for _, id := range []contract.OperationID{"log.search", "trace.search", "tag.list", "log.preview", "log.describe-saved-search", "log.describe-saved-searches"} {
 		if got := operationByID(t, refreshed.Operations, id).Risk; got.ErrorRecovery != "safe-retry" || got.RecoverySource != reviewedReadRecoverySource {
 			t.Fatalf("%s: %#v", id, got)
 		}
 	}
-	for _, id := range []contract.OperationID{"log.put", "log.consume", "shard.create", "log-app.describe-trace"} {
+	for _, id := range []contract.OperationID{"log.put", "log.consume", "shard.create", "log-app.describe-trace", "log.create-saved-search", "log.delete-saved-search"} {
 		if got := operationByID(t, refreshed.Operations, id).Risk; got.ErrorRecovery != "high-risk-retry" || got.RecoverySource != unverifiedRecoverySource {
 			t.Fatalf("%s: %#v", id, got)
 		}

@@ -12,7 +12,7 @@ import (
 
 func TestUnificationBaselineAllToolDigests(t *testing.T) {
 	operations := loadToolOperations("", "", "")
-	if got, want := len(operations), 159; got != want {
+	if got, want := len(operations), 163; got != want {
 		t.Fatalf("tool catalog count: got %d, want %d", got, want)
 	}
 

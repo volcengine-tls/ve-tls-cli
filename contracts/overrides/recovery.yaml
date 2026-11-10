@@ -314,3 +314,9 @@ trace.search: safe-retry
 # POST /SearchSpans; summary=SearchSpans; source=log-service server API
 # request: body=[EndTime,Query,StartTime,TraceInstanceId]; response: output=full; response fields unspecified
 trace.search-spans: safe-retry
+
+# SavedSearch: reviewed server-source reads; write idempotency is unverified.
+log.create-saved-search: high-risk-retry
+log.delete-saved-search: high-risk-retry
+log.describe-saved-search: safe-retry
+log.describe-saved-searches: safe-retry

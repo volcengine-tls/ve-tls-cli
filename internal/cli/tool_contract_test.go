@@ -317,11 +317,40 @@ func TestToolListCreateVerbIsTrustworthyForLogGroup(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected tools list, got %#v", got["tools"])
 	}
-	if len(tools) != 1 {
-		t.Fatalf("expected only one true create action in log group, got %#v", tools)
+	want := map[string]struct {
+		action string
+		method string
+		path   string
+		verb   string
+	}{
+		"log.create-download-task": {action: "CreateDownloadTask", method: "POST", path: "/CreateDownloadTask", verb: "create"},
+		"log.create-saved-search":  {action: "CreateSavedSearch", method: "POST", path: "/CreateSavedSearch", verb: "create"},
 	}
-	if normalizeToken(asStringOrEmpty(tools[0]["id"])) != "log.create-download-task" {
-		t.Fatalf("unexpected create action list: %#v", tools)
+	if len(tools) != len(want) {
+		t.Fatalf("expected exactly the create actions %v in log group, got %#v", want, tools)
+	}
+	for _, tool := range tools {
+		id := normalizeToken(asStringOrEmpty(tool["id"]))
+		expected, ok := want[id]
+		if !ok {
+			t.Fatalf("unexpected non-create or unknown action in create list: %#v", tool)
+		}
+		if got := asStringOrEmpty(tool["action"]); got != expected.action {
+			t.Fatalf("%s action=%q, want %q", id, got, expected.action)
+		}
+		if got := asStringOrEmpty(tool["verb"]); got != expected.verb {
+			t.Fatalf("%s verb=%q, want %q", id, got, expected.verb)
+		}
+		if got := asStringOrEmpty(tool["method"]); got != expected.method {
+			t.Fatalf("%s method=%q, want %q", id, got, expected.method)
+		}
+		if got := asStringOrEmpty(tool["path"]); got != expected.path {
+			t.Fatalf("%s path=%q, want %q", id, got, expected.path)
+		}
+		delete(want, id)
+	}
+	if len(want) != 0 {
+		t.Fatalf("create list omitted expected actions: %v", want)
 	}
 }
 

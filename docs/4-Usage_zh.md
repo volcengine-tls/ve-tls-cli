@@ -146,6 +146,33 @@ volclog --profile default tool exec project.create \
 
 即使已经合并页面，也要检查 `summary.completeness`：`summary.pagination.merged=true` 只表示已累积页面，不代表结果完整。服务端的 `data.Total` 保持原值，`summary.itemCount` 表示已收集条数。完整性包含 `complete`、`stopReason`、`pageCount`、`itemCount`、`resumable`，以及可用时的 `next`。触及页数预算或后续请求失败时命令返回非零，并保留已收集数据。存在 `next` 时，复用相同运行时选择器，以其 `operationId` 和 `input` 发起普通 `tool exec` 单页调用，不传 `--page-all`，也不在上下文中启用 page-all；`next.pageAll` 为 `false`。
 
+### 3.3 保存查询
+
+以下四个补充接口依据服务端代码契约接入，目前尚无对应的官网 OpenAPI 参考。具体来源见 [Contract Override Provenance](https://github.com/volcengine-tls/ve-tls-cli/blob/main/contracts/overrides/README.md#savedsearch-alignment-baseline)。实际可用性取决于部署版本和 IAM 授权；保存查询属于 Topic 下的共享配置。
+
+| Tool ID | 请求参数 | 返回内容 |
+| --- | --- | --- |
+| `log.create-saved-search` | POST body：`TopicID`、`DisplayName`、`SearchQuery` | `SavedSearchID` |
+| `log.delete-saved-search` | DELETE body：`SavedSearchID` | 空对象 |
+| `log.describe-saved-search` | GET query：`SavedSearchID` | `SavedSearch` |
+| `log.describe-saved-searches` | GET query：`TopicId` | `SavedSearches` 数组 |
+
+```bash
+volclog tool describe log.create-saved-search --view full
+volclog --profile default --allow-write tool exec log.create-saved-search \
+  --input '{"body":{"TopicID":"<topic-id>","DisplayName":"errors","SearchQuery":"level:error"}}' --dry-run
+volclog --profile default tool exec log.describe-saved-searches \
+  --input '{"query":{"TopicId":"<topic-id>"}}'
+volclog --profile default tool exec log.describe-saved-search \
+  --input '{"query":{"SavedSearchID":"savedsearch-1692687047134"}}'
+volclog --profile default --allow-write tool exec log.delete-saved-search \
+  --input '{"body":{"SavedSearchID":"savedsearch-1692687047134"}}' --dry-run
+```
+
+创建的 body 使用 `TopicID`，列表的 query 使用 `TopicId`，返回项使用 `TopicID`；请保留大小写。`DisplayName` 为必填，长度为 3～64 个字符，名称规则由服务端校验。创建只保存语句，不执行查询。每个 Topic 默认最多 10 条，可由服务端配置；列表一次返回全部结果，不支持 `--page-all`。
+
+创建和删除在结果不确定时不要自动重试：先查询列表或详情核对状态。创建可能返回 HTTP 409 `SavedSearchAlreadyExist`；重复删除返回 HTTP 400 `SavedSearchNotExist`，CLI 会保留服务端错误。
+
 ## 4. `workflow exec`
 
 `workflow exec` 按 `<group.command>` 标识运行 CLI 提供的高层工作流。工作流用编排逻辑封装一个或多个工具；公共 API 工具面仍可通过 `tool exec` 使用。
