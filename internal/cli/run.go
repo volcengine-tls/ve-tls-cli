@@ -422,6 +422,8 @@ func usageText() string {
 	}
 	b.WriteString("\n补充:\n")
 	b.WriteString("  --output-dir <path> 用于 file / file_auto 的落盘目录；建议与 --output-mode file 一起提供。\n")
+	b.WriteString("  对支持全量分页的操作，可用 --page-all 请求所有页。\n")
+	b.WriteString("    volclog tool exec project.describe-projects --page-all\n")
 	return b.String()
 }
 

@@ -25,6 +25,15 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 			Hint:       "run 'volclog skill status --dir <skills-dir>' to inspect installed skills, or 'volclog skill update --dir <skills-dir>' to update them",
 		}, 2
 	}
+	var skillDirSymlink *skillDirSymlinkError
+	if errors.As(err, &skillDirSymlink) {
+		return errPayload{
+			RequestID:  requestID,
+			StatusCode: statusCode,
+			Kind:       "filesystem",
+			Hint:       "verify the symlink target and pass the real directory with --dir",
+		}, 2
+	}
 	var contextValidation *toolContextValidationError
 	if errors.As(err, &contextValidation) {
 		return errPayload{
