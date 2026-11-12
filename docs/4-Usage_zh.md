@@ -177,21 +177,6 @@ volclog --profile default --allow-write tool exec log.delete-saved-search \
 
 创建和删除在结果不确定时不要自动重试：先查询列表或详情核对状态。创建可能返回 HTTP 409 `SavedSearchAlreadyExist`；重复删除返回 HTTP 400 `SavedSearchNotExist`，CLI 会保留服务端错误。
 
-### 3.4 日志主题的存储权益规格
-
-创建按写入量计费的主题时，设置 `MeteringMode=ChargeByDataIngest`，并从 `D3`、`D7`、`D15`、`D30` 中选择 `DataIngestSpec`。该模式下省略规格时，服务端默认使用 `D30`。日志总保留天数单独用 `Ttl` 设置。存储权益规格在创建时确定，后续可通过 `topic.modify` 的 `Ttl` 修改日志保留天数。
-
-```bash
-volclog --profile default --dry-run tool exec topic.create \
-  --input '{"ProjectId":"<project-id>","TopicName":"short-retention","Ttl":7,"MeteringMode":"ChargeByDataIngest","DataIngestSpec":"D7"}'
-volclog --profile default --dry-run tool exec topic.modify \
-  --input '{"TopicId":"<topic-id>","Ttl":15}'
-volclog --profile default tool exec topic.describe-topic --input '{"TopicId":"<topic-id>"}'
-volclog --profile default tool exec topic.describe-topics --input '{"ProjectId":"<project-id>"}'
-```
-
-单查从 `data.DataIngestSpec` 读取规格，列表从 `data.Topics[].DataIngestSpec` 读取。该字段由服务端按需返回。
-
 ## 4. `workflow exec`
 
 `workflow exec` 按 `<group.command>` 标识运行 CLI 提供的高层工作流。工作流用编排逻辑封装一个或多个工具；公共 API 工具面仍可通过 `tool exec` 使用。

@@ -15,7 +15,7 @@ func TestDecodeResponsePreservesNumbers(t *testing.T) {
 	value, err := decodeResponse(tlsapi.Response{
 		StatusCode: http.StatusOK,
 		Body:       []byte(`{"big":9007199254740993,"decimal":0.12345678901234567890123456789}`),
-	})
+	}, "")
 	if err != nil {
 		t.Fatalf("decodeResponse() error = %v", err)
 	}
@@ -38,7 +38,7 @@ func TestDecodeResponseRejectsTrailingValue(t *testing.T) {
 	_, err := decodeResponse(tlsapi.Response{
 		StatusCode: http.StatusOK,
 		Body:       []byte(`{"ok":true} {"second":true}`),
-	})
+	}, "")
 	if !errors.Is(err, jsonx.ErrTrailingData) {
 		t.Fatalf("error = %v, want jsonx.ErrTrailingData", err)
 	}

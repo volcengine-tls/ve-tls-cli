@@ -100,7 +100,6 @@ func topicCreate(ctx *Context, args []string) (any, error) {
 		enableTrackingSet bool
 		enableTracking    bool
 		meteringMode      string
-		dataIngestSpec    *string
 		logPublicIPSet    bool
 		logPublicIP       bool
 		enableHotTtlSet   bool
@@ -182,12 +181,6 @@ func topicCreate(ctx *Context, args []string) (any, error) {
 				return nil, errors.New("missing --metering-mode value")
 			}
 			meteringMode = args[1]
-			args = args[2:]
-		case "--data-ingest-spec":
-			if len(args) < 2 {
-				return nil, errors.New("missing --data-ingest-spec value")
-			}
-			dataIngestSpec = &args[1]
 			args = args[2:]
 		case "--log-public-ip":
 			logPublicIPSet = true
@@ -319,9 +312,6 @@ func topicCreate(ctx *Context, args []string) (any, error) {
 	if strings.TrimSpace(meteringMode) != "" {
 		req["MeteringMode"] = meteringMode
 	}
-	if dataIngestSpec != nil {
-		req["DataIngestSpec"] = *dataIngestSpec
-	}
 	if logPublicIPSet {
 		req["LogPublicIP"] = logPublicIP
 	}
@@ -382,7 +372,6 @@ func topicModify(ctx *Context, args []string) (any, error) {
 		favSet            bool
 		fav               bool
 		meteringMode      string
-		dataIngestSpec    *string
 		logPublicIPSet    bool
 		logPublicIP       bool
 		enableHotTtlSet   bool
@@ -464,12 +453,6 @@ func topicModify(ctx *Context, args []string) (any, error) {
 				return nil, errors.New("missing --metering-mode value")
 			}
 			meteringMode = args[1]
-			args = args[2:]
-		case "--data-ingest-spec":
-			if len(args) < 2 {
-				return nil, errors.New("missing --data-ingest-spec value")
-			}
-			dataIngestSpec = &args[1]
 			args = args[2:]
 		case "--log-public-ip":
 			logPublicIPSet = true
@@ -587,9 +570,6 @@ func topicModify(ctx *Context, args []string) (any, error) {
 	}
 	if strings.TrimSpace(meteringMode) != "" {
 		req["MeteringMode"] = meteringMode
-	}
-	if dataIngestSpec != nil {
-		req["DataIngestSpec"] = *dataIngestSpec
 	}
 	if logPublicIPSet {
 		req["LogPublicIP"] = logPublicIP

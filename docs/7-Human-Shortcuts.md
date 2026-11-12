@@ -85,8 +85,6 @@ volclog-human --profile default --allow-write index create \
   --request file://index-request.json
 ```
 
-To create an ingestion-billed topic with a storage entitlement, add `--metering-mode ChargeByDataIngest --data-ingest-spec D7` to `topic create`. The supported specs are `D3`, `D7`, `D15`, and `D30`. Use `topic modify --ttl` to update total log retention. The entitlement is fixed at creation. `topic get` and `topic list` show `DataIngestSpec` when the service returns it.
-
 Shortcuts do not support `--dry-run`. Complete the operation through `tool` or `workflow` when a dry run is required; do not add `--dry-run` to a shortcut.
 
 ### 3.3 Search and Export Logs

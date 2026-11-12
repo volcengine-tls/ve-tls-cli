@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"strings"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
@@ -143,39 +142,4 @@ func inspectSearchCompleteness(ctx *Context, input execution.Input, data any) (a
 		ctx.Completeness = state
 	}
 	return data, nil
-}
-
-type searchAwareJSONCodec struct {
-	context  *Context
-	fallback execution.Codec
-}
-
-type searchCodecState struct {
-	input    execution.Input
-	fallback any
-}
-
-func (c searchAwareJSONCodec) Encode(ctx context.Context, operation contract.Operation, request execution.Request) (execution.Request, any, error) {
-	encoded, state, err := c.fallback.Encode(ctx, operation, request)
-	if err != nil || operation.Wire.Path != "/SearchLogs" {
-		return encoded, state, err
-	}
-	input := execution.Input{Header: map[string]any{}}
-	for key, value := range request.Header {
-		input.Header[key] = value
-	}
-	_ = jsonx.Unmarshal(request.Body, &input.Body.JSON)
-	return encoded, searchCodecState{input: input, fallback: state}, nil
-}
-
-func (c searchAwareJSONCodec) Decode(ctx context.Context, operation contract.Operation, response execution.Response, state any) (any, error) {
-	searchState, isSearch := state.(searchCodecState)
-	if isSearch {
-		state = searchState.fallback
-	}
-	data, err := c.fallback.Decode(ctx, operation, response, state)
-	if err != nil || !isSearch {
-		return data, err
-	}
-	return inspectSearchCompleteness(c.context, searchState.input, data)
 }
