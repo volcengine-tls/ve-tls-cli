@@ -8,10 +8,11 @@ const path = require('node:path');
 
 const repoRoot = path.resolve(__dirname, '..', '..');
 const rootPackage = require(path.join(repoRoot, 'package.json'));
+const lockfile = require(path.join(repoRoot, 'package-lock.json'));
 const humanPackage = require(path.join(repoRoot, 'npm', 'human-package', 'package.json'));
 
 test('release metadata stays aligned across Go and npm packages', () => {
-  const version = '1.2.0-rc.2';
+  const version = '1.2.0';
   const releaseTag = `volclog-v${version}`;
   const goVersion = fs.readFileSync(
     path.join(repoRoot, 'internal', 'version', 'version.go'),
@@ -21,6 +22,8 @@ test('release metadata stays aligned across Go and npm packages', () => {
 
   assert.equal(rootPackage.version, version);
   assert.equal(humanPackage.version, version);
+  assert.equal(lockfile.version, version);
+  assert.equal(lockfile.packages[''].version, version);
   assert.equal(rootPackage.publishConfig.tag, 'latest');
   assert.equal(humanPackage.publishConfig.tag, 'latest');
   assert.equal(rootPackage.publishConfig.registry, 'https://registry.npmjs.org/');

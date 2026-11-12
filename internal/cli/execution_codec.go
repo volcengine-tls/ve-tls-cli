@@ -7,6 +7,7 @@ import (
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/contract"
 	"github.com/volcengine-tls/ve-tls-cli/internal/execution"
+	"github.com/volcengine-tls/ve-tls-cli/internal/jsonx"
 	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
 )
 
@@ -22,7 +23,7 @@ func newToolExecutionCodecRegistry(ctx *Context) (*execution.CodecRegistry, erro
 	if err != nil {
 		return nil, err
 	}
-	if err := registry.Register(contract.CodecJSON, searchAwareJSONCodec{context: ctx, fallback: fallback}); err != nil {
+	if err := registry.Register(contract.CodecJSON, toolJSONCodec{context: ctx, fallback: fallback}); err != nil {
 		return nil, err
 	}
 	for id, profile := range map[contract.CodecID]specialIOProfile{
@@ -39,6 +40,44 @@ func newToolExecutionCodecRegistry(ctx *Context) (*execution.CodecRegistry, erro
 		}
 	}
 	return registry, nil
+}
+
+type toolJSONCodec struct {
+	context  *Context
+	fallback execution.Codec
+}
+
+type searchCodecState struct {
+	input    execution.Input
+	fallback any
+}
+
+func (c toolJSONCodec) Encode(ctx context.Context, operation contract.Operation, request execution.Request) (execution.Request, any, error) {
+	encoded, state, err := c.fallback.Encode(ctx, operation, request)
+	if err != nil || operation.Wire.Path != "/SearchLogs" {
+		return encoded, state, err
+	}
+	input := execution.Input{Header: map[string]any{}}
+	for key, value := range request.Header {
+		input.Header[key] = value
+	}
+	_ = jsonx.Unmarshal(request.Body, &input.Body.JSON)
+	return encoded, searchCodecState{input: input, fallback: state}, nil
+}
+
+func (c toolJSONCodec) Decode(ctx context.Context, operation contract.Operation, response execution.Response, state any) (any, error) {
+	searchState, isSearch := state.(searchCodecState)
+	if isSearch {
+		state = searchState.fallback
+	}
+	data, err := c.fallback.Decode(ctx, operation, response, state)
+	if err != nil {
+		return data, err
+	}
+	if isSearch {
+		return inspectSearchCompleteness(c.context, searchState.input, data)
+	}
+	return filterTopicResponse(operation.Wire.Path, data)
 }
 
 func (c toolExecutionCodec) Encode(

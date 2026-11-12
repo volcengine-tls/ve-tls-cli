@@ -220,6 +220,9 @@ func (c *Context) DoRaw(method, path string, query map[string]string, header map
 
 func (c *Context) doRaw(ctx context.Context, method, path string, query map[string]string, header map[string]string, body []byte) (tlsapi.Response, error) {
 	c.beginRequest()
+	if err := validateTopicWrite(path, body); err != nil {
+		return tlsapi.Response{}, err
+	}
 	if err := c.authorizeBusinessRequest(method, path); err != nil {
 		return tlsapi.Response{}, err
 	}
@@ -292,6 +295,9 @@ func (c *Context) Do(method, path string, query map[string]string, header map[st
 		body = adaptedBody
 	}
 	if c.DryRun {
+		if err := validateTopicWrite(path, body); err != nil {
+			return nil, err
+		}
 		plan := c.buildDryRunPlan(method, path, query, header, body, originalRequestPreview(previewBody, body, specialHandled), meta.RequestFormat, specialHandled)
 		c.tracePlan(method, plan["path"].(string), query, header, body, plan)
 		return plan, nil
@@ -303,7 +309,7 @@ func (c *Context) Do(method, path string, query map[string]string, header map[st
 	if out, handled, err := decodeSpecialIOResponse(meta, state, resp); handled {
 		return c.recordOperationResult(method, path, header, body, out, err)
 	}
-	out, err := decodeResponse(resp)
+	out, err := decodeResponse(resp, path)
 	return c.recordOperationResult(method, path, header, body, out, err)
 }
 

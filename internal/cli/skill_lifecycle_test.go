@@ -207,6 +207,40 @@ func TestSkillSwapExistingReportsWrappedConflict(t *testing.T) {
 	}
 }
 
+func TestSkillRejectsSymlinkDirWithFilesystemHint(t *testing.T) {
+	target := t.TempDir()
+	link := filepath.Join(t.TempDir(), "skills")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unavailable on this platform: %v", err)
+	}
+
+	for _, command := range []string{"install", "status", "update", "uninstall"} {
+		t.Run(command, func(t *testing.T) {
+			args := []string{"skill", command, "--dir", link, "--name", "volclog-core"}
+			if command != "status" {
+				args = append(args, "--force")
+			}
+			var stdout, stderr bytes.Buffer
+			if code := Run(args, &stdout, &stderr); code != 2 {
+				t.Fatalf("exit=%d, want 2; stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+			}
+			payload := c4InvocationFailure(t, stdout.String(), stderr.String(), false)
+			if payload.Kind != "filesystem" || !strings.Contains(payload.ErrorMessage, link) ||
+				!strings.Contains(payload.Hint, "pass the real directory with --dir") {
+				t.Fatalf("unexpected symlink error: %#v", payload)
+			}
+		})
+	}
+	if got, err := os.Readlink(link); err != nil || got != target {
+		t.Fatalf("symlink changed: target=%q err=%v", got, err)
+	}
+	if entries, err := os.ReadDir(target); err != nil || len(entries) != 0 {
+		t.Fatalf("symlink target changed: entries=%v err=%v", entries, err)
+	}
+
+	runSkillJSON(t, "install", "--dir", target, "--name", "volclog-core")
+}
+
 func TestSkillInstallRejectsSymlinkEvenWithForce(t *testing.T) {
 	dest := t.TempDir()
 	outside := t.TempDir()

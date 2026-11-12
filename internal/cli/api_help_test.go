@@ -59,6 +59,21 @@ func c4InvocationFailure(t *testing.T, stdout, stderr string, frozen bool) errPa
 	return payload
 }
 
+func TestRootHelpShowsPageAllExample(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"--help"}, &stdout, &stderr); code != 0 || stderr.Len() != 0 {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	for _, want := range []string{
+		"支持全量分页的操作",
+		"volclog tool exec project.describe-projects --page-all",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("root help missing %q: %q", want, stdout.String())
+		}
+	}
+}
+
 func TestUsageRawDescribesTransportOnlySurface(t *testing.T) {
 	text := usageRaw()
 	for _, want := range []string{

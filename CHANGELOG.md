@@ -1,12 +1,28 @@
 # Changelog
 
+## volclog-v1.2.0
+
+- Add four SavedSearch tools, align existing API request contracts, and cap `SearchLogs.Limit` at 1000 rows per page.
+- Honor explicit profile selection, validate runtime context, and improve Console Login diagnostics and Agent login guidance.
+- Require explicit permission for business writes and support non-interactive execution, an invocation deadline, and redacted tracing and dry-run previews.
+- Report execution and delivery outcomes separately. Include completeness and continuation for paginated results and retain partial results when later requests fail.
+- Add `tool describe --view input` and `tool schema`, support JMESPath filters with file delivery, and surface `--page-all` in the main help.
+- Improve Skill installation conflict and directory error messages, and document installation of a pinned CLI version.
+
+### Upgrade notes
+
+- Pass `--allow-write` or set `context.execution.allow_write=true` for business writes. Check `summary.remoteOutcome` before retrying a write after an output error.
+- Check `summary.completeness` before reporting a collection total. Use `--page-all` where supported or resume with the returned `next` input.
+- In the default edition, read invocation failures and file-delivery notices from stdout. Use `artifacts[].path` to locate a delivered file.
+- Refresh cached tool contracts and update bundled Skills before preparing requests against the updated schemas.
+
 ## volclog-v1.2.0-rc.2
 
 - Fix explicit profile selection in `configure show` and align authentication guidance with runtime precedence.
 - Improve Console Login error stages and document foreground fallback for Agent sessions and installation by version.
 - Cap the SearchLogs request `Limit` at 1000 rows per page.
 - Add `tool describe --view input` and `tool schema` for complete request fields and cacheable shared schemas, with updated bundled Skill guidance.
-- Expose Topic `DataIngestSpec` storage entitlements (`D3`, `D7`, `D15`, `D30`) and document the fixed entitlement and separate log retention fields.
+- Include Topic storage entitlement selection for release-candidate testing.
 
 ## volclog-v1.2.0-rc.1
 

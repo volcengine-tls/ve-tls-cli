@@ -25,7 +25,7 @@
 
 - 正式版使用 Tag：`volclog-vX.Y.Z`（例如 `volclog-v1.2.0`）
 - 预发布版使用标准 SemVer Tag：`volclog-vX.Y.Z-rc.N`（例如 `volclog-v1.2.0-rc.1`）
-- 当前候选版为 `1.2.0-rc.2`，目标正式版为 `1.2.0`。RC 存在问题时递增 `rc.N`；验证完成后再发布不带预发布后缀的正式版。
+- RC 存在问题时递增 `rc.N`；验证完成后再发布不带预发布后缀的正式版。
 - 每次候选版或正式版都同步更新 `package.json`、`npm/human-package/package.json`、`package-lock.json` 的顶层及根包版本、`internal/version/version.go`、发布元数据测试和 CHANGELOG，并在合入后打对应 Tag。Tag 必须与包版本匹配。
 - Release workflow 会将 `${GITHUB_REF_NAME}` 注入到二进制版本号中：
   - RC：`volclog --version` 输出 `volclog volclog-v1.2.0-rc.2`
@@ -38,16 +38,16 @@
 
 ## 发布流程（GitHub Actions）
 
-### 1) 合入版本准备 PR 后，打候选版 Tag 并推送
+### 1) 合入版本准备 PR 后，打正式版 Tag 并推送
 
-先确认该提交的 CI 通过，且版本元数据均为 `1.2.0-rc.2`：
+先确认该提交的 CI 通过，且版本元数据均为 `1.2.0`。
 
 ```bash
-git tag volclog-v1.2.0-rc.2
-git push origin volclog-v1.2.0-rc.2
+git tag volclog-v1.2.0
+git push origin volclog-v1.2.0
 ```
 
-正式发布时，先提交并合入 `1.2.0` 的版本更新、完成同样验证，再推送 `volclog-v1.2.0` Tag。
+发布候选版时，在版本准备 PR 中使用带 `-rc.N` 后缀的版本号，并在合入后推送对应 Tag。
 
 ### 2) 等待工作流完成
 - workflow：`.github/workflows/release-volclog.yml`

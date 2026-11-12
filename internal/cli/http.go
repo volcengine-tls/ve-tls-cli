@@ -25,7 +25,7 @@ func (e *httpError) Error() string {
 	return string(e.body)
 }
 
-func decodeResponse(resp tlsapi.Response) (any, error) {
+func decodeResponse(resp tlsapi.Response, requestPath string) (any, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, &httpError{
 			statusCode: resp.StatusCode,
@@ -38,9 +38,9 @@ func decodeResponse(resp tlsapi.Response) (any, error) {
 	}
 	v, err := util.UnmarshalJSON(resp.Body)
 	if err == nil {
-		return v, nil
+		return filterTopicResponse(requestPath, v)
 	}
-	if errors.Is(err, jsonx.ErrTrailingData) {
+	if isTopicQueryPath(requestPath) || errors.Is(err, jsonx.ErrTrailingData) {
 		return nil, err
 	}
 	var s string

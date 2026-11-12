@@ -41,6 +41,14 @@ func (e *skillAlreadyExistsError) Error() string {
 	return fmt.Sprintf("skill already exists: %s (use --force to overwrite)", e.target)
 }
 
+type skillDirSymlinkError struct {
+	path string
+}
+
+func (e *skillDirSymlinkError) Error() string {
+	return fmt.Sprintf("refusing symlink skill directory: %s", e.path)
+}
+
 type skillManifest struct {
 	SchemaVersion    int    `json:"schema_version"`
 	Name             string `json:"name"`
@@ -135,7 +143,7 @@ func absoluteSkillDir(dir string) (string, error) {
 	info, err := os.Lstat(absDir)
 	if err == nil {
 		if info.Mode()&fs.ModeSymlink != 0 {
-			return "", fmt.Errorf("refusing symlink skill directory: %s", absDir)
+			return "", &skillDirSymlinkError{path: absDir}
 		}
 		if !info.IsDir() {
 			return "", fmt.Errorf("skill directory is not a directory: %s", absDir)
@@ -152,7 +160,7 @@ func ensureSkillDir(dir string) error {
 	info, err := os.Lstat(dir)
 	if err == nil {
 		if info.Mode()&fs.ModeSymlink != 0 {
-			return fmt.Errorf("refusing symlink skill directory: %s", dir)
+			return &skillDirSymlinkError{path: dir}
 		}
 		if !info.IsDir() {
 			return fmt.Errorf("skill directory is not a directory: %s", dir)
@@ -170,7 +178,7 @@ func ensureSkillDir(dir string) error {
 		return err
 	}
 	if info.Mode()&fs.ModeSymlink != 0 {
-		return fmt.Errorf("refusing symlink skill directory: %s", dir)
+		return &skillDirSymlinkError{path: dir}
 	}
 	if !info.IsDir() {
 		return fmt.Errorf("skill directory is not a directory: %s", dir)
