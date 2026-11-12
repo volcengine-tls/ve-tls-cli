@@ -27,7 +27,7 @@ Treat this file as the dominant generic operating model for `volclog`, not as an
 - Run `volclog configure list` only when local profile discovery is actually relevant.
 - Use `region` only when the contract or task explicitly requires an override. Do not infer it from endpoint or domain.
 - `--profile`/`context.profile` and `--secrets-file`/`context.secrets_file` are runtime selectors, not business input fields.
-- A non-empty explicit profile must exist. Its static credentials and token cannot be replaced or filled from the environment; incomplete static AK/SK fails. Dynamic identities remain provider-backed. Without an explicit profile, the existing environment precedence applies.
+- A non-empty explicit profile must exist and supply its static credentials or dynamic provider. For an explicit profile, region and endpoint resolve from invocation overrides, then the profile, then project defaults. See [profile and credential selection](references/best-practices.md#profile-and-credential-selection) for implicit selection and an example.
 - Global `--region`/`--endpoint` and context `region`/`endpoint` override profile, applicable environment, and project defaults. Different non-empty global and context values for the same field fail validation.
 - Context validation rejects unknown fields, wrong types, and conflicting aliases before applying the context. Legacy trace boolean/string/object and execution artifact/output/projection forms remain supported; page controls are for supported tools, not workflows.
 - Non-TTY runs are automatically non-interactive; `--non-interactive` or `context.execution.non_interactive=true` also enables the mode. Context `false` cannot turn off automatic non-TTY mode and conflicts with global `true`.
@@ -42,15 +42,15 @@ Discover -> Describe -> Exec -> Read Result
 1. Resolve runtime selectors.
    - decide whether this run is using profile, secrets file, or environment credentials
    - if local profile discovery matters, run `volclog configure list`
-   - specify the chosen profile or secrets-file selector in the command or context; leave profile unset when using environment credentials
+   - use one selector family per invocation. For process-scoped AK/SK, confirm that implicit selection resolves to static mode.
 2. Discover the callable surface.
    - `volclog tool list`
    - `volclog tool list <group>`
    - `volclog workflow list <group>`
 3. Read the contract.
-   - `volclog tool describe <group.action>`
-   - use `volclog tool describe <group.action> --view full` when authoring a nested request or when compact output omits an expected optional field
-   - treat compact view as the discovery summary and full view as the request-authoring contract
+   - `volclog tool describe <group.action> --view input` returns the complete sectioned request schema and operation capabilities
+   - when you need context or execution fields, follow `schema_ref.command` (`volclog tool schema`) and reuse the shared schemas by `schema_digest`
+   - use `--view full` for a self-contained contract or on a CLI without `--view input`. Check `volclog tool describe --help` if support is unclear.
    - `volclog workflow describe <group.command>`
 4. Execute with structured input.
    - `volclog tool exec <group.action> --input '{...}'`
@@ -89,7 +89,7 @@ Discover -> Describe -> Exec -> Read Result
 - TLS writes and unknown raw operations, including unknown GETs, fail with `permission` / `WritePermissionRequired` unless the CLI write gate is enabled. Only for a user-authorized write, use `--allow-write`; `tool exec` / `workflow exec` can instead use `context.execution.allow_write=true`, but raw has no context. This is not an IAM grant. Reviewed reads such as POST `log.search` and dry-runs do not need it; human shortcuts use the same gate. Global `true` conflicts with explicit context `false`.
 - Treat `--dry-run` as contract or plan validation, not proof that the business query is correct.
 - Trace redaction accepts only `on`/`true`/`1`/`yes`/`enabled`/`strict`/`default`; `off`/`false`/`0`/`no`/`disabled` and unknown values fail. `context.trace=false` or `enabled:false` disables a global trace directory.
-- In non-interactive login, use the device-code flow without a browser. Session replacement requiring confirmation returns `interaction_required`: use another `--profile` or an interactive terminal; there is no `--force`. SSO selects a single candidate automatically but fails without the required choice when multiple candidates exist; the transactional token is rolled back and config changes are not committed, though registration cache may already exist.
+- Use non-interactive device-code login when the session can keep the process running and show stderr to the user as it arrives. Set a whole-login `--timeout` that gives the user time to authorize. If the host cannot keep the process alive, have the user run a fresh login in a foreground terminal with the intended profile, Region, and Endpoint. Session replacement requiring confirmation returns `interaction_required`. Use another profile or an interactive terminal. SSO automatically selects a single candidate and requires an explicit choice when there are several.
 - Darwin/Linux interactive prompts use cancellable polling. A Windows console without read-deadline support returns `interaction_required`; provide explicit selectors to avoid the prompt. Runtime verification of this behavior has been on Darwin only.
 - SIGINT, SIGTERM, and `RunContext` cancellation propagate. Before send the outcome is `not_sent`; after send an uncertain result remains `unknown`. Preserve completed partial results and reconcile ambiguous writes before any retry.
 - A dry-run `request_preview` masks known sensitive keys recursively, including sensitive `Contents`/`LogTags` key/value entries; malformed bodies are omitted and `redacted_fields` may list paths. This affects only the preview, not the wire request or body hash. Ordinary body strings are not guaranteed to be recognized as secrets.
@@ -141,7 +141,7 @@ Use this table as the default first response after a failed envelope only after 
 
 | Need | Prefer |
 | --- | --- |
-| Public API contract already chosen | `volclog tool describe <group.action>` / `volclog tool exec <group.action>` |
+| Public API contract already chosen | `volclog tool describe <group.action> --view input` / `volclog tool exec <group.action>` |
 | CLI workflow already chosen | `volclog workflow describe <group.command>` / `volclog workflow exec <group.command>` |
 | Need to discover action or workflow ids | `volclog tool list <group>` / `volclog workflow list <group>` |
 | Need help choosing the surface | read `references/routing.md` |

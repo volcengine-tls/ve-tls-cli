@@ -12,6 +12,8 @@ import (
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth/browser"
 )
 
+var errDeviceAuthorizationExpired = errors.New("device authorization expired")
+
 // DeviceSleeper waits for d or until ctx is done. It is injectable so device
 // authorization tests never need to wait in real time.
 type DeviceSleeper func(ctx context.Context, d time.Duration) error
@@ -132,7 +134,7 @@ func (f *DeviceAuthorizationFlow) Authorize(ctx context.Context) (*ConsoleTokenR
 		return nil, errors.New("nil context")
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, newSafeError("device authorization canceled", err)
+		return nil, newSafeError("start device authorization failed", err)
 	}
 	if isNilInterface(f.client) {
 		return nil, errors.New("device authorization client is unavailable")
@@ -159,14 +161,14 @@ func (f *DeviceAuthorizationFlow) Authorize(ctx context.Context) (*ConsoleTokenR
 		return nil, newSafeError("start device authorization failed", err)
 	}
 	if authResp == nil {
-		return nil, errors.New("device authorization returned empty response")
+		return nil, newSafeError("start device authorization failed", errors.New("device authorization returned empty response"))
 	}
 	if authResp.ExpiresIn <= 0 {
-		return nil, errors.New("device authorization returned invalid expires_in")
+		return nil, newSafeError("start device authorization failed", errors.New("device authorization returned invalid expires_in"))
 	}
 	lifetime, ok := deviceDuration(authResp.ExpiresIn)
 	if !ok {
-		return nil, errors.New("device authorization expires_in is too large")
+		return nil, newSafeError("start device authorization failed", errors.New("device authorization expires_in is too large"))
 	}
 
 	browserURL := strings.TrimSpace(authResp.VerificationURIComplete)
@@ -192,7 +194,7 @@ func (f *DeviceAuthorizationFlow) Authorize(ctx context.Context) (*ConsoleTokenR
 	for {
 		now := clock()
 		if !now.Before(deadline) {
-			return nil, errors.New("device authorization timed out; please run 'volclog login' again")
+			return nil, newSafeError("waiting for device authorization failed", errDeviceAuthorizationExpired)
 		}
 		wait := poll.interval
 		if remaining := deadline.Sub(now); wait > remaining {
@@ -202,7 +204,7 @@ func (f *DeviceAuthorizationFlow) Authorize(ctx context.Context) (*ConsoleTokenR
 			return nil, newSafeError("waiting for device authorization failed", err)
 		}
 		if !clock().Before(deadline) {
-			return nil, errors.New("device authorization timed out; please run 'volclog login' again")
+			return nil, newSafeError("waiting for device authorization failed", errDeviceAuthorizationExpired)
 		}
 
 		tokenResp, pollErr := f.exchangeDeviceToken(ctx, &ConsoleTokenRequest{
@@ -213,12 +215,12 @@ func (f *DeviceAuthorizationFlow) Authorize(ctx context.Context) (*ConsoleTokenR
 		})
 		if pollErr == nil {
 			if tokenResp == nil {
-				return nil, errors.New("device authorization returned empty token response")
+				return nil, newSafeError("polling device authorization failed", errors.New("device authorization returned empty token response"))
 			}
 			return tokenResp, nil
 		}
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return nil, newSafeError("device authorization canceled", ctxErr)
+			return nil, newSafeError("polling device authorization failed", ctxErr)
 		}
 
 		handled, terminalErr := handleDevicePollError(&poll, pollErr, maxTransient)
@@ -260,7 +262,7 @@ func handleDevicePollError(poll *devicePollState, err error, maxTransient int) (
 		return true, nil
 	}
 	if errors.Is(err, context.Canceled) {
-		return false, newSafeError("device authorization canceled", err)
+		return false, newSafeError("polling device authorization failed", err)
 	}
 	var apiErr *ConsoleOAuthAPIError
 	if errors.As(err, &apiErr) {
@@ -272,10 +274,8 @@ func handleDevicePollError(poll *devicePollState, err error, maxTransient int) (
 			poll.resetTransient()
 			poll.slowDown()
 			return true, nil
-		case "access_denied":
-			return false, errors.New("device authorization was denied")
-		case "expired_token", "invalid_device_code":
-			return false, errors.New("device code is invalid or expired; please run 'volclog login' again")
+		case "access_denied", "expired_token", "invalid_device_code":
+			return false, newSafeError("polling device authorization failed", err)
 		case "server_error", "temporarily_unavailable":
 			if !poll.noteTransient() || poll.transientErrors > maxTransient {
 				return false, newSafeError("polling device authorization failed", err)

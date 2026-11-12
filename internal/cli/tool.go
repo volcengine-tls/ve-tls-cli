@@ -32,6 +32,8 @@ func runTool(ctx *Context, args []string) (any, error) {
 		return runToolList(ctx, args[1:])
 	case "describe":
 		return runToolDescribe(ctx, args[1:])
+	case "schema":
+		return runToolSchema(args[1:])
 	case "exec":
 		return runToolExec(ctx, args[1:])
 	default:
@@ -200,7 +202,7 @@ func parseToolDescribeArgs(args []string) (string, toolDescribeView, error) {
 		return "", "", errors.New("missing tool identity: <group.action>")
 	}
 	switch view {
-	case "", toolDescribeViewCompact, toolDescribeViewFull:
+	case "", toolDescribeViewCompact, toolDescribeViewFull, toolDescribeViewInput:
 		return identity, view, nil
 	default:
 		return "", "", errors.New("invalid --view: " + string(view))
@@ -218,6 +220,20 @@ func resolveToolDescribeView(ctx *Context, requested toolDescribeView) toolDescr
 		return toolDescribeViewFull
 	}
 	return toolDescribeViewCompact
+}
+
+func runToolSchema(args []string) (any, error) {
+	if hasHelp(args) {
+		return nil, &usageError{Text: usageToolSchema(), ExitCode: 0}
+	}
+	if len(args) > 0 {
+		return nil, withScopedHelpHint(errors.New("unexpected argument: "+args[0]), "volclog tool schema")
+	}
+	catalog, err := loadOperationCatalog()
+	if err != nil {
+		return nil, err
+	}
+	return buildToolSharedSchema(catalog)
 }
 
 func parseToolIdentity(v string) (group string, action string, ok bool) {

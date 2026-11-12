@@ -251,6 +251,52 @@ func TestDeviceAuthorizationFlowTimeoutDoublesIntervalAndCapsTransientErrors(t *
 	}
 }
 
+func TestDeviceAuthorizationFailureStages(t *testing.T) {
+	for _, tc := range []struct {
+		name, stage, message string
+		waitErr, pollErr     error
+		expiresIn, status    int
+	}{
+		{name: "invocation deadline while waiting", stage: "wait_for_user", message: "timed out", waitErr: context.DeadlineExceeded, expiresIn: 300},
+		{name: "device code expiry", stage: "wait_for_user", message: "device authorization expired", expiresIn: 1},
+		{
+			name: "authorization denied by token endpoint", stage: "token_poll", message: "access_denied", expiresIn: 300, status: 400,
+			pollErr: &ConsoleOAuthAPIError{StatusCode: 400, RequestID: "test-request", Response: ConsoleOAuthErrorResponse{
+				Error: "access_denied", ErrorDescription: "private-oauth-description",
+			}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &scriptedDeviceClient{
+				authResp: &ConsoleDeviceAuthorizationResponse{
+					DeviceCode: "private-device-code", UserCode: "TEST-CODE",
+					VerificationURI: "https://example.com/device", ExpiresIn: tc.expiresIn, Interval: 5,
+				},
+				poll: []error{tc.pollErr},
+			}
+			now := time.Unix(1000, 0)
+			flow := NewDeviceAuthorizationFlow(client, io.Discard, nil, func() time.Time { return now }, func(_ context.Context, wait time.Duration) error {
+				now = now.Add(wait)
+				return tc.waitErr
+			})
+			_, err := flow.Authorize(context.Background())
+			diagnostic := DiagnoseError(err)
+			if diagnostic.Stage != tc.stage || !strings.Contains(diagnostic.Message, tc.message) || diagnostic.StatusCode != tc.status {
+				t.Fatalf("diagnostic = %+v, want stage %q, message containing %q, status %d", diagnostic, tc.stage, tc.message, tc.status)
+			}
+			if tc.pollErr != nil && (len(client.requests) != 1 || diagnostic.RequestID != "test-request") {
+				t.Fatalf("token poll lost request metadata: %+v", diagnostic)
+			}
+			if tc.pollErr == nil && len(client.requests) != 0 {
+				t.Fatal("token request sent after waiting ended")
+			}
+			if strings.Contains(diagnostic.Message, "private-") {
+				t.Fatalf("diagnostic exposed authentication material: %+v", diagnostic)
+			}
+		})
+	}
+}
+
 func TestDeviceAuthorizationFlowTreatsProtocolServerErrorsAsBoundedTransient(t *testing.T) {
 	for _, code := range []string{"server_error", "temporarily_unavailable"} {
 		t.Run(code, func(t *testing.T) {

@@ -44,7 +44,7 @@ volclog configure delete --profile scratch
 volclog configure delete --prefix temp- --yes
 ```
 
-`configure list` 和 `configure show` 永远不会打印密钥。访问密钥 ID 会被掩码（例如 `AKT****XYZ`）；秘密访问密钥则完全不输出。`configure show --profile NAME` 查看单个配置档；不带 `--profile` 时回退到 `current_profile`，再回退到 `default`。
+`configure list` 和 `configure show` 永远不会打印密钥。访问密钥 ID 会被掩码（例如 `AKT****XYZ`）；秘密访问密钥则完全不输出。`configure show NAME`、`configure show --profile NAME` 和 `volclog --profile NAME configure show` 都选择指定配置档。选择器冲突或传入多余参数时会报错。未提供选择器时，回退到 `current_profile`，再回退到 `default`。
 
 `configure use NAME` 将 `current_profile` 设为 `NAME`。`configure delete` 按名称删除单个配置档，或删除名称以 `--prefix` 开头的所有配置档（按前缀删除需要 `--yes`）。删除后，如果 `current_profile` 指向被删除的配置档，会自动调整。
 
@@ -54,7 +54,7 @@ volclog configure delete --prefix temp- --yes
 | --- | --- |
 | `configure profile add NAME [flags...]` | `configure set --profile NAME [flags...]` |
 | `configure profile use NAME` | `configure use NAME` |
-| `configure profile show [NAME]` | `configure show --profile NAME` |
+| `configure profile show [NAME]` | `configure show [NAME]` |
 | `configure profile list [args...]` | `configure list [args...]` |
 | `configure profile delete [NAME]` | `configure delete [NAME]` |
 

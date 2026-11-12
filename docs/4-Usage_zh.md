@@ -72,7 +72,7 @@ volclog skill uninstall --dir <agent-skills-dir> [--name <name>] [--force]
 
 在运行工具或工作流之前，先检查其契约，以便了解所需的输入和请求形状。
 
-### 2.1 `tool list` 和 `tool describe`
+### 2.1 `tool list`、`tool describe` 和 `tool schema`
 
 ```bash
 volclog tool list
@@ -83,9 +83,13 @@ volclog tool list trace
 volclog tool list --verb create --format json
 volclog tool describe project.describe-projects
 volclog tool describe project.create --view full
+volclog tool describe project.describe-projects --view input
+volclog tool schema
 ```
 
-`tool list` 将组作为位置参数（不是 `--group` 标志），并支持 `--verb` 按动词过滤和 `--format text|json`（默认 `text`）。`tool describe <group.action>` 显示工具的标识、输入模式、上下文模式、执行模式、行为、输出策略和契约摘要。`--view` 标志选择 `compact`（默认）或 `full`；显式 JSON 输出默认为 `full`。
+`tool list` 将组作为位置参数（不是 `--group` 标志），并支持 `--verb` 按动词过滤和 `--format text|json`（默认 `text`）。`tool describe <group.action>` 默认用 `compact`，显式传 `--output json` 时默认用 `full`。可通过 `--view` 指定 `compact`、`full` 或 `input`。
+
+`--view input` 返回该操作完整的分区 `input_schema`、入参策略、用法和执行能力。需要查看上下文或执行字段时，运行 `schema_ref.command` 中的命令。`volclog tool schema` 可在离线且无凭证时运行，两份公共 schema 位于同一个 JSON 对象中，`#/execution_schema` 从该对象根部解析。当返回的 `schema_digest` 与 `schema_ref.schema_digest` 一致时，可复用已缓存的公共 schema。使用 `execution.page.all` 或 `execution.page_all` 前，先确认该操作的 `behavior.supports_all`。`behavior.requires_write_permission` 表示实际执行是否需要显式授予 CLI 写入许可。
 
 `full` 视图还提供 `recovery_source`、`recovery_notes`、`doc_url`、`doc_url_source`、`input_policy` 和 `source`；没有核实到精确文档地址时 `doc_url` 为 `null`。`identity.api_version_default` 是客户端默认请求头版本（`0.3.0`），`identity.api_version_source` 说明其来源；它不是逐操作核实的 API 版本。`full` 中未知的 `identity.maintainer` 和 `identity.deprecated` 为 `null`，`compact` 会省略部分细节。
 
@@ -172,6 +176,21 @@ volclog --profile default --allow-write tool exec log.delete-saved-search \
 创建的 body 使用 `TopicID`，列表的 query 使用 `TopicId`，返回项使用 `TopicID`；请保留大小写。`DisplayName` 为必填，长度为 3～64 个字符，名称规则由服务端校验。创建只保存语句，不执行查询。每个 Topic 默认最多 10 条，可由服务端配置；列表一次返回全部结果，不支持 `--page-all`。
 
 创建和删除在结果不确定时不要自动重试：先查询列表或详情核对状态。创建可能返回 HTTP 409 `SavedSearchAlreadyExist`；重复删除返回 HTTP 400 `SavedSearchNotExist`，CLI 会保留服务端错误。
+
+### 3.4 日志主题的存储权益规格
+
+创建按写入量计费的主题时，设置 `MeteringMode=ChargeByDataIngest`，并从 `D3`、`D7`、`D15`、`D30` 中选择 `DataIngestSpec`。该模式下省略规格时，服务端默认使用 `D30`。日志总保留天数单独用 `Ttl` 设置。存储权益规格在创建时确定，后续可通过 `topic.modify` 的 `Ttl` 修改日志保留天数。
+
+```bash
+volclog --profile default --dry-run tool exec topic.create \
+  --input '{"ProjectId":"<project-id>","TopicName":"short-retention","Ttl":7,"MeteringMode":"ChargeByDataIngest","DataIngestSpec":"D7"}'
+volclog --profile default --dry-run tool exec topic.modify \
+  --input '{"TopicId":"<topic-id>","Ttl":15}'
+volclog --profile default tool exec topic.describe-topic --input '{"TopicId":"<topic-id>"}'
+volclog --profile default tool exec topic.describe-topics --input '{"ProjectId":"<project-id>"}'
+```
+
+单查从 `data.DataIngestSpec` 读取规格，列表从 `data.Topics[].DataIngestSpec` 读取。该字段由服务端按需返回。
 
 ## 4. `workflow exec`
 

@@ -11,6 +11,7 @@ type errPayload struct {
 	RequestID    string `json:"requestId,omitempty"`
 	StatusCode   int    `json:"statusCode,omitempty"`
 	Kind         string `json:"kind,omitempty"`
+	Stage        string `json:"stage,omitempty"`
 	Hint         string `json:"hint,omitempty"`
 }
 

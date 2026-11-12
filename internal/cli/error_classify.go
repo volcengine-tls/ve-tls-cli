@@ -71,15 +71,35 @@ func classifyError(err error, requestID string, statusCode int, group string) (e
 	}
 	var loginFlowErr *safeCLIError
 	if errors.As(err, &loginFlowErr) && loginFlowErr.loginFlow != "" {
-		diagnostic := console.DiagnoseError(loginFlowErr.cause)
+		diagnostic := loginFlowErr.loginDiagnostic
 		hint := "check browser callback access, or retry explicitly with 'volclog login --device-code' when loopback is unavailable"
 		if loginFlowErr.loginFlow == "device-code" {
 			hint = "complete device authorization, or rerun 'volclog login --device-code --no-browser' and follow the printed URL and user code"
 		}
+		switch diagnostic.Stage {
+		case console.LoginStageSetup:
+			hint = "check the local configuration and the Console sign-in endpoint in 'volclog login --help'"
+		case console.LoginStageDeviceCode:
+			hint = "check outbound HTTPS access to the Console sign-in endpoint and verify --login-endpoint before starting a fresh login"
+		case console.LoginStageWaitForUser:
+			hint = "start a fresh login in a terminal that can stay open and choose a --timeout that allows the user to authorize on the official page"
+		case console.LoginStageTokenPoll:
+			hint = "check HTTPS connectivity and the authorization status on the official page. Start a fresh login if the device code expired"
+		case console.LoginStageTokenExchange:
+			hint = "check HTTPS access to the Console sign-in endpoint and start a fresh login to obtain a new authorization code"
+		case console.LoginStageTokenResponse:
+			hint = "check the Console sign-in endpoint and contact support if the token response remains invalid"
+		case console.LoginStageConfirmation:
+			hint = "use an interactive terminal to confirm session replacement or select another --profile"
+		case console.LoginStageCache:
+			hint = "check the local login cache directory and write permissions"
+		case console.LoginStageConfigUpdate:
+			hint = "check the configuration file and its write permissions, then inspect the profile with 'volclog configure show --profile NAME'"
+		}
 		if diagnostic.StatusCode == 429 {
-			hint = "console sign-in service rate limited the request; wait before retrying and reduce concurrent login/refresh requests from the same egress IP"
+			hint = "the Console sign-in service rate limited the request. Wait before retrying and reduce concurrent login and refresh requests from the same egress IP"
 		} else if diagnostic.StatusCode == 403 {
-			hint = "console sign-in service rejected the request; check browser authorization and contact support with the requestId when available"
+			hint = "the Console sign-in service rejected the request. " + hint + ". Include requestId when contacting support"
 		}
 		return errPayload{
 			RequestID:  diagnostic.RequestID,

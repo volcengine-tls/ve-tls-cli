@@ -67,8 +67,8 @@ func TestDiagnoseErrorComposesOuterBrowserPhaseWithCallbackAndTimeout(t *testing
 		)
 		got := DiagnoseError(err)
 		want := "browser authorization failed: waiting for browser callback timed out"
-		if got.Message != want {
-			t.Fatalf("Message = %q, want %q", got.Message, want)
+		if got.Message != want || got.Stage != "browser_callback" {
+			t.Fatalf("diagnostic = %+v, want stage browser_callback and message %q", got, want)
 		}
 	})
 }

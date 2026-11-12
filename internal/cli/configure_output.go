@@ -34,17 +34,24 @@ func configureUse(ctx *Context, args []string) (any, error) {
 }
 
 func configureShow(ctx *Context, args []string) (any, error) {
-	var name string
-	if len(args) >= 2 && args[0] == "--profile" {
-		name = args[1]
+	var local string
+	if len(args) > 0 {
+		if args[0] == "--profile" {
+			if !hasGlobalFlagValue(args, 0) || strings.TrimSpace(args[1]) == "" {
+				return nil, errors.New("missing value for --profile")
+			}
+			args = args[1:]
+		}
+		if len(args) != 1 || strings.TrimSpace(args[0]) == "" || strings.HasPrefix(args[0], "-") {
+			return nil, errors.New("unexpected argument: configure show expects one profile name or --profile NAME")
+		}
+		local = args[0]
 	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		name = strings.TrimSpace(ctx.cfg.CurrentProfile)
+	name, err := resolveProfileSelector(ctx.Profile, local)
+	if err != nil {
+		return nil, err
 	}
-	if name == "" {
-		name = "default"
-	}
+	name = ctx.cfg.SelectedProfileName(name)
 	p, ok := ctx.cfg.GetProfile(name)
 	if !ok {
 		return nil, errors.New("profile not found: " + name)

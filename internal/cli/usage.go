@@ -12,6 +12,7 @@ func u(s string) string {
 func usageConfigure() string {
 	return u(`Usage:
   tlsctl configure <command> [args]
+  tlsctl configure show [NAME | --profile NAME]
 
 Commands:
   set          Set a profile
@@ -75,6 +76,7 @@ Examples:
   tlsctl configure profile add tenant-a --ak <ak> --sk <sk> --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure profile use tenant-a
   tlsctl configure use default
+  tlsctl configure show tenant-a
   tlsctl configure show --profile default
   tlsctl configure project show
   tlsctl configure project set --output json --output-mode file --output-dir ./out
@@ -180,12 +182,14 @@ func usageTool() string {
 Commands:
   list      List groups or actions
   describe  Show a tool contract and execution hint
+  schema    Show shared tool context and execution schemas
   exec      Execute a tool contract with JSON context/input
 
 Use:
   volclog tool list
   volclog tool list <group> [--verb <verb>] [--format <text|json>]
   volclog tool describe <group.action>
+  volclog tool schema
   volclog tool exec <group.action> --context file://ctx.json [--input file://req.json]
 
 说明:
@@ -308,14 +312,26 @@ Filters:
 
 func usageToolDescribe() string {
 	return u(`Usage:
-  tlsctl tool describe <group.action> [--view <compact|full>]
+  tlsctl tool describe <group.action> [--view <compact|full|input>]
 
 说明:
   - 默认返回 compact 视图，优先保留最小可执行契约
-  - 指定 --view full 或显式 --output json 时返回完整机器契约
+  - 指定 --view full 时返回完整契约。未指定视图且显式 --output json 时默认用 full
+  - --view input 保留完整请求字段和操作能力，通过 volclog tool schema 查询公共 schema
   - 只展示官网文档已发布接口的契约
   - 只做契约查看，不执行请求
   - 通常与 volclog tool list <group> 配合使用
+`)
+}
+
+func usageToolSchema() string {
+	return u(`Usage:
+  volclog tool schema
+
+说明:
+  - 输出公共 context_schema、execution_schema 和 schema_digest
+  - schema_digest 与 tool describe --view input 的 schema_ref 对应
+  - page.all 是否可用由各操作的 behavior.supports_all 决定
 `)
 }
 
@@ -368,10 +384,11 @@ Agent:
 func usageLogin() string {
 	return u(`Usage:
   tlsctl login [-p|--profile NAME] [-r|--region REGION] [--endpoint URL] [--login-endpoint URL] [--device-code] [--no-browser] [--remote]
+               [--non-interactive] [--timeout DURATION]
 
 概览:
   通过 Console Login 获取临时 STS 凭证。
-  默认使用本机浏览器回调 + PKCE；--device-code 显式使用跨设备 Device Code。
+  交互式终端默认使用本机浏览器回调 + PKCE。非 TTY 自动使用无浏览器 Device Code。
   --no-browser 与历史兼容别名 --remote 均隐含 --device-code。
   登录态只写入 ~/.volclog（或 VOLCLOG_CONFIG 对应目录）的 login/cache，不依赖 ve 或 ~/.volcengine。
 
@@ -383,6 +400,8 @@ Flags:
   --device-code              使用跨设备 Device Code，而非默认本机浏览器回调
   --no-browser               使用 Device Code 且不自动打开浏览器
   --remote                   --no-browser 的历史兼容别名
+  --non-interactive          使用无浏览器 Device Code，避免终端交互式确认
+  --timeout <duration>       整次登录的时间预算，使用正的 Go duration，例如 90s
 
 Examples:
   # 本机桌面：浏览器回调 + PKCE，不输入 user code
@@ -391,12 +410,17 @@ Examples:
   # Device Code：不监听本地回调端口，仍尝试自动打开浏览器
   tlsctl login --device-code --profile NAME --region REGION --endpoint URL
 
-  # SSH / Trae / 人工参与的 Agent：复制终端打印的 URL，在任意浏览器的官方页面输入 user code
-  tlsctl login --device-code --no-browser --profile NAME --region REGION --endpoint URL
+  # 可持续运行并实时显示 stderr 的远程会话，用户在官方页面完成授权
+  tlsctl login --device-code --no-browser --timeout 90s --profile NAME --region REGION --endpoint URL
+
+会话要求
+  - 在原会话保持登录进程运行并实时显示 stderr，给用户留出在官方页面操作的时间。
+  - 宿主会回收进程或无法及时展示授权提示时，请用户在同一配置环境的前台终端完成登录。
 
 输出:
   - stdout 仅输出最终 JSON（profile/provider/region/endpoint/expires_at/masked_access_key）
   - 授权 URL、短期 user code、prompt、浏览器提示、进度只写 stderr
+  - 已识别的失败阶段通过 stderr JSON 的 stage 和 hint 给出
   - 保持原终端运行并等待轮询完成；不需要把任何 code 粘贴回终端
 
 安全:

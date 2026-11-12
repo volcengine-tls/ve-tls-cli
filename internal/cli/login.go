@@ -108,9 +108,10 @@ func newLogoutPartialFailureError(cause error) error {
 // secrets), but Unwrap preserves the cause so errors.Is/errors.As still match.
 // This mirrors console.safeError for the CLI adapter layer.
 type safeCLIError struct {
-	desc      string
-	cause     error
-	loginFlow string
+	desc            string
+	cause           error
+	loginFlow       string
+	loginDiagnostic console.ErrorDiagnostic
 }
 
 func (e *safeCLIError) Error() string {
@@ -136,21 +137,22 @@ func newSafeCLIError(desc string, cause error) error {
 	return &safeCLIError{desc: desc, cause: cause}
 }
 
-// newConsoleLoginError preserves the long-standing *safeCLIError contract and
-// adds only a private flow marker for actionable, secret-free classification.
+// newConsoleLoginError records the selected flow and its safe diagnostic.
 func newConsoleLoginError(deviceCode bool, cause error) error {
 	flow := "browser"
 	if deviceCode {
 		flow = "device-code"
 	}
 	desc := "console login failed"
-	if diagnostic := console.DiagnoseError(cause); diagnostic.Message != "" {
+	diagnostic := console.DiagnoseError(cause)
+	if diagnostic.Message != "" {
 		desc += ": " + diagnostic.Message
 	}
 	return &safeCLIError{
-		desc:      desc,
-		cause:     cause,
-		loginFlow: flow,
+		desc:            desc,
+		cause:           cause,
+		loginFlow:       flow,
+		loginDiagnostic: diagnostic,
 	}
 }
 

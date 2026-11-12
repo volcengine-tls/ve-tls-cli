@@ -72,7 +72,7 @@ Each installed Skill directory contains `.volclog-skill.json` with the schema ve
 
 Before running a tool or workflow, inspect its contract so you know the required input and the request shape.
 
-### 2.1 `tool list` and `tool describe`
+### 2.1 `tool list`, `tool describe`, and `tool schema`
 
 ```bash
 volclog tool list
@@ -83,9 +83,13 @@ volclog tool list trace
 volclog tool list --verb create --format json
 volclog tool describe project.describe-projects
 volclog tool describe project.create --view full
+volclog tool describe project.describe-projects --view input
+volclog tool schema
 ```
 
-`tool list` takes the group as a positional argument (not a `--group` flag) and supports `--verb` to filter by verb and `--format text|json` (default `text`). `tool describe <group.action>` shows the tool's identity, input schema, context schema, execution schema, behavior, output policy, and contract digest. The `--view` flag selects `compact` (default) or `full`; explicit JSON output defaults to `full`.
+`tool list` takes the group as a positional argument (not a `--group` flag) and supports `--verb` to filter by verb and `--format text|json` (default `text`). `tool describe <group.action>` defaults to `compact`, or to `full` when `--output json` is explicitly set. An explicit `--view` selects `compact`, `full`, or `input`.
+
+`--view input` returns the complete sectioned `input_schema` for the action, input policy, usage guidance, and operation capabilities. When you need the context or execution fields, run the command in `schema_ref.command`. `volclog tool schema` returns both shared schemas in one JSON object and can be run offline without credentials. Resolve `#/execution_schema` from the root of that object. Reuse the shared schemas when the returned `schema_digest` matches `schema_ref.schema_digest`. Check the action's `behavior.supports_all` before using `execution.page.all` or `execution.page_all`. `behavior.requires_write_permission` tells you whether a live call requires the CLI's explicit write permission.
 
 The full view also exposes `recovery_source`, `recovery_notes`, `doc_url`, `doc_url_source`, `input_policy`, and `source`. A missing verified documentation URL is `null`. `identity.api_version_default` is the client's default request header (`0.3.0`), with `identity.api_version_source` identifying its source; it is not a verified per-operation API version. Unknown `identity.maintainer` and `identity.deprecated` are `null` in the full view. Compact output omits some of these details.
 
@@ -172,6 +176,21 @@ volclog --profile default --allow-write tool exec log.delete-saved-search \
 Creation uses body key `TopicID`, listing uses query key `TopicId`, and returned items use `TopicID`; preserve the spelling. `DisplayName` is required and must be 3–64 characters, with name validation performed by the service. Creation stores the expression without executing it. The default limit is 10 saved queries per Topic and is configurable by the service. Listing returns every item in one response and does not support `--page-all`.
 
 Do not retry creation or deletion automatically after an ambiguous result; reconcile with a list or detail request first. Creation can return HTTP 409 `SavedSearchAlreadyExist`. Repeated deletion returns HTTP 400 `SavedSearchNotExist`; the CLI preserves the service error.
+
+### 3.4 Topic storage entitlements
+
+For a new topic billed by ingestion volume, set `MeteringMode` to `ChargeByDataIngest` and choose `DataIngestSpec` from `D3`, `D7`, `D15`, and `D30`. In this billing mode the service defaults the entitlement to `D30` when omitted. Set total log retention separately with `Ttl`. The storage entitlement is fixed at creation. Use `topic.modify` with `Ttl` to change log retention.
+
+```bash
+volclog --profile default --dry-run tool exec topic.create \
+  --input '{"ProjectId":"<project-id>","TopicName":"short-retention","Ttl":7,"MeteringMode":"ChargeByDataIngest","DataIngestSpec":"D7"}'
+volclog --profile default --dry-run tool exec topic.modify \
+  --input '{"TopicId":"<topic-id>","Ttl":15}'
+volclog --profile default tool exec topic.describe-topic --input '{"TopicId":"<topic-id>"}'
+volclog --profile default tool exec topic.describe-topics --input '{"ProjectId":"<project-id>"}'
+```
+
+The detail response exposes the service's `DataIngestSpec` in `data`, and the list exposes it on each entry in `data.Topics`. The field is optional in both responses.
 
 ## 4. `workflow exec`
 

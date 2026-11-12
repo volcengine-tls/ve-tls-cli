@@ -1,5 +1,13 @@
 # Changelog
 
+## volclog-v1.2.0-rc.2
+
+- Fix explicit profile selection in `configure show` and align authentication guidance with runtime precedence.
+- Improve Console Login error stages and document foreground fallback for Agent sessions and installation by version.
+- Cap the SearchLogs request `Limit` at 1000 rows per page.
+- Add `tool describe --view input` and `tool schema` for complete request fields and cacheable shared schemas, with updated bundled Skill guidance.
+- Expose Topic `DataIngestSpec` storage entitlements (`D3`, `D7`, `D15`, `D30`) and document the fixed entitlement and separate log retention fields.
+
 ## volclog-v1.2.0-rc.1
 
 - Add four SavedSearch tools for creating, deleting, reading, and listing shared Topic saved queries, with exact field spelling, explicit write permission, upstream error propagation, and server-source provenance.

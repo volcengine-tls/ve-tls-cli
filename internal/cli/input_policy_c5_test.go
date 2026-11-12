@@ -18,7 +18,7 @@ func TestC5ToolInputRejectsInvalidDeclaredValuesBeforeSending(t *testing.T) {
 		{"non-object section", "project.create", `{"query":[],"body":{"ProjectName":"demo","Region":"cn-beijing"}}`},
 		{"declared type", "log.search", `{"TopicId":"tid","Query":"*","StartTime":"1710374400000","EndTime":1710378000000}`},
 		{"declared enum", "log.search", `{"TopicId":"tid","Query":"*","StartTime":1710374400000,"EndTime":1710378000000,"Sort":"sideways"}`},
-		{"declared bound", "log.search", `{"TopicId":"tid","Query":"*","StartTime":1710374400000,"EndTime":1710378000000,"Limit":1000001}`},
+		{"declared bound", "log.search", `{"TopicId":"tid","Query":"*","StartTime":1710374400000,"EndTime":1710378000000,"Limit":1001}`},
 		{"non-negative shard", "shard.merge", `{"TopicId":"tid","ShardId":-1}`},
 		{"nested array element", "project.create", `{"ProjectName":"demo","Region":"cn-beijing","Tags":[{"Key":123}]}`},
 	} {
@@ -35,6 +35,51 @@ func TestC5ToolInputRejectsInvalidDeclaredValuesBeforeSending(t *testing.T) {
 			}
 			if bytes.Contains(stdout.Bytes(), []byte("c5-secret-canary")) {
 				t.Fatal("validation error disclosed input value")
+			}
+		})
+	}
+}
+
+func TestSearchLogsRequestLimitAndSQLLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		input     string
+		wantQuery string
+		wantLimit any
+		response  string
+	}{
+		{
+			name:      "request limit at maximum",
+			input:     `{"TopicId":"tid","Query":"*","StartTime":1710374400000,"EndTime":1710378000000,"Limit":1000}`,
+			wantQuery: "*",
+			wantLimit: float64(1000),
+			response:  `{"ResultStatus":"complete","ListOver":true,"Logs":[]}`,
+		},
+		{
+			name:      "larger SQL limit",
+			input:     `{"TopicId":"tid","Query":"* | SELECT * LIMIT 2000","StartTime":1710374400000,"EndTime":1710378000000}`,
+			wantQuery: "* | SELECT * LIMIT 2000",
+			response:  `{"ResultStatus":"complete","AnalysisResult":{"Data":[]}}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, requests := outcomeCLIServer(t, func(w http.ResponseWriter, r *http.Request) {
+				var body map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Errorf("decode request: %v", err)
+					return
+				}
+				if body["Query"] != tc.wantQuery {
+					t.Errorf("request Query=%v, want %q", body["Query"], tc.wantQuery)
+				}
+				if limit, present := body["Limit"]; limit != tc.wantLimit || present != (tc.wantLimit != nil) {
+					t.Errorf("request Limit=%v present=%v, want %v", limit, present, tc.wantLimit)
+				}
+				_, _ = w.Write([]byte(tc.response))
+			})
+			code, env := outcomeCLIRun(t, []string{"tool", "exec", "log.search", "--input", tc.input})
+			if code != 0 || env["status"] != "success" || requests.Load() != 1 {
+				t.Fatalf("expected one successful search: exit=%d envelope=%#v requests=%d", code, env, requests.Load())
 			}
 		})
 	}

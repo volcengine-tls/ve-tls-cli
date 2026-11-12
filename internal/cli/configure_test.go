@@ -286,6 +286,60 @@ func TestConfigure_ProfileAliasAddUse(t *testing.T) {
 	}
 }
 
+func TestConfigureShowResolvesExplicitProfileAndRejectsExtraArguments(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("VOLCLOG_CONFIG", path)
+	cfg := config.DefaultConfig()
+	cfg.CurrentProfile = "current"
+	cfg.PutProfile("current", config.Profile{Region: "cn-beijing"})
+	cfg.PutProfile("default", config.Profile{Region: "cn-beijing"})
+	cfg.PutProfile("wanted", config.Profile{Region: "cn-guangzhou"})
+	if err := config.Save(cfg, path); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name        string
+		args        []string
+		wantProfile string
+		wantExit    int
+		wantError   string
+	}{
+		{name: "current fallback", args: []string{"configure", "show"}, wantProfile: "current"},
+		{name: "positional", args: []string{"configure", "show", "wanted"}, wantProfile: "wanted"},
+		{name: "leading flag", args: []string{"--profile", "wanted", "configure", "show"}, wantProfile: "wanted"},
+		{name: "local flag", args: []string{"configure", "show", "--profile", "wanted"}, wantProfile: "wanted"},
+		{name: "alias", args: []string{"configure", "profile", "show", "wanted"}, wantProfile: "wanted"},
+		{name: "matching selectors", args: []string{"--profile", "wanted", "configure", "show", "wanted"}, wantProfile: "wanted"},
+		{name: "conflict", args: []string{"--profile", "default", "configure", "show", "--profile", "wanted"}, wantExit: 1, wantError: "conflicting profile selectors"},
+		{name: "missing named profile", args: []string{"configure", "show", "absent"}, wantExit: 2, wantError: "profile not found: absent"},
+		{name: "missing value", args: []string{"configure", "show", "--profile"}, wantExit: 1, wantError: "missing value for --profile"},
+		{name: "empty value", args: []string{"configure", "show", "--profile", " "}, wantExit: 1, wantError: "missing value for --profile"},
+		{name: "extra positional", args: []string{"configure", "show", "wanted", "default"}, wantExit: 1, wantError: "unexpected argument"},
+		{name: "extra flag", args: []string{"configure", "show", "--profile", "wanted", "--profile", "default"}, wantExit: 1, wantError: "unexpected argument"},
+		{name: "alias extra positional", args: []string{"configure", "profile", "show", "wanted", "default"}, wantExit: 1, wantError: "unexpected argument"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := Run(tc.args, &stdout, &stderr); code != tc.wantExit {
+				t.Fatalf("exit = %d, want %d; stdout=%q stderr=%q", code, tc.wantExit, stdout.String(), stderr.String())
+			}
+			if tc.wantExit != 0 {
+				if !strings.Contains(stdout.String()+stderr.String(), tc.wantError) {
+					t.Fatalf("expected %q, got stdout=%q stderr=%q", tc.wantError, stdout.String(), stderr.String())
+				}
+				return
+			}
+			var out struct {
+				Profile string `json:"effective_profile"`
+			}
+			if err := json.Unmarshal(stdout.Bytes(), &out); err != nil || out.Profile != tc.wantProfile {
+				t.Fatalf("want profile %q, got %q: %v", tc.wantProfile, stdout.String(), err)
+			}
+		})
+	}
+}
+
 func TestConfigure_ShowAndListExposeAgentContextFields(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "config.json")

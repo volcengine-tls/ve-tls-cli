@@ -5345,6 +5345,17 @@
               "description": "低频存储时长。该时长取值范围为 1~3650。 标准存储时长 7 天及以上可实现低频存储。 此参数仅在 EnableHotTtl 为 true 时生效。",
               "type": "integer"
             },
+            "DataIngestSpec": {
+              "description": "存储权益规格。空字符串等同于省略。",
+              "enum": [
+                "D3",
+                "D7",
+                "D15",
+                "D30",
+                ""
+              ],
+              "type": "string"
+            },
             "Description": {
               "description": "日志主题描述信息。 * 不支持 <>、'、\\、\\\\、所有 emoji 表情符号。 * 长度为 0~64 个字符。",
               "type": "string"
@@ -5412,7 +5423,7 @@
               "default": 1
             },
             "Tags": {
-              "description": "日志主题标签信息。 标签用于云资源的标识与分类，您可以将日志项目、日志主题通过标签进行归类，便于资源的搜索和资源聚合。详细说明请参考标签管理。",
+              "description": "用于标识、筛选和归类日志主题的标签。",
               "items": {
                 "type": "object",
                 "properties": {
@@ -5445,7 +5456,34 @@
             "TopicName",
             "Ttl"
           ],
-          "type": "object"
+          "type": "object",
+          "if": {
+            "required": [
+              "DataIngestSpec"
+            ],
+            "properties": {
+              "DataIngestSpec": {
+                "enum": [
+                  "D3",
+                  "D7",
+                  "D15",
+                  "D30"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "MeteringMode"
+            ],
+            "properties": {
+              "MeteringMode": {
+                "enum": [
+                  "ChargeByDataIngest"
+                ]
+              }
+            }
+          }
         }
       },
       "runtime": {
@@ -5458,11 +5496,163 @@
       "docs": {
         "summary": "CreateTopic",
         "source": "日志主题管理",
-        "usage_constraints": "EncryptConf is an object with enable, encrypt_type, and user_cmk_info fields; user_cmk_info accepts user_cmk_id, trn, region_id, and from_tls. ShardCount defaults to 1 when omitted. Remaining encryption and shard constraints are finalized by the service."
+        "usage_constraints": "Non-empty DataIngestSpec requires MeteringMode=ChargeByDataIngest. The default spec is D30. Ttl sets retention. EncryptConf accepts enable, encrypt_type, and user_cmk_info (user_cmk_id, trn, region_id, from_tls). The service validates encryption and shards."
       },
       "risk": {
         "level": "high",
         "error_recovery": "high-risk-retry"
+      }
+    },
+    {
+      "id": "topic.modify",
+      "group": "topic",
+      "group_title": "日志主题管理",
+      "action": "ModifyTopic",
+      "resource": "topic",
+      "verb": "modify",
+      "family": "topic",
+      "visibility": "public",
+      "wire": {
+        "method": "PUT",
+        "path": "/ModifyTopic",
+        "request_format": "json",
+        "codec": "json"
+      },
+      "input_schema": {
+        "body": {
+          "additionalProperties": false,
+          "properties": {
+            "ArchiveTtl": {
+              "description": "开启冷热存储数据的保存时间，单位为天，取值范围为8~3650。",
+              "type": "integer"
+            },
+            "AutoSplit": {
+              "description": "是否开启自动分裂",
+              "type": "boolean"
+            },
+            "ColdTtl": {
+              "description": "开启冷热存储数据的保存时间，单位为天，取值范围为8~3650。",
+              "type": "integer"
+            },
+            "DataIngestSpec": {
+              "description": "按写入量计费的存储权益规格，取值 D3、D7、D15、D30。该规格在创建主题时确定。修改日志总保留天数使用 Ttl。",
+              "enum": [
+                "D3",
+                "D7",
+                "D15",
+                "D30"
+              ],
+              "type": "string"
+            },
+            "Description": {
+              "description": "日志主题描述信息。选填；限制：\n- 长度：<=64（按 rune 计数）\n- 禁止字符：< > ' \" \\\\\n- 禁止：emoji",
+              "type": "string"
+            },
+            "EnableHotTtl": {
+              "description": "是否开启冷热存储",
+              "type": "boolean"
+            },
+            "EnableTracking": {
+              "type": "boolean"
+            },
+            "EncryptConf": {
+              "description": "数据加密配置",
+              "properties": {
+                "enable": {
+                  "type": "boolean"
+                },
+                "encrypt_type": {
+                  "type": "string"
+                },
+                "user_cmk_info": {
+                  "properties": {
+                    "from_tls": {
+                      "type": "boolean"
+                    },
+                    "region_id": {
+                      "type": "string"
+                    },
+                    "trn": {
+                      "type": "string"
+                    },
+                    "user_cmk_id": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "Favourite": {
+              "description": "是否收藏",
+              "type": "boolean"
+            },
+            "HotTtl": {
+              "description": "开启冷热存储数据的保存时间，单位为天，取值范围为8~3650。",
+              "type": "integer"
+            },
+            "LogPublicIP": {
+              "description": "记录外网ip",
+              "type": "boolean"
+            },
+            "MaxSplitShard": {
+              "type": "integer"
+            },
+            "MeteringMode": {
+              "description": "计量模式。ChargeByFunction 按功能计费模式，ChargeByDataIngest 按写入数据量计费模式",
+              "enum": [
+                "ChargeByFunction",
+                "ChargeByDataIngest"
+              ],
+              "type": "string"
+            },
+            "TimeFormat": {
+              "description": "TimeFormat 时间字段的解析格式。与 TimeKey 必须成对出现；长度<=128；需满足服务端时间格式校验规则。",
+              "type": "string"
+            },
+            "TimeKey": {
+              "description": "TimeKey 日志时间字段的字段名称。与 TimeFormat 必须成对出现；限制：\n- 正则：^[a-zA-Z0-9-_\\\\.\\\\/ ]{1,128}$\n- 长度：1~128\n- 额外限制：不允许前后空格",
+              "type": "string"
+            },
+            "TopicId": {
+              "description": "日志主题ID。",
+              "type": "string"
+            },
+            "TopicName": {
+              "description": "日志主题名称：同一个日志项目下不可重复；命名规则：\n- 正则：^[a-z0-9\\\\p{Han}][a-z-_0-9\\\\p{Han}]{1,62}[a-z0-9\\\\p{Han}]$\n- 长度：3~64；中间允许 '-'、'_'；首尾不允许 '-'、'_'\n- 不允许以保留前缀开头（如 tls_、tos_、tls-service-log_ 等）",
+              "type": "string"
+            },
+            "Ttl": {
+              "description": "数据的保存时间，单位为天，取值范围为1~3650。",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "TopicId"
+          ],
+          "type": "object"
+        }
+      },
+      "runtime": {
+        "supports_dry_run": true
+      },
+      "output": {
+        "policy": "full",
+        "is_envelope_output": true
+      },
+      "docs": {
+        "summary": "ModifyTopic",
+        "source": "日志主题管理",
+        "usage_constraints": "DataIngestSpec is fixed at topic creation. ModifyTopic accepts the field in the request. To change total log retention, set Ttl.",
+        "url": "https://www.volcengine.com/docs/6470/112183",
+        "url_source": "official-doc-index"
+      },
+      "risk": {
+        "level": "high",
+        "error_recovery": "high-risk-retry",
+        "recovery_source": "unverified",
+        "recovery_notes": "Idempotency is unverified. Do not retry automatically; reconcile the operation outcome before any retry."
       }
     },
     {
@@ -7229,8 +7419,8 @@
               "type": "boolean"
             },
             "Limit": {
-              "description": "返回的日志条数。取值范围为 0~1000000（不同用户限额可能不同，以服务端校验为准）；最多返回一定大小的日志数据。",
-              "maximum": 1000000,
+              "description": "纯检索分页时的每页返回条数，最大为 1000。检索分析通过 Query 中的 SQL LIMIT 控制返回行数。",
+              "maximum": 1000,
               "minimum": 0,
               "type": "integer"
             },
@@ -7297,7 +7487,7 @@
       "docs": {
         "summary": "SearchLogs",
         "source": "日志管理",
-        "usage_constraints": "Unresolved documentation discrepancy: official SearchLogs documents Limit at most 1000, while the current catalog allows 0..1000000. The catalog bound is retained pending service verification; it is not a guarantee that the service accepts this range.",
+        "usage_constraints": "SearchLogs request Limit is capped at 1000 rows per page. For analysis, set SQL LIMIT in Query.",
         "url": "https://www.volcengine.com/docs/6470/112195",
         "url_source": "official-doc-index"
       },

@@ -57,34 +57,23 @@ volclog --profile NAME tool exec project.describe-projects
 
 ### 2.1 Region 和 Endpoint
 
-TLS 请求必须能够确定 Region 和 Endpoint。配置示例：
+CLI 分别解析 Region 和 Endpoint。全局 `--region`、`--endpoint` 和 `tool exec` 或 `workflow exec` 的 `context.region`、`context.endpoint` 都是本次调用的覆盖值。同一字段在两处都填写时，值必须一致。Region 和 Endpoint 都必须有值，CLI 不会用其中一个推导另一个。
+
+| Profile 选择方式 | 凭证来源 | Region 和 Endpoint 优先级 |
+| --- | --- | --- |
+| 显式 `--profile` 或 `context.profile` | 指定 profile 的静态凭证或动态提供者 | 本次覆盖 → profile → 项目默认值 |
+| 隐式选择动态 profile | 所选动态提供者，如 SSO、Console Login、RAM Role ARN、OIDC 或 ECS Role | 本次覆盖 → `VOLCENGINE_REGION` / `VOLCENGINE_ENDPOINT` → profile → 项目默认值 |
+| 隐式静态模式，环境 AK/SK 齐全 | 环境 AK/SK 和可选 token | 本次覆盖 → `VOLCENGINE_REGION` / `VOLCENGINE_ENDPOINT` → 项目默认值 |
+| 隐式静态模式，环境 AK/SK 不齐全 | profile 的内联或 `cred_ref` 凭证。AK 或 SK 缺失时，签名客户端可从环境补齐缺失的 AK/SK 和 token。 | 本次覆盖 → profile → 项目默认值 |
+
+隐式选择使用 `current_profile`，为空时使用 `default`。显式指定的 profile 必须存在，并提供自己的静态凭证或动态提供者。显式选择后，从本次覆盖或已保存的配置中读取请求目标。例如，profile 未配置 Region 和 Endpoint 时可这样传入：
 
 ```bash
---region cn-beijing \
---endpoint https://tls-cn-beijing.volces.com
+volclog --profile NAME --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com doctor --online
 ```
 
-对于 SSO、Console Login、RAM Role ARN、OIDC 和 ECS Role，运行配置按以下顺序解析：
-
-1. 本次调用的全局 `--region`、`--endpoint`；
-2. `VOLCENGINE_REGION`、`VOLCENGINE_ENDPOINT`；
-3. 所选 profile 中的 `region`、`endpoint`；
-4. 当前 `tool` 或 `workflow` 执行的 `context.region`、`context.endpoint` 默认值；
-5. 当前目录的项目配置。
-
-CLI 不会根据 Region 推导 Endpoint，必须通过其中一层显式提供两个值。timeout 未配置时使用 60 秒。
-
-如果动态登录 profile 中没有 TLS 运行配置，可以在执行 TLS 命令时显式提供环境变量：
-
-```bash
-VOLCENGINE_REGION=cn-beijing \
-VOLCENGINE_ENDPOINT=https://tls-cn-beijing.volces.com \
-volclog --profile NAME doctor --online
-```
-
-执行上下文默认值仅适用于 `tool` 和 `workflow` 命令，不会覆盖非空的环境变量或 profile 值。如果当前目录已经有项目配置，也可以使用其中的 Region 和 Endpoint。项目配置跟随工作目录；离开该目录执行时，应确保 profile、执行上下文或环境变量仍能提供正确的值。完整的静态与动态优先级规则见[配置](3-Configuration_zh.md#5-运行时优先级)。
-
-静态模式下，如果同时存在完整的环境 AK/SK，则这组环境凭证优先于 profile；相应的 Region、Endpoint 可同时通过环境变量提供。为了减少身份和运行环境混用，生产调用建议显式使用一套完整配置。
+项目默认值随工作目录变化。超时优先级和选择器冲突规则见[配置](3-Configuration_zh.md#5-运行时优先级)，其中包括显式 profile 与 `--secrets-file` 的互斥规则。
 
 ### 2.2 配置检查和真实访问验证
 
@@ -324,7 +313,7 @@ volclog tool exec project.describe-projects
 | --- | --- | --- | --- | --- |
 | 本机浏览器回调 + PKCE（交互式默认） | 无 | CLI 可以监听 loopback 随机端口，浏览器可以回调当前机器 | 无需输入 user code，步骤最少 | 本机桌面终端 |
 | Device Code + 自动打开浏览器 | `--device-code` | CLI 可以向外访问 HTTPS，机器可以打开浏览器 | 不监听回调端口，同时保留自动打开浏览器 | 本机回调被防火墙或沙箱限制 |
-| Device Code + 无浏览器 | `--device-code --no-browser`、非 TTY 或 `--non-interactive` | CLI 可以向外访问 HTTPS，用户能在任意设备打开浏览器 | 终端与浏览器解耦，不依赖 GUI 或入站回调 | SSH、Trae、人工参与的 Agent 会话 |
+| Device Code + 无浏览器 | `--device-code --no-browser`、非 TTY 或 `--non-interactive` | 会话能持续运行并实时显示 stderr，CLI 可访问登录服务，用户能打开官方授权页 | 终端与浏览器可在不同设备 | 可持续运行且有用户参与授权的远程终端 |
 
 ### 5.3 本机浏览器回调登录（交互式默认）
 
@@ -361,7 +350,8 @@ volclog login \
   --region cn-beijing \
   --endpoint https://tls-cn-beijing.volces.com \
   --device-code \
-  --no-browser
+  --no-browser \
+  --timeout 90s
 ```
 
 按终端提示：
@@ -375,7 +365,20 @@ volclog login \
 
 非交互模式下若替换会话需要确认，立即返回 `interaction_required`；请使用其他 `--profile` 或交互式终端，没有 `--force` 覆盖。Darwin 和 Linux 的交互提示使用可取消轮询；不支持读取 deadline 的 Windows 控制台会返回 `interaction_required`，可显式提供选择器以避免提示。本次运行验证仅在 Darwin 完成。
 
-Device Code 适合 SSH、Trae 和人工参与的 Agent 会话，是因为它不启动本地回调监听、不要求 CLI 操作浏览器，也不要求浏览器和终端位于同一台机器；CLI 只需要能够向 Console 发起出站 HTTPS 请求。它仍然要求用户在官方页面确认授权，因此不适合无人值守 CI。CI 或工作负载应优先使用 OIDC、ECS Role 或其他可自动轮换的非交互身份。
+Agent 协助登录时，先选能保留原登录进程、实时向用户显示 stderr 的会话。`--timeout` 是整次登录的时间预算，需在宿主允许的窗口内给用户留出授权时间。用户从终端查看短期码，并在官方授权页输入。
+
+宿主会提前结束进程或只在退出后显示输出时，请用户改在前台终端重新发起登录。使用后续 TLS 命令所在的同一台机器、用户和配置路径，显式传入目标 profile、Region 和 Endpoint。loopback 可用时走交互式浏览器回调，否则在这个可持续运行的终端使用 Device Code。登录后用 `volclog --profile NAME doctor` 核对配置档。无人值守 CI 和工作负载使用 OIDC、ECS Role 等可自动轮换的身份。
+
+失败时读取 stderr 最后的 JSON 错误。已识别阶段通过 `stage` 和 `hint` 给出下一步。
+
+| `stage` | 如何排查 |
+| --- | --- |
+| `setup`、`device_code_request` | 核对本地配置、Console 登录地址和出站 HTTPS。 |
+| `wait_for_user` | 在可持续运行的终端重新发起登录，给用户留出授权时间。 |
+| `browser_callback` | 检查 loopback 连通性，或在可持续运行的终端使用 Device Code。 |
+| `token_poll`、`token_exchange`、`token_response` | 检查授权状态和登录服务连通性。授权码过期时重新登录，有 `requestId` 时可提交给支持人员。 |
+| `session_confirmation` | 在交互式终端确认替换会话，或选择其他配置档。 |
+| `cache`、`config_update` | 检查本地路径与权限，重试前查看目标配置档。 |
 
 ### 5.5 凭证安全与最小权限边界
 
