@@ -142,7 +142,8 @@ Credential selection is a host/runtime concern, not a business-input concern.
 
 - Discover saved profiles with `volclog configure list`.
 - Use a saved profile or a one-shot secrets file supplied by the host. `--profile`/`context.profile` and `--secrets-file`/`context.secrets_file` are mutually exclusive. A secrets file selects static authentication.
-- Implicit selection uses `current_profile`, or `default` when it is empty. Global `--region`/`--endpoint` and `context.region`/`context.endpoint` are invocation overrides. When a field is set in both places, the values must agree. Supply Region and Endpoint independently.
+- Without an explicit profile, the existing environment precedence applies. Implicit selection uses `current_profile`, or `default` when it is empty. A complete environment AK/SK pair means both `VOLCENGINE_ACCESS_KEY_ID` and `VOLCENGINE_ACCESS_KEY_SECRET` are set.
+- Global `--region`/`--endpoint` and `context.region`/`context.endpoint` are invocation overrides. When a field is set in both places, the values must agree. Supply Region and Endpoint independently.
 
 | Selection | Identity | Region and endpoint precedence |
 | --- | --- | --- |
