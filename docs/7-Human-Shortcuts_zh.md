@@ -85,6 +85,8 @@ volclog-human --profile default --allow-write index create \
   --request file://index-request.json
 ```
 
+创建按写入量计费的主题时，可在 `topic create` 中加上 `--metering-mode ChargeByDataIngest --data-ingest-spec D7`。支持的规格为 `D3`、`D7`、`D15` 和 `D30`。存储权益规格在创建时确定，修改日志总保留天数使用 `topic modify --ttl`。服务端返回 `DataIngestSpec` 时，`topic get` 和 `topic list` 会展示该字段。
+
 Shortcut 本身不支持 `--dry-run`；需要预执行时应完成 `tool` / `workflow` 路径，不要把 `--dry-run` 加到 shortcut 上。
 
 ### 3.3 检索和导出日志

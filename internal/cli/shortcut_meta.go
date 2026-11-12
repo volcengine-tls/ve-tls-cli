@@ -480,6 +480,7 @@ func shortcutSpecs() map[string]shortcutCommandSpec {
 			Notes: []string{
 				"TopicName 和 TopicId 不应同时提供。",
 				"列表结果支持 --output table 和 --all。",
+				"服务端返回存储权益规格时，从 Topics[].DataIngestSpec 读取。",
 			},
 		},
 		{
@@ -489,7 +490,7 @@ func shortcutSpecs() map[string]shortcutCommandSpec {
 			Kind:          shortcutKindOperation,
 			OperationID:   "topic.describe-topic",
 			Summary:       "查询单个日志主题",
-			Description:   "按 TopicId 获取主题详情。",
+			Description:   "按 TopicId 获取主题详情。服务端返回存储权益规格时，从 DataIngestSpec 读取。",
 			InputMode:     "query via flags",
 			RequiredFlags: []string{"--topic-id"},
 			Bindings: []shortcutBinding{
@@ -517,6 +518,7 @@ func shortcutSpecs() map[string]shortcutCommandSpec {
 				shortcutBindingParam("EnableTracking", "--enable-tracking", "body", false, "boolean", "开启 WebTracking"),
 				shortcutBindingParam("EnableTracking", "--disable-tracking", "body", false, "boolean", "关闭 WebTracking"),
 				shortcutBindingParam("MeteringMode", "--metering-mode", "body", false, "string", "计费模式"),
+				shortcutBindingParam("DataIngestSpec", "--data-ingest-spec", "body", false, "string", "按写入量计费的存储权益规格，支持 D3、D7、D15、D30"),
 				shortcutBindingParam("LogPublicIP", "--log-public-ip", "body", false, "boolean", "开启记录来源 IP"),
 				shortcutBindingParam("LogPublicIP", "--no-log-public-ip", "body", false, "boolean", "关闭记录来源 IP"),
 				shortcutBindingParam("EnableHotTtl", "--enable-hot-ttl", "body", false, "boolean", "开启分层存储"),
@@ -546,6 +548,7 @@ func shortcutSpecs() map[string]shortcutCommandSpec {
 				"HotTtl、ColdTtl、ArchiveTtl 仅在 EnableHotTtl=true 时生效。",
 				"AutoSplit=true 时，MaxSplitShard 必填，且必须大于 ShardCount。",
 				"TimeKey 和 TimeFormat 必须成对提供。",
+				"设置 DataIngestSpec 时请同时使用 --metering-mode ChargeByDataIngest。--ttl 单独指定日志总保留天数。",
 			},
 		},
 		{
@@ -555,7 +558,7 @@ func shortcutSpecs() map[string]shortcutCommandSpec {
 			Kind:          shortcutKindOperation,
 			OperationID:   "topic.modify",
 			Summary:       "修改日志主题",
-			Description:   "需要 TopicId；其余字段可通过 flags 或 --request 提供。",
+			Description:   "通过 flags 或 --request 提供修改字段。日志保留天数使用 --ttl，存储权益规格在创建时确定。",
 			InputMode:     "body via --request; common fields via flags",
 			RequiredFlags: []string{"--topic-id"},
 			Bindings: []shortcutBinding{
@@ -568,6 +571,7 @@ func shortcutSpecs() map[string]shortcutCommandSpec {
 				shortcutHiddenBindingParam("EnableTracking", "--enable-tracking/--disable-tracking", "body", false, "boolean", "设置 WebTracking"),
 				shortcutHiddenBindingParam("Favourite", "--favourite/--no-favourite", "body", false, "boolean", "设置收藏状态"),
 				shortcutHiddenBindingParam("MeteringMode", "--metering-mode", "body", false, "string", "计费模式"),
+				shortcutBindingParam("DataIngestSpec", "--data-ingest-spec", "body", false, "string", "透传存储权益规格，主题创建后规格固定"),
 				shortcutHiddenBindingParam("LogPublicIP", "--log-public-ip/--no-log-public-ip", "body", false, "boolean", "设置记录来源 IP"),
 				shortcutHiddenBindingParam("EnableHotTtl", "--enable-hot-ttl/--disable-hot-ttl", "body", false, "boolean", "设置分层存储"),
 				shortcutHiddenBindingParam("HotTtl", "--hot-ttl", "body", false, "integer", "标准存储时长"),

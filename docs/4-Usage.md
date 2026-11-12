@@ -177,6 +177,21 @@ Creation uses body key `TopicID`, listing uses query key `TopicId`, and returned
 
 Do not retry creation or deletion automatically after an ambiguous result; reconcile with a list or detail request first. Creation can return HTTP 409 `SavedSearchAlreadyExist`. Repeated deletion returns HTTP 400 `SavedSearchNotExist`; the CLI preserves the service error.
 
+### 3.4 Topic storage entitlements
+
+For a new topic billed by ingestion volume, set `MeteringMode` to `ChargeByDataIngest` and choose `DataIngestSpec` from `D3`, `D7`, `D15`, and `D30`. In this billing mode the service defaults the entitlement to `D30` when omitted. Set total log retention separately with `Ttl`. The storage entitlement is fixed at creation. Use `topic.modify` with `Ttl` to change log retention.
+
+```bash
+volclog --profile default --dry-run tool exec topic.create \
+  --input '{"ProjectId":"<project-id>","TopicName":"short-retention","Ttl":7,"MeteringMode":"ChargeByDataIngest","DataIngestSpec":"D7"}'
+volclog --profile default --dry-run tool exec topic.modify \
+  --input '{"TopicId":"<topic-id>","Ttl":15}'
+volclog --profile default tool exec topic.describe-topic --input '{"TopicId":"<topic-id>"}'
+volclog --profile default tool exec topic.describe-topics --input '{"ProjectId":"<project-id>"}'
+```
+
+The detail response exposes the service's `DataIngestSpec` in `data`, and the list exposes it on each entry in `data.Topics`. The field is optional in both responses.
+
 ## 4. `workflow exec`
 
 `workflow exec` runs a CLI-provided higher-level workflow by its `<group.command>` identity. Workflows wrap one or more tools with orchestration logic; the public API tool surface remains available through `tool exec`.
