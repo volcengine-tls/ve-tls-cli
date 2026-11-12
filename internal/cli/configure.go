@@ -78,9 +78,6 @@ func runConfigureProfile(ctx *Context, args []string) (any, error) {
 		}
 		return configureUse(ctx, []string{args[1]})
 	case "show":
-		if len(args) >= 2 && strings.TrimSpace(args[1]) != "" && !strings.HasPrefix(args[1], "-") {
-			return configureShow(ctx, []string{"--profile", args[1]})
-		}
 		return configureShow(ctx, args[1:])
 	case "list":
 		return configureList(ctx, args[1:])

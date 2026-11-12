@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -16,6 +18,7 @@ type toolDescribeView string
 const (
 	toolDescribeViewCompact toolDescribeView = "compact"
 	toolDescribeViewFull    toolDescribeView = "full"
+	toolDescribeViewInput   toolDescribeView = "input"
 )
 
 var (
@@ -377,35 +380,56 @@ type toolDescribeCommon struct {
 }
 
 func buildToolDescribeOutput(operation contract.Operation, view toolDescribeView) (map[string]any, error) {
-	common, err := buildToolDescribeCommon(operation)
+	catalog, err := loadOperationCatalog()
 	if err != nil {
 		return nil, err
 	}
-	switch view {
-	case toolDescribeViewCompact:
-		return buildToolDescribeCompactOutput(operation, common), nil
-	default:
-		return buildToolDescribeFullOutput(operation, common), nil
+	common := buildToolDescribeCommon(operation)
+	if view == toolDescribeViewInput {
+		shared, err := buildToolSharedSchema(catalog)
+		if err != nil {
+			return nil, err
+		}
+		return buildToolDescribeInputOutput(operation, common, shared), nil
 	}
-}
 
-func buildToolDescribeCommon(operation contract.Operation) (toolDescribeCommon, error) {
-	catalog, err := loadOperationCatalog()
-	if err != nil {
-		return toolDescribeCommon{}, err
-	}
 	expandedContextSchema, err := contract.ExpandContextSchema(catalog.ContextSchema, catalog.ExecutionSchema)
 	if err != nil {
-		return toolDescribeCommon{}, err
+		return nil, err
 	}
+	supportsAll := operation.Pagination != nil
+	common.executionSchema = enrichToolExecutionSchema(map[string]any(catalog.ExecutionSchema), supportsAll)
+	common.contextSchema = enrichToolContextSchema(map[string]any(expandedContextSchema), common.executionSchema, supportsAll)
+	common.execution = cloneToolSchema(common.executionSchema)
+	common.execution["supports_all"] = supportsAll
+	common.execution["supports_dry_run"] = operation.Runtime.SupportsDryRun
+	common.inputFlatSchema = buildToolFlatInputSchema(common.inputSchema)
+
+	if view == toolDescribeViewCompact {
+		return buildToolDescribeCompactOutput(operation, common), nil
+	}
+	return buildToolDescribeFullOutput(operation, common), nil
+}
+
+func buildToolSharedSchema(catalog contract.Catalog) (map[string]any, error) {
+	schema := map[string]any{
+		"schema_version":   catalog.SchemaVersion,
+		"contract_version": catalog.ContractVersion,
+		"context_schema":   map[string]any(catalog.ContextSchema),
+		"execution_schema": map[string]any(catalog.ExecutionSchema),
+	}
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		return nil, fmt.Errorf("encode shared tool schema: %w", err)
+	}
+	schema["schema_digest"] = fmt.Sprintf("%x", sha256.Sum256(raw))
+	return schema, nil
+}
+
+func buildToolDescribeCommon(operation contract.Operation) toolDescribeCommon {
 	supportsAll := operation.Pagination != nil
 	supportsDryRun := operation.Runtime.SupportsDryRun
 	inputSchema := cloneToolSchema(map[string]any(operation.InputSchema))
-	executionSchema := enrichToolExecutionSchema(map[string]any(catalog.ExecutionSchema), supportsAll)
-	contextSchema := enrichToolContextSchema(map[string]any(expandedContextSchema), executionSchema, supportsAll)
-	execution := cloneToolSchema(executionSchema)
-	execution["supports_all"] = supportsAll
-	execution["supports_dry_run"] = supportsDryRun
 	digestValue := strings.ToLower(toolContractForDigest(operation))
 	verb := semanticToolVerb(operation)
 	usageNotes := []any{}
@@ -417,12 +441,8 @@ func buildToolDescribeCommon(operation contract.Operation) (toolDescribeCommon, 
 	}
 	usageNotes = append(usageNotes, toolSpecificUsageNotes(operation)...)
 	return toolDescribeCommon{
-		inputSchema:     inputSchema,
-		inputFlatSchema: buildToolFlatInputSchema(inputSchema),
-		inputEncoding:   buildToolInputEncodingHint(inputSchema),
-		contextSchema:   contextSchema,
-		executionSchema: executionSchema,
-		execution:       execution,
+		inputSchema:   inputSchema,
+		inputEncoding: buildToolInputEncodingHint(inputSchema),
 		identity: map[string]any{
 			"id":                  strings.TrimSpace(string(operation.ID)),
 			"group":               strings.TrimSpace(operation.Group),
@@ -465,7 +485,7 @@ func buildToolDescribeCommon(operation contract.Operation) (toolDescribeCommon, 
 				"unknown field, contract mismatch, or usage errors for this action",
 			},
 		},
-	}, nil
+	}
 }
 
 func toolSpecificUsageNotes(operation contract.Operation) []any {
@@ -537,7 +557,33 @@ func buildToolDescribeFullOutput(operation contract.Operation, common toolDescri
 }
 
 func buildToolDescribeCompactOutput(operation contract.Operation, common toolDescribeCommon) map[string]any {
+	target := buildToolDescribeActionMetadata(operation, common)
+	target["context_schema"] = compactToolContextSchema(common.contextSchema)
+	target["execution_schema"] = compactToolExecutionSchema(common.executionSchema)
 	compactInputSchema := compactToolInputSchema(common.inputSchema)
+	if len(compactInputSchema) > 0 && !compactToolPrefersFlatInputSchema(common.inputSchema, common.inputFlatSchema) {
+		target["input_schema"] = compactInputSchema
+	}
+	if common.inputFlatSchema != nil {
+		target["input_flat_schema"] = common.inputFlatSchema
+	}
+	return target
+}
+
+func buildToolDescribeInputOutput(operation contract.Operation, common toolDescribeCommon, shared map[string]any) map[string]any {
+	target := buildToolDescribeActionMetadata(operation, common)
+	target["input_schema"] = common.inputSchema
+	target["schema_ref"] = map[string]any{
+		"command":          "volclog tool schema",
+		"schema_version":   shared["schema_version"],
+		"contract_version": shared["contract_version"],
+		"schema_digest":    shared["schema_digest"],
+	}
+	common.behavior["requires_write_permission"] = !operationIsReviewedRead(operation)
+	return target
+}
+
+func buildToolDescribeActionMetadata(operation contract.Operation, common toolDescribeCommon) map[string]any {
 	target := map[string]any{
 		"identity": map[string]any{
 			"id":                  common.identity["id"],
@@ -547,8 +593,6 @@ func buildToolDescribeCompactOutput(operation contract.Operation, common toolDes
 			"path":                common.identity["path"],
 			"api_version_default": common.identity["api_version_default"],
 		},
-		"context_schema":      compactToolContextSchema(common.contextSchema),
-		"execution_schema":    compactToolExecutionSchema(common.executionSchema),
 		"usage_notes":         common.usageNotes,
 		"usage_constraints":   common.usageConstraints,
 		"behavior":            common.behavior,
@@ -561,12 +605,6 @@ func buildToolDescribeCompactOutput(operation contract.Operation, common toolDes
 		"source":              strings.TrimSpace(operation.Docs.Source),
 		"contract_digest":     common.contractDigest,
 		"contract_cache_hint": common.contractCache,
-	}
-	if len(compactInputSchema) > 0 && !compactToolPrefersFlatInputSchema(common.inputSchema, common.inputFlatSchema) {
-		target["input_schema"] = compactInputSchema
-	}
-	if common.inputFlatSchema != nil {
-		target["input_flat_schema"] = common.inputFlatSchema
 	}
 	if common.inputEncoding != nil {
 		target["input_encoding_hint"] = common.inputEncoding

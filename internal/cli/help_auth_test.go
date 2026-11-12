@@ -228,7 +228,7 @@ func TestAuthenticationHelpCarriesNextStep(t *testing.T) {
 		{
 			name: "console login",
 			text: usageLogin(),
-			want: []string{"--login-endpoint", "https://signin.volcengine.com", "Next:", "volclog --profile <name> doctor", "tool exec project.describe-projects"},
+			want: []string{"--login-endpoint", "https://signin.volcengine.com", "--non-interactive", "--timeout", "前台终端", "Next:", "volclog --profile <name> doctor", "tool exec project.describe-projects"},
 		},
 		{
 			name: "sso login",

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "contract_version": "v1",
   "digest_algorithm": "sha256/go-json-v1",
-  "catalog_digest": "2dd9149e9bc6a40fe1a3e4339d4d3165553fd259f584c7a0b37b63d62aec0748",
+  "catalog_digest": "8474c99205c33bf13d688c2aceb4264e6b0f3481cec795579576a52e15503740",
   "operation_count": 169,
   "generation_mode": "bootstrap",
   "inputs": [
@@ -79,12 +79,12 @@
     {
       "name": "override_supplemental_operations",
       "path": "contracts/overrides/supplemental_operations.json",
-      "sha256": "b1383f04bb84749d01a93201d041008346a1a90f78880279e1293a31985b3eae"
+      "sha256": "76ed9a62895413a2685c2fd0c11b57287bd5bb8e6d41a9ce7a50f5f78bea79d0"
     },
     {
       "name": "override_usage_constraints",
       "path": "contracts/overrides/usage_constraints.yaml",
-      "sha256": "6f0d01ef3cf644a10bdcb82feede89293e9c15d4f28e4205ff9ded464156baa6"
+      "sha256": "1d55bc894ac4070a0dcabd6277cd1dd639ff5ef3bd83fa6234ad99e63bbbddaa"
     }
   ]
 }

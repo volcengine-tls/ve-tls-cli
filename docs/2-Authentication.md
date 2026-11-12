@@ -57,34 +57,23 @@ Unless you genuinely want to change the default identity for subsequent commands
 
 ### 2.1 Region and endpoint
 
-Every TLS request must be able to determine a region and an endpoint. Configuration example:
+The CLI resolves region and endpoint separately. Global `--region` and `--endpoint` and the `context.region` and `context.endpoint` fields for `tool exec` or `workflow exec` are per-invocation overrides. When the same field is set in both places, the values must agree. The CLI requires both a region and an endpoint and never derives one from the other.
+
+| Profile selection | Credential source | Region and endpoint precedence |
+| --- | --- | --- |
+| Explicit `--profile` or `context.profile` | The named profile's static credentials or dynamic provider | Invocation overrides → profile → project defaults |
+| Implicit profile with a dynamic provider | The selected provider, such as SSO, Console Login, RAM Role ARN, OIDC, or ECS Role | Invocation overrides → `VOLCENGINE_REGION` / `VOLCENGINE_ENDPOINT` → profile → project defaults |
+| Implicit static mode with both environment AK and SK | Environment AK/SK and optional token | Invocation overrides → `VOLCENGINE_REGION` / `VOLCENGINE_ENDPOINT` → project defaults |
+| Implicit static mode without a complete environment pair | Profile credentials, including `cred_ref`. The signing client can fill missing AK/SK and token from the environment when AK or SK is missing. | Invocation overrides → profile → project defaults |
+
+Implicit selection uses `current_profile`, or `default` when it is empty. An explicit profile must exist and supply its own static credentials or dynamic provider. With an explicit profile, use invocation overrides or saved settings to supply the target. For example, supply the region and endpoint for a profile that lacks them:
 
 ```bash
---region cn-beijing \
---endpoint https://tls-cn-beijing.volces.com
+volclog --profile NAME --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com doctor --online
 ```
 
-For SSO, Console Login, RAM Role ARN, OIDC, and ECS Role, the runtime configuration is resolved in this order:
-
-1. Global `--region`, `--endpoint` for this invocation;
-2. `VOLCENGINE_REGION`, `VOLCENGINE_ENDPOINT`;
-3. The `region` and `endpoint` in the selected profile;
-4. The `context.region` and `context.endpoint` defaults for the current `tool` or `workflow` execution;
-5. The project configuration in the current directory.
-
-The CLI does not derive an endpoint from a region. Supply both values explicitly through one of these layers. When timeout is not configured, 60 seconds is used.
-
-If a dynamic-login profile does not carry TLS runtime configuration, you can supply the environment variables explicitly for a single command:
-
-```bash
-VOLCENGINE_REGION=cn-beijing \
-VOLCENGINE_ENDPOINT=https://tls-cn-beijing.volces.com \
-volclog --profile NAME doctor --online
-```
-
-Execution-context defaults apply only to `tool` and `workflow` commands and do not override non-empty environment or profile values. If the current directory already has a project configuration, its region and endpoint can also be used. Project configuration follows the working directory; when you run commands outside that directory, make sure the profile, execution context, or environment variables still provide the correct values. See [Configuration](3-Configuration.md#5-runtime-precedence) for the complete static and dynamic precedence rules.
-
-In static mode, when a complete set of environment AK/SK is present, those environment credentials take precedence over the profile; the corresponding region and endpoint can be supplied through environment variables at the same time. To avoid mixing identity and runtime environment, production calls should use one complete, explicit configuration set.
+Project defaults follow the working directory. See [Configuration](3-Configuration.md#5-runtime-precedence) for timeout precedence and selector conflicts, including the conflict between an explicit profile and `--secrets-file`.
 
 ### 2.2 Configuration checks and live access verification
 
@@ -324,7 +313,7 @@ volclog tool exec project.describe-projects
 | --- | --- | --- | --- | --- |
 | Local browser callback + PKCE (interactive default) | None | The CLI can listen on a random loopback port and the browser can call back to the same machine | No user-code entry and the fewest steps | A local desktop terminal |
 | Device Code + browser auto-open | `--device-code` | The CLI has outbound HTTPS access and the machine can open a browser | No callback listener while retaining browser auto-open | A firewall or sandbox blocks local callbacks |
-| Device Code + no browser | `--device-code --no-browser`, non-TTY, or `--non-interactive` | The CLI has outbound HTTPS access and the user can open a browser on any device | Terminal and browser are decoupled; no GUI or inbound callback dependency | SSH, Trae, or a human-assisted Agent session |
+| Device Code + no browser | `--device-code --no-browser`, non-TTY, or `--non-interactive` | The session stays alive and shows stderr live. The CLI can reach the sign-in service and the user can open the official page | Terminal and browser can run on different machines | A persistent remote terminal with a user available to authorize |
 
 ### 5.3 Local browser callback login (interactive default)
 
@@ -361,7 +350,8 @@ volclog login \
   --region cn-beijing \
   --endpoint https://tls-cn-beijing.volces.com \
   --device-code \
-  --no-browser
+  --no-browser \
+  --timeout 90s
 ```
 
 Follow the terminal prompts:
@@ -375,7 +365,20 @@ Follow the terminal prompts:
 
 Non-interactive session replacement that requires confirmation returns `interaction_required`; use another `--profile` or an interactive terminal. There is no `--force` override. Darwin and Linux interactive prompts use cancellable polling; a Windows console without read-deadline support returns `interaction_required`, so provide explicit selectors to avoid prompting. Runtime verification of this change has been performed on Darwin only.
 
-Device Code fits SSH, Trae, and human-assisted Agent sessions because it starts no local callback listener, does not require the CLI to control a browser, and allows the browser and terminal to run on different machines. The CLI needs only outbound HTTPS access to Console. A user must still approve the request on the official page, so this is not an unattended-CI authentication method. Prefer OIDC, ECS Role, or another automatically rotated non-interactive identity for CI and workloads.
+For Agent-assisted login, choose a session that can keep the original process running and show stderr to the user as it arrives. Set `--timeout` to a whole-login budget that fits the session and gives the user time to authorize. The user enters the short-lived code on the official page using the terminal output.
+
+If the host stops the process early or only shows output after it exits, ask the user to run a fresh login in a foreground terminal. Use the same machine, user, config path, and explicit profile, Region, and Endpoint that the TLS commands will use. Choose the interactive browser callback when loopback is available, or run Device Code in that persistent terminal. After login, verify the intended profile with `volclog --profile NAME doctor`. For unattended CI and workloads, use an automatically rotated identity such as OIDC or ECS Role.
+
+Read the final JSON error on stderr. For failures with a known stage, `stage` and `hint` identify the next step.
+
+| `stage` | What to check |
+| --- | --- |
+| `setup`, `device_code_request` | Check local configuration, the Console sign-in endpoint, and outbound HTTPS. |
+| `wait_for_user` | Start a fresh login in a persistent terminal with time for the user to authorize. |
+| `browser_callback` | Check loopback access or use Device Code in a persistent terminal. |
+| `token_poll`, `token_exchange`, `token_response` | Check authorization and sign-in service connectivity. Use a fresh login for an expired code and share `requestId` with support when available. |
+| `session_confirmation` | Confirm the session replacement in an interactive terminal or select another profile. |
+| `cache`, `config_update` | Check local paths and permissions. Inspect the intended profile before retrying. |
 
 ### 5.5 Credential security and least-privilege boundary
 

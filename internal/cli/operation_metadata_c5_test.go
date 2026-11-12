@@ -135,7 +135,7 @@ func TestC5CompactDescribePreservesSearchConstraints(t *testing.T) {
 	}
 	properties := c5Object(t, body["properties"], "body.properties")
 	limit := c5Object(t, properties["Limit"], "Limit")
-	if limit["minimum"] != float64(0) || limit["maximum"] != float64(1000000) {
+	if limit["minimum"] != float64(0) || limit["maximum"] != float64(1000) {
 		t.Fatalf("Limit bounds=%#v", limit)
 	}
 	sortField := c5Object(t, properties["Sort"], "Sort")

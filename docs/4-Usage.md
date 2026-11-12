@@ -72,7 +72,7 @@ Each installed Skill directory contains `.volclog-skill.json` with the schema ve
 
 Before running a tool or workflow, inspect its contract so you know the required input and the request shape.
 
-### 2.1 `tool list` and `tool describe`
+### 2.1 `tool list`, `tool describe`, and `tool schema`
 
 ```bash
 volclog tool list
@@ -83,9 +83,13 @@ volclog tool list trace
 volclog tool list --verb create --format json
 volclog tool describe project.describe-projects
 volclog tool describe project.create --view full
+volclog tool describe project.describe-projects --view input
+volclog tool schema
 ```
 
-`tool list` takes the group as a positional argument (not a `--group` flag) and supports `--verb` to filter by verb and `--format text|json` (default `text`). `tool describe <group.action>` shows the tool's identity, input schema, context schema, execution schema, behavior, output policy, and contract digest. The `--view` flag selects `compact` (default) or `full`; explicit JSON output defaults to `full`.
+`tool list` takes the group as a positional argument (not a `--group` flag) and supports `--verb` to filter by verb and `--format text|json` (default `text`). `tool describe <group.action>` defaults to `compact`, or to `full` when `--output json` is explicitly set. An explicit `--view` selects `compact`, `full`, or `input`.
+
+`--view input` returns the complete sectioned `input_schema` for the action, input policy, usage guidance, and operation capabilities. When you need the context or execution fields, run the command in `schema_ref.command`. `volclog tool schema` returns both shared schemas in one JSON object and can be run offline without credentials. Resolve `#/execution_schema` from the root of that object. Reuse the shared schemas when the returned `schema_digest` matches `schema_ref.schema_digest`. Check the action's `behavior.supports_all` before using `execution.page.all` or `execution.page_all`. `behavior.requires_write_permission` tells you whether a live call requires the CLI's explicit write permission.
 
 The full view also exposes `recovery_source`, `recovery_notes`, `doc_url`, `doc_url_source`, `input_policy`, and `source`. A missing verified documentation URL is `null`. `identity.api_version_default` is the client's default request header (`0.3.0`), with `identity.api_version_source` identifying its source; it is not a verified per-operation API version. Unknown `identity.maintainer` and `identity.deprecated` are `null` in the full view. Compact output omits some of these details.
 

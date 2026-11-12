@@ -78,6 +78,18 @@ For the human edition:
 npm install -g @volcengine-tls/volclog-human@latest --registry https://registry.npmjs.org/
 ```
 
+For an Agent evaluation or any version-specific request, pin the requested version in a separate prefix. Run the executable by its installed path and check the `version` field before continuing.
+
+```bash
+volclog_prefix="$PWD/.volclog-rc"
+npm install --prefix "$volclog_prefix" @volcengine-tls/volclog@1.2.0-rc.1 --registry https://registry.npmjs.org/
+"$volclog_prefix/node_modules/.bin/volclog" version
+```
+
+Use `@volcengine-tls/volclog-human@1.2.0-rc.1` and `volclog-human` for the human edition. Replace `1.2.0-rc.1` with the requested version. `@rc` follows the candidate channel and `@latest` follows the stable channel. To roll back, reinstall the chosen older version into the same prefix and verify the executable there. `volclog upgrade --version <semver>` checks a specific release. Add `--yes` to apply the upgrade.
+
+`--registry` selects the npm source explicitly when the machine has a different default. An enterprise mirror must contain the requested package version. Postinstall also downloads the matching binary and checksum from GitHub Release. If your environment uses an approved mirror for those assets, set `VOLCLOG_BASE_URL` to the base URL for that release's assets during installation.
+
 ### 3.3 Build from source
 
 Requires Go 1.22+. Run from the repository root and install to a user-writable directory:

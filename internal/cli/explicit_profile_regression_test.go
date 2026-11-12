@@ -71,6 +71,12 @@ func TestRunExplicitProfileUsesProfileSignatureWithoutEnvironmentFallback(t *tes
 			wantHost: "profile.example.invalid", wantAuth: explicitProfileSigningIdentity{"profile-ak", "profile-sk", "profile-token"},
 		},
 		{
+			name:     "doctor example supplies target flags with explicit profile",
+			profile:  config.Profile{AccessKeyID: "profile-ak", SecretAccessKey: "profile-sk"},
+			args:     []string{"--profile", "selected", "--region", "cn-beijing", "--endpoint", "https://flags.example.invalid", "doctor", "--online"},
+			wantHost: "flags.example.invalid", wantAuth: explicitProfileSigningIdentity{"profile-ak", "profile-sk", ""},
+		},
+		{
 			name:     "context profile with credential reference",
 			profile:  config.Profile{CredRef: "ref", SecurityToken: "profile-token", Region: "cn-beijing", Endpoint: profileEndpoint},
 			creds:    map[string]config.Credential{"ref": {AccessKeyID: "ref-ak", SecretAccessKey: "ref-sk"}},
@@ -125,6 +131,8 @@ func TestRunExplicitProfileUsesProfileSignatureWithoutEnvironmentFallback(t *tes
 			}
 			t.Setenv("VOLCENGINE_REGION", envRegion)
 			t.Setenv("VOLCENGINE_ENDPOINT", "https://env.example.invalid")
+			// Let the fake transport handle doctor without DNS or TCP checks.
+			t.Setenv("HTTPS_PROXY", "http://proxy.example.invalid")
 
 			path := filepath.Join(t.TempDir(), "config.json")
 			t.Setenv("VOLCLOG_CONFIG", path)

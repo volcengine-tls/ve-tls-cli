@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/output"
@@ -16,6 +17,10 @@ func writeCLIError(w io.Writer, err error, requestID string, statusCode int, kin
 		StatusCode:   statusCode,
 		Kind:         kind,
 		Hint:         hint,
+	}
+	var loginErr *safeCLIError
+	if errors.As(err, &loginErr) {
+		p.Stage = loginErr.loginDiagnostic.Stage
 	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)

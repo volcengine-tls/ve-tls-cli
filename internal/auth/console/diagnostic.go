@@ -14,11 +14,23 @@ import (
 // error string.
 type ErrorDiagnostic struct {
 	Message    string
+	Stage      string
 	StatusCode int
 	RequestID  string
 }
 
 const (
+	LoginStageSetup         = "setup"
+	LoginStageDeviceCode    = "device_code_request"
+	LoginStageWaitForUser   = "wait_for_user"
+	LoginStageTokenPoll     = "token_poll"
+	LoginStageBrowser       = "browser_callback"
+	LoginStageTokenExchange = "token_exchange"
+	LoginStageTokenResponse = "token_response"
+	LoginStageConfirmation  = "session_confirmation"
+	LoginStageCache         = "cache"
+	LoginStageConfigUpdate  = "config_update"
+
 	diagnosticLoginCanceled    = "console login canceled"
 	diagnosticLoginTimedOut    = "console login timed out"
 	diagnosticCallbackTimedOut = "waiting for browser callback timed out"
@@ -27,35 +39,37 @@ const (
 	diagnosticTLSFailure       = "console login TLS handshake failed"
 )
 
-// safeDiagnosticPhases is deliberately separate from safeError.Error. The
-// latter preserves its existing contract for callers that already consume it;
-// this map ensures only the fixed phase strings used by console login code can
-// reach a user-facing diagnostic.
+// safeDiagnosticPhases allows fixed descriptions and stages through the
+// diagnostic boundary. A broad wrapper can supply the message while a nested
+// failure supplies the stage.
 var safeDiagnosticPhases = map[string]string{
-	"load config failed":                      "load config failed",
-	"create oauth client failed":              "create oauth client failed",
-	"device authorization failed":             "device authorization failed",
-	"generate PKCE failed":                    "generate PKCE failed",
-	"generate OAuth state failed":             "generate OAuth state failed",
-	"browser authorization failed":            "browser authorization failed",
-	"authorization code exchange failed":      "authorization code exchange failed",
-	"login session confirmation failed":       "login session confirmation failed",
-	"read cache snapshot failed":              "read cache snapshot failed",
-	"marshal cache failed":                    "marshal cache failed",
-	"write cache failed":                      "write cache failed",
-	"config update and cache rollback failed": "config update and cache rollback failed",
-	"config update and cache cleanup failed":  "config update and cache cleanup failed",
-	"config update failed":                    "config update failed",
-	"device authorization canceled":           "device authorization canceled",
-	"start device authorization failed":       "start device authorization failed",
-	"waiting for device authorization failed": "waiting for device authorization failed",
-	"polling device authorization failed":     "polling device authorization failed",
-	"create callback server failed":           "create callback server failed",
-	"cleanup callback server failed":          "cleanup callback server failed",
-	"authorization and cleanup failed":        "authorization and cleanup failed",
-	"build authorize URL failed":              "build authorize URL failed",
-	"wait for callback failed":                "wait for callback failed",
-	"context already done":                    "context already done",
+	"load config failed":                      LoginStageSetup,
+	"create oauth client failed":              LoginStageSetup,
+	"device authorization failed":             "",
+	"generate PKCE failed":                    LoginStageSetup,
+	"generate OAuth state failed":             LoginStageSetup,
+	"browser authorization failed":            "",
+	"authorization code exchange failed":      LoginStageTokenExchange,
+	"validate token response failed":          LoginStageTokenResponse,
+	"validate STS credentials failed":         LoginStageTokenResponse,
+	"extract login session failed":            LoginStageTokenResponse,
+	"compute token expiration failed":         LoginStageTokenResponse,
+	"login session confirmation failed":       LoginStageConfirmation,
+	"read cache snapshot failed":              LoginStageCache,
+	"marshal cache failed":                    LoginStageCache,
+	"write cache failed":                      LoginStageCache,
+	"config update and cache rollback failed": LoginStageConfigUpdate,
+	"config update and cache cleanup failed":  LoginStageConfigUpdate,
+	"config update failed":                    LoginStageConfigUpdate,
+	"start device authorization failed":       LoginStageDeviceCode,
+	"waiting for device authorization failed": LoginStageWaitForUser,
+	"polling device authorization failed":     LoginStageTokenPoll,
+	"create callback server failed":           LoginStageBrowser,
+	"cleanup callback server failed":          LoginStageBrowser,
+	"authorization and cleanup failed":        "",
+	"build authorize URL failed":              LoginStageBrowser,
+	"wait for callback failed":                LoginStageBrowser,
+	"context already done":                    LoginStageSetup,
 }
 
 // DiagnoseError converts a console login error into a safe diagnostic. The
@@ -68,16 +82,28 @@ func DiagnoseError(err error) ErrorDiagnostic {
 		return ErrorDiagnostic{}
 	}
 
-	var phaseErr *safeError
-	phase := ""
-	if errors.As(err, &phaseErr) && phaseErr != nil {
-		phase = safeDiagnosticPhases[phaseErr.desc]
+	var phases []*safeError
+	collectSafeErrors(err, &phases)
+	var phase, stage string
+	for _, failure := range phases {
+		value, known := safeDiagnosticPhases[failure.desc]
+		if !known {
+			continue
+		}
+		if phase == "" {
+			phase = failure.desc
+		}
+		if value != "" {
+			stage = value
+			break
+		}
 	}
 
 	var apiErr *ConsoleOAuthAPIError
 	if errors.As(err, &apiErr) && apiErr != nil {
 		result := ErrorDiagnostic{
 			Message:    composeDiagnosticMessage(phase, apiErr.Error()),
+			Stage:      stage,
 			StatusCode: apiErr.StatusCode,
 		}
 		if safeRequestID(apiErr.RequestID) {
@@ -92,6 +118,8 @@ func DiagnoseError(err error) ErrorDiagnostic {
 		detail = callbackErr.Error()
 	} else if isCallbackWaitTimeout(err) {
 		detail = diagnosticCallbackTimedOut
+	} else if errors.Is(err, errDeviceAuthorizationExpired) {
+		detail = errDeviceAuthorizationExpired.Error()
 	} else if errors.Is(err, context.Canceled) {
 		detail = diagnosticLoginCanceled
 	} else if errors.Is(err, context.DeadlineExceeded) {
@@ -103,7 +131,7 @@ func DiagnoseError(err error) ErrorDiagnostic {
 	if phase == "" && detail == "" {
 		return ErrorDiagnostic{}
 	}
-	return ErrorDiagnostic{Message: composeDiagnosticMessage(phase, detail)}
+	return ErrorDiagnostic{Message: composeDiagnosticMessage(phase, detail), Stage: stage}
 }
 
 func composeDiagnosticMessage(phase, detail string) string {

@@ -44,7 +44,7 @@ volclog configure delete --profile scratch
 volclog configure delete --prefix temp- --yes
 ```
 
-`configure list` and `configure show` never print secrets. The access key ID is masked (for example `AKT****XYZ`); the secret access key is omitted entirely. `configure show --profile NAME` shows one profile; without `--profile` it falls back to `current_profile`, then `default`.
+`configure list` and `configure show` never print secrets. The access key ID is masked (for example `AKT****XYZ`); the secret access key is omitted entirely. `configure show NAME`, `configure show --profile NAME`, and `volclog --profile NAME configure show` select the named profile. Conflicting selectors or extra arguments produce an error. With no selector, the command falls back to `current_profile`, then `default`.
 
 `configure use NAME` sets `current_profile` to `NAME`. `configure delete` removes a single profile by name, or every profile whose name starts with `--prefix` (prefix deletion requires `--yes`). After deletion, `current_profile` is adjusted if it pointed at a removed profile.
 
@@ -54,7 +54,7 @@ The `configure profile` subcommand group is a set of aliases:
 | --- | --- |
 | `configure profile add NAME [flags...]` | `configure set --profile NAME [flags...]` |
 | `configure profile use NAME` | `configure use NAME` |
-| `configure profile show [NAME]` | `configure show --profile NAME` |
+| `configure profile show [NAME]` | `configure show [NAME]` |
 | `configure profile list [args...]` | `configure list [args...]` |
 | `configure profile delete [NAME]` | `configure delete [NAME]` |
 

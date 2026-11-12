@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -366,40 +365,40 @@ func (s *LoginService) Login(ctx context.Context, opts LoginOptions) (*LoginResu
 		}
 	}
 	if tokenResp == nil {
-		return nil, errors.New("token exchange returned nil response")
+		return nil, newSafeError("validate token response failed", errors.New("token exchange returned nil response"))
 	}
 
 	// 5b. Require a non-empty TokenType before any cache/config mutation. An
 	// empty TokenType fails closed with a fixed safe error: no cache write and
 	// no config update occur.
 	if strings.TrimSpace(tokenResp.TokenType) == "" {
-		return nil, errors.New("token exchange returned empty token type")
+		return nil, newSafeError("validate token response failed", errors.New("token exchange returned empty token type"))
 	}
 
 	// 6. Validate STS credentials.
 	sts, err := ParseSTSCredentials(tokenResp.AccessToken)
 	if err != nil {
-		return nil, fmt.Errorf("validate STS credentials: %w", err)
+		return nil, newSafeError("validate STS credentials failed", err)
 	}
 
 	// 7. Extract login-session from ID token.
 	loginSession, err := ExtractLoginSession(tokenResp.IDToken)
 	if err != nil {
-		return nil, fmt.Errorf("extract login session: %w", err)
+		return nil, newSafeError("extract login session failed", err)
 	}
 
 	// 8. If the profile is bound to a different session, require confirmation.
 	existingSession := profile.LoginSession
 	if existingSession != "" && existingSession != loginSession {
 		if s.confirm == nil {
-			return nil, errors.New("login session replacement requires confirmation")
+			return nil, newSafeError("login session confirmation failed", errors.New("login session replacement requires confirmation"))
 		}
 		ok, err := s.confirm(profileName, existingSession, loginSession)
 		if err != nil {
 			return nil, newSafeError("login session confirmation failed", err)
 		}
 		if !ok {
-			return nil, errors.New("login cancelled: user rejected session replacement")
+			return nil, newSafeError("login session confirmation failed", errors.New("login cancelled: user rejected session replacement"))
 		}
 	}
 
@@ -408,7 +407,7 @@ func (s *LoginService) Login(ctx context.Context, opts LoginOptions) (*LoginResu
 	issuedAt := now.Format(time.RFC3339Nano)
 	expiresAt, err := CacheExpiration(issuedAt, tokenResp.ExpiresIn)
 	if err != nil {
-		return nil, fmt.Errorf("compute token expiration: %w", err)
+		return nil, newSafeError("compute token expiration failed", err)
 	}
 
 	// 10. Determine the frozen scope: use the returned scope only if it

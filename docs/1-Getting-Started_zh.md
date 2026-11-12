@@ -78,6 +78,18 @@ npm install -g @volcengine-tls/volclog@latest --registry https://registry.npmjs.
 npm install -g @volcengine-tls/volclog-human@latest --registry https://registry.npmjs.org/
 ```
 
+Agent 测评或指定版本安装时，在独立 prefix 中固定目标版本。按安装后的绝对路径运行，检查 `version` 字段后再继续。
+
+```bash
+volclog_prefix="$PWD/.volclog-rc"
+npm install --prefix "$volclog_prefix" @volcengine-tls/volclog@1.2.0-rc.1 --registry https://registry.npmjs.org/
+"$volclog_prefix/node_modules/.bin/volclog" version
+```
+
+人工交互版使用 `@volcengine-tls/volclog-human@1.2.0-rc.1` 和 `volclog-human`。把 `1.2.0-rc.1` 替换成实际要求的版本。`@rc` 跟随候选版，`@latest` 跟随正式版。回退时在同一 prefix 重装指定旧版，并用该路径验版。`volclog upgrade --version <semver>` 检查指定 Release，加 `--yes` 才执行升级。
+
+当机器默认使用其他 npm 源时，可用 `--registry` 显式选择。企业镜像需包含目标包版本。安装脚本还会从 GitHub Release 下载对应的二进制和校验文件。如果环境使用获准的资产镜像，可在安装时将 `VOLCLOG_BASE_URL` 设为该版本资产所在目录的 URL。
+
 ### 3.3 从源码构建
 
 需要 Go 1.22+。在仓库根目录运行，并安装到用户可写目录：

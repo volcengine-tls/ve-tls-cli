@@ -46,9 +46,15 @@ Key rules:
 
 ## Contract View And Recovery Precedence
 
-- Use compact `tool describe` output for discovery and ordinary flat requests.
-- Run `volclog tool describe <group.action> --view full` before authoring nested objects or whenever an expected optional field is absent from compact output.
-- Treat full view as the request-authoring schema; do not infer omitted optional fields from compact view.
+Use `input` for complete request fields, including nested objects. Use `full` for a self-contained contract or when the installed CLI lacks `input`. The default `compact` view is a discovery summary that can omit optional fields.
+
+```bash
+volclog tool describe project.describe-projects --view input
+volclog tool schema
+```
+
+- Query `tool schema` only when you need the context or execution field definitions and lack a cached match for `schema_ref.schema_digest`. The query works offline. Resolve `#/execution_schema` from the root of its JSON output. Use `contract_digest` when caching the operation contract.
+- Check `behavior.supports_all` before using `--page-all`, `context.execution.page.all`, or `context.execution.page_all`. Check `behavior.supports_dry_run` before planning a dry-run. On `input`, `behavior.requires_write_permission` reports whether a live call needs explicit CLI write permission.
 - Read `risk`, `recovery`, `recovery_source`, `recovery_notes`, and `usage_constraints` before executing or recovering an operation. These operation-specific fields override the generic recovery tables in this skill.
 - `reviewed-read-contract` means the operation was reviewed as read or non-persistent; it does not prove service idempotency or permit automatic retry. For `unverified`, reconcile the outcome before retrying.
 - Full describe includes `input_policy`, `doc_url`, `doc_url_source`, and `source`; `doc_url` is `null` if no exact URL is verified. `identity.api_version_default` is the client default header (`0.3.0`), with `identity.api_version_source` indicating its source, not a per-operation version guarantee. Unknown `identity.maintainer` and `identity.deprecated` are `null` in full view; compact may omit details.
@@ -62,7 +68,7 @@ Key rules:
 - `--timeout 30s` and `context.execution.timeout="30s"` set a positive Go-duration budget for the entire invocation, starting at command entry and shared across pages/batches. There is no overall default; profile `timeout_seconds` remains a separate HTTP request timeout. Equal global/context durations may repeat; unequal ones conflict.
 - TLS writes and unknown raw operations, including unknown GETs, require a CLI write permit. For an already user-authorized action, use `--allow-write`; `tool exec` / `workflow exec` may instead use `context.execution.allow_write=true`, but raw has no context. This does not grant IAM permissions. Global `true` conflicts with explicit context `false`. Reviewed reads such as POST `log.search` and dry-runs are exempt; human write shortcuts are gated too.
 - `--trace-redact` accepts `on`/`true`/`1`/`yes`/`enabled`/`strict`/`default`; `off`/`false`/`0`/`no`/`disabled` and unknown values fail validation. Context `trace=false` or `enabled:false` disables global tracing.
-- Non-interactive `login` uses a device code without opening a browser. If session replacement needs confirmation it returns `interaction_required`; select another `--profile` or an interactive terminal, not `--force`. SSO auto-selects one account/role but fails immediately when multiple candidates need an unspecified choice. The transactional token is rolled back and config changes are not committed; registration cache may already have been written.
+- Non-interactive `login` uses a device code without opening a browser. Keep the original process running while the user enters the code from terminal output on the official page. For hosts that stop the process or buffer stderr until exit, use a foreground terminal with the same config and profile. Session replacement that needs confirmation returns `interaction_required`. Select another profile or an interactive terminal. When non-interactive SSO needs an account or role choice, it rolls back the transaction token and preserves the config. The registration cache may already exist.
 - Darwin/Linux interactive prompts use cancellable polling. Windows consoles without read-deadline support return `interaction_required`, so provide explicit selectors to avoid prompting. Runtime verification of this change has been on Darwin only.
 - Cancellation by SIGINT, SIGTERM, or `RunContext` shares the invocation budget: before send it is `not_sent`, and after send an unresolved outcome remains `unknown`. Keep partial results and follow completeness and reconciliation guidance.
 
@@ -101,6 +107,7 @@ Use this section to interpret result semantics after the surface has already bee
 - `HitCount` is only the count returned in the current `SearchLogs` response window.
 - `Histogram.TotalCount` is the better whole-window total only for pure search when histogram is the correct surface.
 - For SearchLogs, `ResultStatus=incomplete` or `time_out` means incomplete data and `error` means failure. SQL/analysis is complete only with `ResultStatus=complete`; `ListOver` applies to pure search. Inspect `summary.completeness` before trusting counts, rows, empty results, or bucket distribution.
+- For pure-search pagination, the `log.search` request field `Limit` accepts at most 1000 rows per page. Use SQL `LIMIT` within `Query` for analysis rows.
 - Explicit SQL `LIMIT`/`OFFSET` calls are independent queries without a shared-snapshot guarantee; do not invent an offset to resume an incomplete response.
 - For search+analysis or pure analysis queries, do not use histogram as the analysis row count. Use SQL such as `select count(*)` when the user asks for analysis totals.
 
@@ -134,21 +141,22 @@ Interpretation rules:
 Credential selection is a host/runtime concern, not a business-input concern.
 
 - Discover saved profiles with `volclog configure list`.
-- Omit `profile` to use the active CLI profile.
-- Set `context.profile` only when switching tenant or environment inside one session.
-- For stateless service assistants and CI, keep long-lived credentials on the host. Let the host choose the local profile, then inject one-shot credentials with `--secrets-file` or `context.secrets_file`.
+- Use a saved profile or a one-shot secrets file supplied by the host. `--profile`/`context.profile` and `--secrets-file`/`context.secrets_file` are mutually exclusive. A secrets file selects static authentication.
+- Implicit selection uses `current_profile`, or `default` when it is empty. Global `--region`/`--endpoint` and `context.region`/`context.endpoint` are invocation overrides. When a field is set in both places, the values must agree. Supply Region and Endpoint independently.
 
-Preferred order:
+| Selection | Identity | Region and endpoint precedence |
+| --- | --- | --- |
+| Explicit profile | Named profile's static credentials or dynamic provider | Invocation overrides → profile → project defaults |
+| Implicit dynamic profile | Selected dynamic provider | Invocation overrides → environment → profile → project defaults |
+| Implicit static, complete environment AK/SK | Environment AK/SK and optional token | Invocation overrides → environment → project defaults |
+| Implicit static, incomplete environment AK/SK | Profile or `cred_ref`. When AK or SK is missing, the static signing client can fill missing credentials from the environment. | Invocation overrides → profile → project defaults |
 
-1. non-secret selector such as profile or environment label
-2. `--secrets-file`
-3. `context.secrets_file`
-4. process-scoped `VOLCENGINE_ACCESS_KEY_ID` / `VOLCENGINE_ACCESS_KEY_SECRET` only as fallback
+Supply the target through flags when an explicit profile has no region or endpoint.
 
-Hard rule:
-
-- An explicit `--profile` or `context.profile` must exist and keeps that profile's identity. Environment credentials and tokens cannot replace or fill its static credentials; dynamic identities remain provider-backed. Without an explicit profile, the existing environment precedence applies.
-- `--profile`/`context.profile` and `--secrets-file`/`context.secrets_file` are mutually exclusive runtime selectors; conflicting selectors fail fast instead of silently overriding each other.
+```bash
+volclog --profile NAME --region cn-beijing \
+  --endpoint https://tls-cn-beijing.volces.com doctor --online
+```
 
 ## Doctor Boundary
 
@@ -214,8 +222,8 @@ When the command already failed, follow the smallest next action:
 - `ingest-is-not-tool-put`: use `workflow log.ingest` for local file or stdin import, and `tool log.put` only for the public PutLogs contract.
 - `shortcuts-are-human-first`: human shortcut groups are for humans; agent flows should stay on `tool / workflow / raw`.
 - `thin-client-does-not-judge-business-semantics`: if there was no local validation, decode, or filesystem error, debug the query semantics and time window before blaming the CLI.
-- `env-creds-override-profile`: environment precedence applies only when profile selection is implicit; an explicit `--profile` or `context.profile` keeps its identity.
+- `env-creds-override-profile`: complete environment AK/SK take precedence on the implicit static path. An explicit profile keeps its identity and uses invocation overrides, profile settings, and project defaults for its target.
 - `profile-and-secrets-file-are-exclusive`: choose exactly one runtime selector family, not both `profile` and `secrets_file`.
 - `high-risk-retry-is-not-auto-retry`: ambiguous high-risk outcomes require contract-named reconciliation or escalation, never an automatic replay.
-- `compact-describe-can-omit-optional-fields`: use `tool describe --view full` before authoring nested optional configuration.
+- `compact-describe-can-omit-optional-fields`: use `tool describe --view input` or `--view full` for the complete request schema.
 - `topic-resolution-is-logapp-only`: if `app.resolve-topic-ids` reports `unsupported_feature`, follow its hint and use `app.resolve-resources`; do not guess Topic IDs for opaque resources.

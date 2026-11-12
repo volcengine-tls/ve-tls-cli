@@ -561,6 +561,9 @@ func TestLoginConfigFailureRestoresCacheSnapshot(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when config update fails")
 	}
+	if diagnostic := DiagnoseError(err); diagnostic.Stage != "config_update" {
+		t.Fatalf("config update diagnostic = %+v", diagnostic)
+	}
 	// Cache did not exist before; it should have been deleted (not left with new data).
 	if _, ok := cache.data[session]; ok {
 		t.Error("cache should be deleted when config fails and cache did not exist before")
@@ -936,6 +939,9 @@ func TestLoginEmptyTokenTypeFailsClosedWithoutMutation(t *testing.T) {
 	_, err := svc.Login(context.Background(), LoginOptions{Profile: "default"})
 	if err == nil {
 		t.Fatal("expected error for empty token type")
+	}
+	if diagnostic := DiagnoseError(err); diagnostic.Stage != "token_response" {
+		t.Fatalf("invalid token diagnostic = %+v", diagnostic)
 	}
 	// No cache write must occur.
 	if atomic.LoadInt32(&cache.writeCnt) != 0 {

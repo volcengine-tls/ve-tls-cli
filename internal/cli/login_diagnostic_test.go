@@ -6,11 +6,39 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth/console"
 )
+
+func TestRunLoginDeviceCodeRequestDeadlineReportsStage(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	// The listener never answers the TLS handshake, so the deadline is reached
+	// before any device code can be issued.
+	t.Setenv("VOLCLOG_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"login", "--profile", "deadline-test", "--login-endpoint", "https://" + listener.Addr().String(),
+		"--non-interactive", "--timeout", "200ms",
+	}, &stdout, &stderr)
+	var payload map[string]any
+	if err := json.Unmarshal(stderr.Bytes(), &payload); err != nil {
+		t.Fatalf("decode login error: %v; stderr=%q", err, stderr.String())
+	}
+	if code != 2 || stdout.Len() != 0 || payload["kind"] != "auth" || payload["stage"] != "device_code_request" {
+		t.Fatalf("unexpected login failure: exit=%d stdout=%q payload=%v", code, stdout.String(), payload)
+	}
+	if !strings.Contains(fmt.Sprint(payload["errorMessage"]), "timed out") || !strings.Contains(fmt.Sprint(payload["hint"]), "outbound HTTPS") {
+		t.Fatalf("missing request-stage timeout guidance: %v", payload)
+	}
+}
 
 func TestRunLoginPreservesSafeOAuthDiagnostics(t *testing.T) {
 	for _, tc := range []struct {
