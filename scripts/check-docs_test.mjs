@@ -106,8 +106,9 @@ See [1-Getting-Started.md](docs/1-Getting-Started.md).
     '5-Practical-Guide',
     '6-Advanced',
     '7-Human-Shortcuts',
+    '8-Install-CLI-with-AI-Agent',
   ];
-  // Navigation routes: [prev, pair, next] for each page index (0..6)
+  // Navigation routes: [prev, pair, next] for each page.
   const navEn = [
     ['../README.md', '1-Getting-Started_zh.md', '2-Authentication.md'],
     ['1-Getting-Started.md', '2-Authentication_zh.md', '3-Configuration.md'],
@@ -115,7 +116,8 @@ See [1-Getting-Started.md](docs/1-Getting-Started.md).
     ['3-Configuration.md', '4-Usage_zh.md', '5-Practical-Guide.md'],
     ['4-Usage.md', '5-Practical-Guide_zh.md', '6-Advanced.md'],
     ['5-Practical-Guide.md', '6-Advanced_zh.md', '7-Human-Shortcuts.md'],
-    ['6-Advanced.md', '7-Human-Shortcuts_zh.md', '../README.md'],
+    ['6-Advanced.md', '7-Human-Shortcuts_zh.md', '8-Install-CLI-with-AI-Agent.md'],
+    ['7-Human-Shortcuts.md', '8-Install-CLI-with-AI-Agent_zh.md', '../README.md'],
   ];
   const navZh = [
     ['../README_ZH.md', '1-Getting-Started.md', '2-Authentication_zh.md'],
@@ -124,7 +126,8 @@ See [1-Getting-Started.md](docs/1-Getting-Started.md).
     ['3-Configuration_zh.md', '4-Usage.md', '5-Practical-Guide_zh.md'],
     ['4-Usage_zh.md', '5-Practical-Guide.md', '6-Advanced_zh.md'],
     ['5-Practical-Guide_zh.md', '6-Advanced.md', '7-Human-Shortcuts_zh.md'],
-    ['6-Advanced_zh.md', '7-Human-Shortcuts.md', '../README_ZH.md'],
+    ['6-Advanced_zh.md', '7-Human-Shortcuts.md', '8-Install-CLI-with-AI-Agent_zh.md'],
+    ['7-Human-Shortcuts_zh.md', '8-Install-CLI-with-AI-Agent.md', '../README_ZH.md'],
   ];
   for (let i = 0; i < names.length; i++) {
     const n = names[i];
@@ -148,7 +151,7 @@ See [1-Getting-Started.md](docs/1-Getting-Started.md).
 
 // --- tests -----------------------------------------------------------------
 
-test('valid complete seven-pair miniature tree passes', () => {
+test('valid complete bilingual miniature tree passes', () => {
   const dir = makeTree(validTree());
   try {
     const diags = validateDocsTree(dir);
@@ -182,14 +185,14 @@ test('wrong README_CN.md is rejected', () => {
   }
 });
 
-test('missing numbered pair fails', () => {
+test('missing English counterpart for the AI Agent installation guide fails', () => {
   const files = validTree();
-  delete files['docs/3-Configuration.md'];
-  delete files['docs/3-Configuration_zh.md'];
+  const missing = 'docs/8-Install-CLI-with-AI-Agent.md';
+  delete files[missing];
   const dir = makeTree(files);
   try {
     const diags = validateDocsTree(dir);
-    assert.ok(diags.some((d) => d.includes('3-Configuration')), `expected 3-Configuration diagnostic, got: ${diags.join('\n')}`);
+    assert.ok(diags.includes(`${missing}: expected docs file is missing`), `expected ${missing} diagnostic, got: ${diags.join('\n')}`);
   } finally {
     cleanup(dir);
   }
@@ -818,7 +821,7 @@ test('root README that is a directory returns diagnostic without throwing', () =
 test('extra symlink under docs is rejected', () => {
   const dir = makeTree(validTree());
   try {
-    // A valid 14-file tree plus an extra symlink must not pass.
+    // A valid 16-file tree plus an extra symlink must not pass.
     symlinkSync(join(dir, 'docs', '1-Getting-Started.md'), join(dir, 'docs', 'extra-link.md'));
     const diags = validateDocsTree(dir);
     assert.ok(diags.some((d) => d.includes('extra-link.md')), `expected diagnostic for extra symlink, got: ${diags.join('\n')}`);
@@ -860,12 +863,13 @@ test('docs/ that is a symlink to an external tree is rejected', () => {
     // potential violation is docs/ itself being a symlink.
     writeFileSync(join(dir, 'README.md'), `# volclog-cli\n\n[中文版](README_ZH.md)\n`, 'utf8');
     writeFileSync(join(dir, 'README_ZH.md'), `# volclog-cli\n\n[English](README.md)\n`, 'utf8');
-    // Build a valid-looking 14-file tree outside the repo root with matching
+    // Build a valid-looking 16-file tree outside the repo root with matching
     // EN/ZH content so pair/parity checks would pass if docs/ were real.
     mkdirSync(outsideDir, { recursive: true });
     const names = [
       '1-Getting-Started', '2-Authentication', '3-Configuration',
       '4-Usage', '5-Practical-Guide', '6-Advanced', '7-Human-Shortcuts',
+      '8-Install-CLI-with-AI-Agent',
     ];
     for (const n of names) {
       const body = `# 1 ${n}\n\n## 1.1 Section\n\nText.\n`;

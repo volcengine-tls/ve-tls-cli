@@ -76,6 +76,7 @@ volclog --profile default tool exec project.describe-projects
 | 5 | [Practical Guide](docs/5-Practical-Guide.md) | End-to-end task walkthroughs and troubleshooting |
 | 6 | [Advanced](docs/6-Advanced.md) | Best practices, agent skills, and advanced workflows |
 | 7 | [Human Shortcuts](docs/7-Human-Shortcuts.md) | Interactive shortcut commands and common terminal workflows |
+| 8 | [Install TLS CLI with an AI Agent](docs/8-Install-CLI-with-AI-Agent.md) | Agent-assisted installation, sign-in, and verification |
 
 ## Contributing & Security
 

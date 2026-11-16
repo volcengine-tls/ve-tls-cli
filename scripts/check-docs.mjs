@@ -28,6 +28,8 @@ const EXPECTED_DOCS = [
   '6-Advanced_zh.md',
   '7-Human-Shortcuts.md',
   '7-Human-Shortcuts_zh.md',
+  '8-Install-CLI-with-AI-Agent.md',
+  '8-Install-CLI-with-AI-Agent_zh.md',
 ];
 
 const RETIRED_FILENAMES = [
@@ -58,12 +60,13 @@ const PAIR_PREFIXES = [
   '5-Practical-Guide',
   '6-Advanced',
   '7-Human-Shortcuts',
+  '8-Install-CLI-with-AI-Agent',
 ];
 
 // Expected navigation routes for each numbered page.
 // Each entry: { prev, pair, next } — the three link targets (in order) that
 // must appear on both the top and bottom navigation lines.
-// Index 0 = page 1, index 6 = page 7.
+// Index 0 corresponds to page 1.
 const NAV_ROUTES_EN = [
   { prev: '../README.md', pair: '1-Getting-Started_zh.md', next: '2-Authentication.md' },
   { prev: '1-Getting-Started.md', pair: '2-Authentication_zh.md', next: '3-Configuration.md' },
@@ -71,7 +74,8 @@ const NAV_ROUTES_EN = [
   { prev: '3-Configuration.md', pair: '4-Usage_zh.md', next: '5-Practical-Guide.md' },
   { prev: '4-Usage.md', pair: '5-Practical-Guide_zh.md', next: '6-Advanced.md' },
   { prev: '5-Practical-Guide.md', pair: '6-Advanced_zh.md', next: '7-Human-Shortcuts.md' },
-  { prev: '6-Advanced.md', pair: '7-Human-Shortcuts_zh.md', next: '../README.md' },
+  { prev: '6-Advanced.md', pair: '7-Human-Shortcuts_zh.md', next: '8-Install-CLI-with-AI-Agent.md' },
+  { prev: '7-Human-Shortcuts.md', pair: '8-Install-CLI-with-AI-Agent_zh.md', next: '../README.md' },
 ];
 const NAV_ROUTES_ZH = [
   { prev: '../README_ZH.md', pair: '1-Getting-Started.md', next: '2-Authentication_zh.md' },
@@ -80,7 +84,8 @@ const NAV_ROUTES_ZH = [
   { prev: '3-Configuration_zh.md', pair: '4-Usage.md', next: '5-Practical-Guide_zh.md' },
   { prev: '4-Usage_zh.md', pair: '5-Practical-Guide.md', next: '6-Advanced_zh.md' },
   { prev: '5-Practical-Guide_zh.md', pair: '6-Advanced.md', next: '7-Human-Shortcuts_zh.md' },
-  { prev: '6-Advanced_zh.md', pair: '7-Human-Shortcuts.md', next: '../README_ZH.md' },
+  { prev: '6-Advanced_zh.md', pair: '7-Human-Shortcuts.md', next: '8-Install-CLI-with-AI-Agent_zh.md' },
+  { prev: '7-Human-Shortcuts_zh.md', pair: '8-Install-CLI-with-AI-Agent.md', next: '../README_ZH.md' },
 ];
 
 // --- small markdown helpers (line-oriented, no general parser) -------------

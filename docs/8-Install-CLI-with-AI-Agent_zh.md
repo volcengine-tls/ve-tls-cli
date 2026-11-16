@@ -1,4 +1,6 @@
-# 使用 AI Agent 安装 TLS CLI
+# 8. 使用 AI Agent 安装 TLS CLI
+
+[← 上一篇：Human Shortcuts](7-Human-Shortcuts_zh.md) | [English](8-Install-CLI-with-AI-Agent.md) | [返回 README →](../README_ZH.md)
 
 请在 AI Agent 后续调用 TLS CLI（`volclog`）的环境中完成安装。登录时由用户在浏览器中完成火山引擎授权。
 
@@ -45,3 +47,7 @@ volclog skill install --name volclog-core --dir "<agent-skills-dir>"
 ```
 
 完成后报告 CLI 版本、登录结果、在线验证结果和 Skill 安装目录。
+
+---
+
+[← 上一篇：Human Shortcuts](7-Human-Shortcuts_zh.md) | [English](8-Install-CLI-with-AI-Agent.md) | [返回 README →](../README_ZH.md)
