@@ -1,6 +1,6 @@
 # 7. Human Shortcuts
 
-[← 上一篇：进阶](6-Advanced_zh.md) | [English](7-Human-Shortcuts.md) | [下一篇：README →](../README_ZH.md)
+[← 上一篇：进阶](6-Advanced_zh.md) | [English](7-Human-Shortcuts.md) | [下一篇：使用 AI Agent 安装 TLS CLI →](8-Install-CLI-with-AI-Agent_zh.md)
 
 `volclog-human` 面向已经明确目标资源和操作的人类终端用户。它与 `volclog` 共享认证和配置，并额外提供 `project`、`topic`、`metric-topic`、`index`、`log`、`host-group`、`collector` 等资源级 shortcut。
 
@@ -113,4 +113,4 @@ volclog-human --profile default \
 
 ---
 
-[← 上一篇：进阶](6-Advanced_zh.md) | [English](7-Human-Shortcuts.md) | [下一篇：README →](../README_ZH.md)
+[← 上一篇：进阶](6-Advanced_zh.md) | [English](7-Human-Shortcuts.md) | [下一篇：使用 AI Agent 安装 TLS CLI →](8-Install-CLI-with-AI-Agent_zh.md)

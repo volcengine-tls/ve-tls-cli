@@ -1,6 +1,6 @@
 # 7. Human Shortcuts
 
-[← Previous: Advanced](6-Advanced.md) | [中文](7-Human-Shortcuts_zh.md) | [Next: README →](../README.md)
+[← Previous: Advanced](6-Advanced.md) | [中文](7-Human-Shortcuts_zh.md) | [Next: Install TLS CLI with an AI Agent →](8-Install-CLI-with-AI-Agent.md)
 
 `volclog-human` is for terminal users who already know the target resource and operation. It shares authentication and configuration with `volclog` and adds resource-oriented shortcuts such as `project`, `topic`, `metric-topic`, `index`, `log`, `host-group`, and `collector`.
 
@@ -113,4 +113,4 @@ Use `log export` for plain-search results and `log export-analysis` for SQL or a
 
 ---
 
-[← Previous: Advanced](6-Advanced.md) | [中文](7-Human-Shortcuts_zh.md) | [Next: README →](../README.md)
+[← Previous: Advanced](6-Advanced.md) | [中文](7-Human-Shortcuts_zh.md) | [Next: Install TLS CLI with an AI Agent →](8-Install-CLI-with-AI-Agent.md)

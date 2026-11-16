@@ -76,6 +76,7 @@ volclog --profile default tool exec project.describe-projects
 | 5 | [实战指导](docs/5-Practical-Guide_zh.md) | 端到端任务链路与排障 |
 | 6 | [进阶](docs/6-Advanced_zh.md) | 最佳实践、agent skills 与高级工作流 |
 | 7 | [Human Shortcuts](docs/7-Human-Shortcuts_zh.md) | 面向人工终端操作的快捷命令与常用场景 |
+| 8 | [使用 AI Agent 安装 TLS CLI](docs/8-Install-CLI-with-AI-Agent_zh.md) | 通过 AI Agent 完成安装、登录和验证 |
 
 ## 贡献与安全
 
