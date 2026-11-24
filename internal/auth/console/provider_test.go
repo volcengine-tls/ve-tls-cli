@@ -1110,10 +1110,12 @@ func TestProviderEmptyCachedTokenTypeRequiresReauth(t *testing.T) {
 	}
 }
 
-// TestProviderEmptyRefreshedTokenTypeIsProtocolError verifies that a refresh
-// response with an empty TokenType is a ProtocolError that fails closed: no
-// credentials are returned and the cache is not persisted.
-func TestProviderEmptyRefreshedTokenTypeIsProtocolError(t *testing.T) {
+// TestProviderRefreshWithoutTokenTypeKeepsCachedTokenType verifies that a
+// refresh response without token_type and without a new refresh_token (the
+// shape the Volcengine signin service returns for the refresh_token grant) is
+// accepted: the new STS is returned and persisted, while the cached TokenType
+// and RefreshToken are kept.
+func TestProviderRefreshWithoutTokenTypeKeepsCachedTokenType(t *testing.T) {
 	const session = "trn:iam::1:user:refreshemptytt"
 	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
 	issuedAt := now.Add(-3599 * time.Second) // near expiry -> refresh
@@ -1123,25 +1125,31 @@ func TestProviderEmptyRefreshedTokenTypeIsProtocolError(t *testing.T) {
 
 	resp := validTokenResponse(session)
 	resp.TokenType = ""
+	resp.RefreshToken = ""
 	client := &fakeOAuthClient{exchangeResp: resp, endpointURL: DefaultEndpoint}
 	p := NewProvider(session, cache, func(string) (OAuthClient, error) { return client, nil }, func() time.Time { return now })
 
 	val, err := p.Retrieve(context.Background())
-	if err == nil {
-		t.Fatal("expected error for empty refreshed TokenType")
+	if err != nil {
+		t.Fatalf("Retrieve: %v", err)
 	}
-	if val.AccessKeyID != "" {
-		t.Errorf("no credentials should be returned, got %q", val.AccessKeyID)
+	if val.AccessKeyID == "" {
+		t.Fatal("expected refreshed credentials")
 	}
-	var authErr *auth.Error
-	if !errors.As(err, &authErr) {
-		t.Fatalf("expected *auth.Error, got %T", err)
+	if atomic.LoadInt32(&cache.writeCnt) != 1 {
+		t.Fatalf("rotated cache should be persisted once, writeCnt=%d", cache.writeCnt)
 	}
-	if authErr.Kind != auth.ProtocolError {
-		t.Errorf("error kind = %q, want %q", authErr.Kind, auth.ProtocolError)
+	var rotated LoginTokenCache
+	if err := json.Unmarshal(cache.data[session], &rotated); err != nil {
+		t.Fatalf("unmarshal rotated cache: %v", err)
 	}
-	// Cache must not have been overwritten with the bad refresh.
-	if atomic.LoadInt32(&cache.writeCnt) != 0 {
-		t.Errorf("cache should not be persisted on empty refreshed TokenType, writeCnt=%d", cache.writeCnt)
+	if rotated.TokenType != "sts" {
+		t.Errorf("TokenType = %q, want cached %q", rotated.TokenType, "sts")
+	}
+	if rotated.RefreshToken != "refresh-token" {
+		t.Errorf("RefreshToken = %q, want cached refresh-token", rotated.RefreshToken)
+	}
+	if rotated.IssuedAt != now.UTC().Format(time.RFC3339Nano) {
+		t.Errorf("IssuedAt = %q, want %q", rotated.IssuedAt, now.UTC().Format(time.RFC3339Nano))
 	}
 }
