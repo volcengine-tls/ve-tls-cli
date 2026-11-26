@@ -74,6 +74,11 @@ func (f *fakeProviderFactory) ECSRole(_ string, profileName string, cfg config.C
 	return f.provider, f.err
 }
 
+func (f *fakeProviderFactory) VE() auth.Provider {
+	f.gotMode = config.AuthModeVE
+	return f.provider
+}
+
 type typedNilFactory struct{}
 
 func (*typedNilFactory) SSO(string, string, config.Config) (auth.Provider, AuthStatusReader, error) {
@@ -89,6 +94,9 @@ func (*typedNilFactory) OIDC(string, string, config.Config) (auth.Provider, erro
 	panic("typed-nil factory must not be called")
 }
 func (*typedNilFactory) ECSRole(string, string, config.Config) (auth.Provider, error) {
+	panic("typed-nil factory must not be called")
+}
+func (*typedNilFactory) VE() auth.Provider {
 	panic("typed-nil factory must not be called")
 }
 

@@ -197,6 +197,10 @@ func (f *indepFakeSSOFactory) ECSRole(configPath, profileName string, cfg config
 	return nil, errSentinel("indepFakeSSOFactory: ECSRole not implemented")
 }
 
+func (*indepFakeSSOFactory) VE() auth.Provider {
+	panic("unexpected VE provider")
+}
+
 // --- Fakes for driving real SSO/Console login entry points ---
 
 // indepLoginSSOOAuth implements sso.OAuthAPI for the real DeviceFlow.Login path.

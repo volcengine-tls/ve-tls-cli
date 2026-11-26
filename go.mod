@@ -5,6 +5,7 @@ go 1.22.1
 require (
 	github.com/google/uuid v1.3.0
 	github.com/volcengine/volc-sdk-golang v1.0.240
+	github.com/volcengine/volcengine-go-sdk v1.2.45
 	github.com/woodsbury/jmespath v0.4.0
 	golang.org/x/sys v0.18.0
 	gopkg.in/yaml.v2 v2.4.0

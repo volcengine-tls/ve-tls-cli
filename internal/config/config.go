@@ -17,6 +17,7 @@ const (
 	AuthModeRamRoleARN   = "ramrolearn"
 	AuthModeOIDC         = "oidc"
 	AuthModeECSRole      = "ecsrole"
+	AuthModeVE           = "ve"
 )
 
 type Credential struct {
@@ -189,7 +190,7 @@ func NormalizeAuthMode(raw string) (string, error) {
 		return AuthModeAK, nil
 	case AuthModeSSO, AuthModeConsoleLogin:
 		return mode, nil
-	case AuthModeRamRoleARN, AuthModeOIDC, AuthModeECSRole:
+	case AuthModeRamRoleARN, AuthModeOIDC, AuthModeECSRole, AuthModeVE:
 		return mode, nil
 	default:
 		return "", errors.New("unknown auth mode: " + mode)
@@ -215,7 +216,7 @@ func IsWorkloadAuthMode(mode string) bool {
 }
 
 func IsProviderAuthMode(mode string) bool {
-	return IsCachedLoginAuthMode(mode) || IsWorkloadAuthMode(mode)
+	return mode == AuthModeVE || IsCachedLoginAuthMode(mode) || IsWorkloadAuthMode(mode)
 }
 
 func (c *Config) SelectedProfileName(explicit string) string {

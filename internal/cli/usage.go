@@ -28,12 +28,13 @@ Commands:
 
 Authentication:
   - Static AK/SK, RAM Role ARN, OIDC, or ECS Role: tlsctl configure set --help
+  - VE credentials: tlsctl configure set --mode ve
   - Console Login: tlsctl login --help
   - First-time SSO: tlsctl configure sso-session --help, then tlsctl configure sso --help
   - SSO re-login or logout: tlsctl sso --help
 
 Configure Set Flags:
-  --mode <ak|ramrolearn|oidc|ecsrole>  Auth mode (omit for legacy static AK/SK)
+  --mode <ak|ramrolearn|oidc|ecsrole|ve>  Auth mode (omit for legacy static AK/SK)
   --account-id <id>                    Account ID for ramrolearn
   --role-name <name>                   Role name for ramrolearn/ecsrole
   --oidc-token-file <path>             OIDC token file path for oidc
@@ -49,12 +50,17 @@ Configure Set Flags:
   endpoint, and/or timeout-seconds patches those runtime fields without changing
   its auth mode or identity. Other commands without --mode preserve the legacy
   static AK/SK behavior. When
-  --mode is supplied only ak/ramrolearn/oidc/ecsrole are accepted; sso and
+  --mode is supplied only ak/ramrolearn/oidc/ecsrole/ve are accepted; sso and
   console-login must use their dedicated flows (configure sso / login). Explicit
   --mode merges only the supplied flags into the existing profile and validates
   identity fields: ak needs AK/SK or cred-ref; ramrolearn needs source AK/SK or
   cred-ref plus account-id+role-name; oidc needs oidc-token-file+role-trn;
   ecsrole needs role-name. TLS region/endpoint may be supplied later.
+
+  ve loads credentials through the official VE SDK. Switch the active VE
+  profile with ve configure profile --profile <name>. VOLCENGINE_PROFILE and
+  VOLCSTACK_PROFILE take precedence when set. Set the TLS target in the TLS
+  profile or pass explicit TLS --region and --endpoint overrides.
 
   WARNING: --disable-ssl only switches the RAM/OIDC STS assumption scheme to
   HTTP. The endpoint URL scheme remains authoritative: an https:// endpoint still
@@ -72,6 +78,7 @@ Examples:
   tlsctl configure set --profile ram-1 --mode ramrolearn --ak <ak> --sk <sk> --account-id 2100000000 --role-name TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure set --profile oidc-1 --mode oidc --oidc-token-file /var/run/secrets/token --role-trn trn:iam::2100000000:role/TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure set --profile ecs-1 --mode ecsrole --role-name TLSAdminRole --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
+  tlsctl configure set --profile tls-beijing --mode ve --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure set --profile default --mode ak --disable-ssl=false --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure profile add tenant-a --ak <ak> --sk <sk> --region cn-beijing --endpoint https://tls-cn-beijing.volces.com
   tlsctl configure profile use tenant-a

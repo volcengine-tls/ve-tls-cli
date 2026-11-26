@@ -401,6 +401,8 @@ func dynamicReauthHint(mode string) string {
 		return "check token file, audience/issuer, role-trn, and trust policy"
 	case config.AuthModeECSRole:
 		return "check attached instance role, IMDSv2 reachable and enabled"
+	case config.AuthModeVE:
+		return "check the selected profile and credentials in ve"
 	}
 	return "volclog login --profile <name>"
 }

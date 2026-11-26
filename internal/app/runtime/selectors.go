@@ -239,7 +239,7 @@ func (r Resolver) Resolve(request ResolveRequest) (Resolution, error) {
 		}
 		profile = applyStaticRuntimeSettings(profile, request)
 	} else {
-		profile = applyDynamicRuntimeSettings(profile, request, lookup)
+		profile = applyDynamicRuntimeSettings(profile, request, mode, lookup)
 	}
 
 	if strings.TrimSpace(profile.Region) == "" {
@@ -280,9 +280,9 @@ func applyStaticRuntimeSettings(profile config.Profile, request ResolveRequest) 
 	return applyTimeout(profile, request.Defaults)
 }
 
-func applyDynamicRuntimeSettings(profile config.Profile, request ResolveRequest, lookup func(string) string) config.Profile {
+func applyDynamicRuntimeSettings(profile config.Profile, request ResolveRequest, mode string, lookup func(string) string) config.Profile {
 	envRegion, envEndpoint := "", ""
-	if strings.TrimSpace(request.ExplicitProfile) == "" {
+	if mode != config.AuthModeVE && strings.TrimSpace(request.ExplicitProfile) == "" {
 		envRegion = lookup("VOLCENGINE_REGION")
 		envEndpoint = lookup("VOLCENGINE_ENDPOINT")
 	}
