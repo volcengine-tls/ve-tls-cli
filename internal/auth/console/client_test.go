@@ -867,3 +867,70 @@ func TestConsoleOAuthAPIErrorIsRetryable(t *testing.T) {
 		})
 	}
 }
+
+// newTokenTypelessClient returns a client whose token endpoint answers 200
+// with access_token, id_token and expires_in only: the response shape the
+// Volcengine signin service returns for the refresh_token grant.
+func newTokenTypelessClient(t *testing.T) *ConsoleOAuthClient {
+	t.Helper()
+	const accessObj = `{"access_key_id":"AKLT-refresh","secret_access_key":"sk-refresh","session_token":"st-refresh"}`
+	inner, _ := json.Marshal(accessObj)
+	rt := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body, _ := json.Marshal(map[string]any{
+			"access_token": json.RawMessage(inner),
+			"id_token":     "id-token",
+			"expires_in":   900,
+		})
+		return newResponse(http.StatusOK, string(body), nil), nil
+	})
+	client, err := NewConsoleOAuthClient(&ConsoleOAuthClientConfig{
+		RetryClient: &httpx.RetryClient{
+			HTTPClient:  &http.Client{Transport: rt, Timeout: TokenTimeout},
+			MaxAttempts: 1,
+			Sleeper:     noopSleeper,
+			Clock:       fixedClock(time.Now()),
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewConsoleOAuthClient: %v", err)
+	}
+	return client
+}
+
+func TestExchangeTokenRefreshAcceptsMissingTokenType(t *testing.T) {
+	client := newTokenTypelessClient(t)
+	resp, err := client.ExchangeToken(context.Background(), &ConsoleTokenRequest{
+		GrantType:    GrantTypeRefreshToken,
+		RefreshToken: "refresh-token",
+		ClientID:     ClientIDSameDevice,
+		Scope:        Scope,
+	})
+	if err != nil {
+		t.Fatalf("ExchangeToken: %v", err)
+	}
+	if resp.TokenType != "" || resp.RefreshToken != "" {
+		t.Fatalf("unexpected token_type/refresh_token: %q/%q", resp.TokenType, resp.RefreshToken)
+	}
+	creds, err := ParseSTSCredentials(resp.AccessToken)
+	if err != nil {
+		t.Fatalf("ParseSTSCredentials: %v", err)
+	}
+	if creds.AccessKeyID != "AKLT-refresh" {
+		t.Fatalf("access_key_id = %q, want AKLT-refresh", creds.AccessKeyID)
+	}
+}
+
+func TestExchangeTokenAuthorizationCodeRequiresTokenType(t *testing.T) {
+	client := newTokenTypelessClient(t)
+	_, err := client.ExchangeToken(context.Background(), &ConsoleTokenRequest{
+		GrantType:    GrantTypeAuthorizationCode,
+		Code:         "auth-code",
+		RedirectURI:  "http://127.0.0.1:12345/oauth/callback",
+		ClientID:     ClientIDSameDevice,
+		Scope:        Scope,
+		CodeVerifier: "verifier-value",
+	})
+	if err == nil || !strings.Contains(err.Error(), "token_type") {
+		t.Fatalf("expected missing token_type error, got %v", err)
+	}
+}

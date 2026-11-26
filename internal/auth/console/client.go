@@ -320,7 +320,12 @@ func (c *ConsoleOAuthClient) exchangeTokenWithAttempts(ctx context.Context, req 
 	if len(bytes.TrimSpace(tokenResp.AccessToken)) == 0 {
 		return nil, errors.New("token response missing access_token")
 	}
-	if strings.TrimSpace(tokenResp.TokenType) == "" {
+	// The authorization-code and device-code grants must return token_type.
+	// The refresh_token grant of the Volcengine signin service returns only
+	// access_token, id_token and expires_in (no token_type and no new
+	// refresh_token), so an empty token_type is accepted there and the caller
+	// keeps the token_type stored in the login cache.
+	if req.GrantType != GrantTypeRefreshToken && strings.TrimSpace(tokenResp.TokenType) == "" {
 		return nil, errors.New("token response missing token_type")
 	}
 	if tokenResp.ExpiresIn <= 0 {

@@ -191,11 +191,10 @@ func (p *Provider) Retrieve(ctx context.Context) (auth.Value, error) {
 			return &auth.Error{Kind: auth.ProtocolError, Description: "refreshed token has invalid STS"}
 		}
 
-		// A refreshed token must carry a non-empty TokenType. An empty one is a
-		// protocol error: fail closed without persisting or returning credentials.
-		if strings.TrimSpace(tokenResp.TokenType) == "" {
-			return &auth.Error{Kind: auth.ProtocolError, Description: "refreshed token has empty token type; run: volclog login"}
-		}
+		// The refresh_token grant may omit token_type (the Volcengine signin
+		// service never returns it on refresh). The cached TokenType is already
+		// non-empty (InspectLoginCache checked it), so it is kept below when the
+		// response omits it.
 
 		// Build the rotated cache, preserving old fields when the response
 		// omits optional replacements.
@@ -203,7 +202,9 @@ func (p *Provider) Retrieve(ctx context.Context) (auth.Value, error) {
 		rotated.AccessToken = tokenResp.AccessToken
 		rotated.IssuedAt = p.clock().UTC().Format(time.RFC3339Nano)
 		rotated.ExpiresIn = tokenResp.ExpiresIn
-		rotated.TokenType = tokenResp.TokenType
+		if strings.TrimSpace(tokenResp.TokenType) != "" {
+			rotated.TokenType = tokenResp.TokenType
+		}
 		if tokenResp.RefreshToken != "" {
 			rotated.RefreshToken = tokenResp.RefreshToken
 		}
