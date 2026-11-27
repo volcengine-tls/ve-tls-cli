@@ -12,7 +12,7 @@ const lockfile = require(path.join(repoRoot, 'package-lock.json'));
 const humanPackage = require(path.join(repoRoot, 'npm', 'human-package', 'package.json'));
 
 test('release metadata stays aligned across Go and npm packages', () => {
-  const version = '1.2.0';
+  const version = '1.2.1';
   const releaseTag = `volclog-v${version}`;
   const goVersion = fs.readFileSync(
     path.join(repoRoot, 'internal', 'version', 'version.go'),
