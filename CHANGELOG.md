@@ -1,5 +1,10 @@
 # Changelog
 
+## volclog-v1.2.1
+
+- Fix Console Login automatic refresh when the token response omits `token_type`. Refresh keeps the cached token type and reuses the existing refresh token when no replacement is returned. (#28, #29)
+- Add installation instructions for using the TLS CLI with an AI agent. (#27)
+
 ## volclog-v1.2.0
 
 - Add four SavedSearch tools, align existing API request contracts, and cap `SearchLogs.Limit` at 1000 rows per page.
