@@ -19,6 +19,8 @@ import (
 	"github.com/volcengine-tls/ve-tls-cli/internal/auth/sts"
 	"github.com/volcengine-tls/ve-tls-cli/internal/config"
 	"github.com/volcengine-tls/ve-tls-cli/internal/tlsapi"
+	"github.com/volcengine/volcengine-go-sdk/volcengine/credentials"
+	"github.com/volcengine/volcengine-go-sdk/volcengine/credentials/clicreds"
 )
 
 // ProviderFactory constructs the provider for each dynamic authentication
@@ -29,6 +31,7 @@ type ProviderFactory interface {
 	RamRoleARN(configPath, profileName string, cfg config.Config) (auth.Provider, error)
 	OIDC(configPath, profileName string, cfg config.Config) (auth.Provider, error)
 	ECSRole(configPath, profileName string, cfg config.Config) (auth.Provider, error)
+	VE() auth.Provider
 }
 
 // AuthStatus is an offline, secret-free snapshot of cached authentication
@@ -38,6 +41,8 @@ type AuthStatus struct {
 	Present         bool
 	ExpiresAt       time.Time
 	RefreshRequired bool
+	CacheState      string
+	CacheAction     string
 }
 
 // AuthStatusReader reads authentication status without refreshing, networking,
@@ -46,11 +51,36 @@ type AuthStatusReader interface {
 	Status(context.Context, string) (AuthStatus, error)
 }
 
-// DefaultProviderFactory constructs production SSO, Console Login, RAM role,
-// OIDC, and ECS role providers.
+// DefaultProviderFactory constructs production credential providers.
 type DefaultProviderFactory struct{}
 
 var _ ProviderFactory = DefaultProviderFactory{}
+
+func (DefaultProviderFactory) VE() auth.Provider {
+	// The SDK resolves the VE config file and profile independently of TLS.
+	return veCredentialsProvider{credentials: clicreds.NewCliCredentials("", "")}
+}
+
+type veCredentialsProvider struct {
+	credentials *credentials.Credentials
+}
+
+func (p veCredentialsProvider) Retrieve(context.Context) (auth.Value, error) {
+	value, err := p.credentials.Get()
+	if err != nil {
+		return auth.Value{}, &auth.Error{
+			Kind:        auth.ProtocolError,
+			Description: "failed to retrieve credentials from ve",
+			Cause:       err,
+		}
+	}
+	return auth.Value{
+		AccessKeyID:     value.AccessKeyID,
+		SecretAccessKey: value.SecretAccessKey,
+		SessionToken:    value.SessionToken,
+		ProviderName:    config.AuthModeVE,
+	}, nil
+}
 
 func (DefaultProviderFactory) SSO(configPath, profileName string, cfg config.Config) (auth.Provider, AuthStatusReader, error) {
 	profile, ok := cfg.GetProfile(profileName)
@@ -284,6 +314,8 @@ func BuildClient(request BuildClientRequest) (*tlsapi.Client, error) {
 		provider, err = factory.OIDC(request.ConfigPath, request.ProfileName, cfg)
 	case config.AuthModeECSRole:
 		provider, err = factory.ECSRole(request.ConfigPath, request.ProfileName, cfg)
+	case config.AuthModeVE:
+		provider = factory.VE()
 	}
 	if err != nil {
 		return nil, err
@@ -456,6 +488,14 @@ func (r *consoleAuthStatusReader) Status(context.Context, string) (AuthStatus, e
 		return AuthStatus{Provider: console.ProviderName, RefreshRequired: true}, nil
 	}
 	data, existed, err := r.cache.ReadRaw(r.loginSession)
+	if state, action := console.CacheRecovery(err); state != "" {
+		return AuthStatus{
+			Provider:        console.ProviderName,
+			RefreshRequired: true,
+			CacheState:      state,
+			CacheAction:     action,
+		}, nil
+	}
 	if err != nil || !existed || len(data) == 0 {
 		return AuthStatus{Provider: console.ProviderName, RefreshRequired: true}, nil
 	}

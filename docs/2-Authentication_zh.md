@@ -12,7 +12,7 @@
 | --- | --- | --- | --- |
 | 静态 AK/SK | 兼容已有配置、本地固定身份 | AK、SK | 保存到 profile，或通过环境变量、secrets file 临时注入；不自动轮换 |
 | 手工 STS | 已经从其他系统取得临时凭证 | 临时 AK、临时 SK、Session Token | 由用户注入；过期后需要重新取得完整三元组 |
-| Console Login | 个人终端、没有长期 AK/SK、希望通过控制台授权 | 浏览器登录授权 | 登录态写入本地安全缓存；接近过期时自动刷新 |
+| Console Login | 本地或远程终端，使用低权限 IAM 子用户交互登录 | 浏览器登录授权 | 登录态存入本地加密缓存，接近过期时自动刷新 |
 | SSO | 企业统一身份、账号和角色由 SSO 分配 | SSO Start URL、账号和角色 | OAuth 与 STS 状态写入本地安全缓存；接近过期时自动刷新 |
 | RAM Role ARN | 使用一个已有身份扮演目标账号中的角色 | 源 AK/SK、目标账号 ID、角色名 | 临时 STS 仅缓存在当前进程内；接近过期时自动重新 AssumeRole |
 | OIDC | VKE、CI 或其他提供 OIDC Token 的工作负载 | OIDC Token 文件、角色 TRN | Token 文件在每次刷新时重新读取；临时 STS 仅缓存在当前进程内 |
@@ -385,7 +385,9 @@ Agent 协助登录时，先选能保留原登录进程、实时向用户显示 s
 - CLI 不读取 Console 密码；账号密码和多因素认证信息只能输入到官方 HTTPS 浏览器页面。
 - 成功结果的 stdout 只包含 profile、provider、Region、Endpoint、过期时间和脱敏 AK。raw AK、SK、SecurityToken、OAuth token、authorization code、PKCE verifier 和内部 device code 不得出现在 stdout、stderr、错误消息或 trace 中。
 - Device Code 流程必须把验证 URL 和短期 user code 写到 stderr 供用户完成授权。user code 不会落盘，但终端宿主可能记录 stderr；不要把它复制到聊天、工单、CI 日志或其他持久化位置。
-- OAuth 与 STS 动态材料只保存在权限为 `0600` 的登录缓存中，并通过缓存锁和原子替换更新；profile 只保存登录会话绑定和 TLS 运行配置。
+- 临时 STS 三元组及服务端返回的 `refresh_token`、`id_token` 加密后写入本地登录缓存，默认位于 `~/.volclog/login/cache/`。CLI 在会话锁下原子更新 `<会话哈希>.enc`，Unix 使用 `0600` 文件权限，Windows 使用私有 ACL。profile 记录登录会话绑定和 TLS 运行配置。
+- **Linux、SSH 和默认 Docker**使用缓存目录内的 `master.key` 加密会话。每个目录生成一个随机密钥，目录权限为 `0700`，密钥文件权限为 `0600`。同一系统用户的独立命令和重连的 SSH 终端可复用会话。容器重建后如需复用，使用同一用户身份并让私有卷保留缓存目录及配置中的会话绑定。能够读取密钥和密文的人或进程可以解密会话。整个缓存目录应按凭据管理，包括它的备份、镜像层和挂载卷。
+- **macOS** 使用登录 Keychain 保管缓存目录的密钥，`volclog` 的发布版带有 Keychain 支持。遇到 Keychain 锁定或更换了可执行文件时，可在 Keychain Access 解锁并授权对应的 `volclog.console-login` 条目。**Windows** 使用当前用户的 DPAPI 加密会话。使用相同系统用户和系统保护环境才能复用缓存。
 - 登录失败不会回退到环境变量或 profile 中的 AK/SK，也不会自动切换授权流程，避免在用户不知情时使用另一个身份。
 - Console Login 只获得当前登录账号原本拥有的权限，不会提升权限。应为账号配置最小必要权限，并使用 `doctor --online` 或只读 API 验证实际访问边界。
 - 使用完毕后执行 `volclog logout --profile NAME` 清除登录缓存。Agent 只能引导用户在官方页面授权，不应要求用户把密码、user code、AK/SK 或 token 粘贴进对话。
@@ -437,6 +439,8 @@ volclog logout --profile console-dev
 ```bash
 volclog logout --all
 ```
+
+从使用明文缓存的版本升级时，退出旧版进程，用新版执行 `volclog login --profile 原名称`，并使用原账号授权。使用自定义配置或 `VOLCLOG_LOGIN_CACHE_DIRECTORY` 时，沿用原来的路径。新版保存新授权的加密会话和 profile 绑定后，删除对应的旧 `<会话哈希>.json`。共享该会话的 profile 可以继续使用各自原配置。若提示新会话已保存但旧缓存清理失败，检查缓存目录权限后再次登录可重试清理。已解绑且无需重新登录的旧文件需在确认归属后清理。退出会保留该缓存目录共用的 Linux 或 macOS 密钥。
 
 退出会删除本地登录缓存并清除受影响 profile 的登录会话绑定，但不会删除 profile，也不会删除其中保留的 TLS 运行配置。它也不会移除可能因之前的静态配置而残留的任何休眠静态 `AccessKeyID`、`SecretAccessKey`、`SecurityToken` 或 `CredRef` 字段。
 
@@ -895,6 +899,8 @@ volclog configure set --profile NAME \
 ```
 
 ### 11.3 `ReauthRequired`
+
+Console Login 的离线 `doctor` 通过 `credentials.cache_state` 和 `credentials.cache_action` 提示加密缓存故障。遇到 `legacy_plaintext` 时，用原 profile 重新登录即可升级。遇到 `key_missing` 或 `cache_invalid` 时，先退出对应 profile，再重新登录。遇到 `key_locked` 或 `key_unavailable` 时，按提示解锁 Keychain、授权当前可执行文件或检查 Linux 密钥文件权限。
 
 Console Login：
 

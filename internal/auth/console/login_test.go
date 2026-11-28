@@ -73,6 +73,8 @@ func (f *fakeCache) WithLock(ctx context.Context, loginSession string, fn func()
 	return fn()
 }
 
+func (f *fakeCache) Prepare(context.Context) error { return nil }
+
 func (f *fakeCache) ReadRaw(loginSession string) ([]byte, bool, error) {
 	atomic.AddInt32(&f.readCnt, 1)
 	if f.readErr != nil {
@@ -98,7 +100,7 @@ func (f *fakeCache) WriteRaw(loginSession string, data []byte) error {
 	return nil
 }
 
-func (f *fakeCache) Delete(loginSession string) error {
+func (f *fakeCache) DeleteEncrypted(loginSession string) error {
 	atomic.AddInt32(&f.deleteCnt, 1)
 	if f.deleteErr != nil {
 		return f.deleteErr
@@ -106,6 +108,8 @@ func (f *fakeCache) Delete(loginSession string) error {
 	delete(f.data, loginSession)
 	return nil
 }
+
+func (*fakeCache) DeleteLegacy(string) error { return nil }
 
 type fakeProfileStore struct {
 	cfg     config.Config
@@ -995,22 +999,23 @@ func TestFileCacheDataFilenameIsSHA1(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CacheFilename: %v", err)
 	}
-	// The actual file on disk must be exactly <dir>/<sha1hex>.json.
+	wantName = strings.TrimSuffix(wantName, ".json") + ".enc"
+	// The actual file on disk must be <dir>/<sha1hex>.enc.
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("ReadDir: %v", err)
 	}
-	var jsonFiles []string
+	var cacheFiles []string
 	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".json") {
-			jsonFiles = append(jsonFiles, e.Name())
+		if strings.HasSuffix(e.Name(), ".enc") {
+			cacheFiles = append(cacheFiles, e.Name())
 		}
 	}
-	if len(jsonFiles) != 1 {
-		t.Fatalf("expected 1 .json file in cache dir, got %d", len(jsonFiles))
+	if len(cacheFiles) != 1 {
+		t.Fatalf("expected 1 .enc file in cache dir, got %d", len(cacheFiles))
 	}
-	if jsonFiles[0] != wantName {
-		t.Errorf("cache filename = %q, want %q", jsonFiles[0], wantName)
+	if cacheFiles[0] != wantName {
+		t.Errorf("cache filename = %q, want %q", cacheFiles[0], wantName)
 	}
 }
 
@@ -1035,11 +1040,11 @@ func TestFileCacheDirectoryAndFilePermissions(t *testing.T) {
 	}
 
 	// File must be 0600.
-	name, err := CacheFilename(session)
+	path, err := cache.dataPath(session)
 	if err != nil {
-		t.Fatalf("CacheFilename: %v", err)
+		t.Fatalf("cache data path: %v", err)
 	}
-	finfo, err := os.Stat(filepath.Join(dir, name))
+	finfo, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("Stat file: %v", err)
 	}
@@ -1061,11 +1066,10 @@ func TestFileCacheRejectsSymlinkInReadRaw(t *testing.T) {
 	if err := os.WriteFile(target, []byte(`{}`), 0o600); err != nil {
 		t.Fatalf("write target: %v", err)
 	}
-	name, err := CacheFilename(session)
+	linkPath, err := cache.dataPath(session)
 	if err != nil {
-		t.Fatalf("CacheFilename: %v", err)
+		t.Fatalf("cache data path: %v", err)
 	}
-	linkPath := filepath.Join(dir, name)
 	if err := os.Symlink(target, linkPath); err != nil {
 		t.Fatalf("symlink: %v", err)
 	}
@@ -1083,11 +1087,10 @@ func TestFileCacheRejectsBroadPermissionFileInReadRaw(t *testing.T) {
 		t.Fatalf("NewFileCache: %v", err)
 	}
 	const session = "trn:iam::1:user:broad"
-	name, err := CacheFilename(session)
+	path, err := cache.dataPath(session)
 	if err != nil {
-		t.Fatalf("CacheFilename: %v", err)
+		t.Fatalf("cache data path: %v", err)
 	}
-	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte(`{"login_session":"trn:iam::1:user:broad"}`), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -1124,11 +1127,10 @@ func TestFileCacheRejectsSymlinkInDelete(t *testing.T) {
 	if err := os.WriteFile(target, []byte(`{}`), 0o600); err != nil {
 		t.Fatalf("write target: %v", err)
 	}
-	name, err := CacheFilename(session)
+	linkPath, err := cache.dataPath(session)
 	if err != nil {
-		t.Fatalf("CacheFilename: %v", err)
+		t.Fatalf("cache data path: %v", err)
 	}
-	linkPath := filepath.Join(dir, name)
 	if err := os.Symlink(target, linkPath); err != nil {
 		t.Fatalf("symlink: %v", err)
 	}
@@ -1155,11 +1157,10 @@ func TestFileCacheWriteRawRejectsSymlink(t *testing.T) {
 	if err := os.WriteFile(target, []byte(sentinel), 0o600); err != nil {
 		t.Fatalf("write target: %v", err)
 	}
-	name, err := CacheFilename(session)
+	linkPath, err := cache.dataPath(session)
 	if err != nil {
-		t.Fatalf("CacheFilename: %v", err)
+		t.Fatalf("cache data path: %v", err)
 	}
-	linkPath := filepath.Join(dir, name)
 	if err := os.Symlink(target, linkPath); err != nil {
 		t.Fatalf("symlink: %v", err)
 	}

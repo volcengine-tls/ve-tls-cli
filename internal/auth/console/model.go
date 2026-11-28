@@ -77,9 +77,7 @@ const (
 // never stored alongside raw response bodies.
 const RequestIDHeader = "X-Tt-Logid"
 
-// LoginTokenCache is the on-disk representation of a Console Login token cache.
-// The JSON schema is byte-for-byte compatible with the upstream volcengine-cli
-// cache so that caches written by either tool can be read by the other.
+// LoginTokenCache is the JSON payload protected by the Console Login cache.
 type LoginTokenCache struct {
 	// LoginSession is the stable session identifier extracted from the ID token.
 	LoginSession string `json:"login_session"`

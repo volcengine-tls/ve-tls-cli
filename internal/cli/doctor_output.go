@@ -17,7 +17,14 @@ func buildDoctorOutput(state *doctorRuntimeState, online bool) (any, int, error)
 		"sk":      state.skPresent,
 		"token":   state.tokenPresent,
 	}
-	if state.isDynamic {
+	if state.mode == config.AuthModeVE {
+		credentials["provider"] = config.AuthModeVE
+		credentials["source"] = config.AuthModeVE
+		credentials["on_demand"] = true
+		credentials["ak"] = state.credPresent
+		credentials["sk"] = state.credPresent
+		delete(credentials, "token")
+	} else if state.isDynamic {
 		if config.IsCachedLoginAuthMode(state.mode) {
 			// SSO/Console: safe defaults until the offline reader proves the
 			// cache valid.
@@ -32,6 +39,10 @@ func buildDoctorOutput(state *doctorRuntimeState, online bool) (any, int, error)
 			credentials["provider"] = providerName
 			credentials["expires_at"] = formatExpiresAt(state.dynamicStatus.ExpiresAt)
 			credentials["refresh_required"] = refreshRequired
+			if state.dynamicStatus.CacheState != "" {
+				credentials["cache_state"] = state.dynamicStatus.CacheState
+				credentials["cache_action"] = state.dynamicStatus.CacheAction
+			}
 		} else {
 			// Workload modes are on-demand and memory-only.
 			state.sourceReady = workloadSourceReady(state.mode, state.profile, state.cfg)
@@ -48,7 +59,7 @@ func buildDoctorOutput(state *doctorRuntimeState, online bool) (any, int, error)
 		}
 	}
 	// source_ready remains the final check, after every optional online check.
-	if state.isDynamic && !config.IsCachedLoginAuthMode(state.mode) {
+	if config.IsWorkloadAuthMode(state.mode) {
 		state.checks = append(state.checks, map[string]any{
 			"name":   "source_ready",
 			"ok":     state.sourceReady,
@@ -103,28 +114,26 @@ func buildDoctorOutput(state *doctorRuntimeState, online bool) (any, int, error)
 		}
 		return out, 2, nil
 	}
-	if state.isDynamic && !config.IsCachedLoginAuthMode(state.mode) {
+	if config.IsWorkloadAuthMode(state.mode) {
 		if !basicOK || !state.sourceReady {
 			return out, 2, nil
 		}
 		return out, 0, nil
 	}
-	if !state.credPresent || !basicOK {
+	if !basicOK || (state.mode != config.AuthModeVE && !state.credPresent) {
 		return out, 2, nil
 	}
 	return out, 0, nil
 }
 
-// resolveDoctorRuntimeValue mirrors request-time runtime selection. Dynamic
-// providers use environment runtime overrides independently of their identity.
-// Static auth uses environment runtime values only when a complete environment
-// AK/SK pair selected the environment identity; otherwise it stays on the
-// profile. Explicit command flags always win.
-func resolveDoctorRuntimeValue(flagValue, envValue, profileValue, projectValue string, isDynamic, staticUsesEnvIdentity bool) (string, string) {
+// resolveDoctorRuntimeValue mirrors request-time runtime selection. Explicit
+// flags take precedence, followed by environment values when the selected
+// mode permits them, then the profile and project settings.
+func resolveDoctorRuntimeValue(flagValue, envValue, profileValue, projectValue string, usesDynamicRuntimeEnv, staticUsesEnvIdentity bool) (string, string) {
 	if value := strings.TrimSpace(flagValue); value != "" {
 		return value, "flag"
 	}
-	if isDynamic {
+	if usesDynamicRuntimeEnv {
 		if value := strings.TrimSpace(envValue); value != "" {
 			return value, "env"
 		}

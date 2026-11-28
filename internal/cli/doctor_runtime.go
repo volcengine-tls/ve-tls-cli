@@ -91,6 +91,7 @@ func collectDoctorRuntimeState(ctx *Context) (*doctorRuntimeState, error) {
 	}
 	mode, _ := config.NormalizeAuthMode(profile.Mode)
 	isDynamic := config.IsProviderAuthMode(mode)
+	usesDynamicRuntimeEnv := isDynamic && mode != config.AuthModeVE
 
 	// credStatus holds the resolved credential status. Provider modes ignore
 	// environment AK/SK. Cached login modes derive status from the read-only
@@ -121,7 +122,7 @@ func collectDoctorRuntimeState(ctx *Context) (*doctorRuntimeState, error) {
 		envRegion,
 		profile.Region,
 		projectCfg.Region,
-		isDynamic,
+		usesDynamicRuntimeEnv,
 		staticUsesEnvIdentity,
 	)
 	endpoint, endpointSource := resolveDoctorRuntimeValue(
@@ -129,7 +130,7 @@ func collectDoctorRuntimeState(ctx *Context) (*doctorRuntimeState, error) {
 		envEndpoint,
 		profile.Endpoint,
 		projectCfg.Endpoint,
-		isDynamic,
+		usesDynamicRuntimeEnv,
 		staticUsesEnvIdentity,
 	)
 

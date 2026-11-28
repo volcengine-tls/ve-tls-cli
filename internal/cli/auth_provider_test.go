@@ -84,6 +84,10 @@ func (f *fakeAuthFactory) ECSRole(configPath, profileName string, cfg config.Con
 	return f.ecsProvider, f.ecsErr
 }
 
+func (*fakeAuthFactory) VE() auth.Provider {
+	panic("unexpected VE provider")
+}
+
 type fakeProvider struct {
 	value      auth.Value
 	err        error

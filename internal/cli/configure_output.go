@@ -103,8 +103,13 @@ func configureList(ctx *Context, args []string) (any, error) {
 // from the read-only authStatusReader; workload modes add only on-demand source
 // readiness. No secret material is ever included.
 func buildProfileOutput(ctx *Context, name string, p config.Profile) map[string]any {
+	mode, _ := config.NormalizeAuthMode(p.Mode)
 	credRef := strings.TrimSpace(p.CredRef)
 	credStatus := config.ResolveProfileCredentialStatus(ctx.cfg, p)
+	if mode == config.AuthModeVE {
+		credRef = ""
+		credStatus = config.CredentialStatus{Source: config.AuthModeVE}
+	}
 	out := map[string]any{
 		"profile":            name,
 		"effective_profile":  name,
@@ -114,10 +119,9 @@ func buildProfileOutput(ctx *Context, name string, p config.Profile) map[string]
 		"credential_source":  credStatus.Source,
 		"credential_present": credStatus.Present,
 		"access_key_id":      config.MaskAK(credStatus.AccessKeyID),
-		"has_security_token": p.SecurityToken != "",
+		"has_security_token": p.SecurityToken != "" && mode != config.AuthModeVE,
 		"timeout_seconds":    p.TimeoutSeconds,
 	}
-	mode, _ := config.NormalizeAuthMode(p.Mode)
 	applyInsecureMarker(out, mode, p.DisableSSL)
 	if config.IsProviderAuthMode(mode) {
 		out["auth_mode"] = mode
@@ -139,7 +143,7 @@ func buildProfileOutput(ctx *Context, name string, p config.Profile) map[string]
 					out["refresh_required"] = st.RefreshRequired
 				}
 			}
-		} else {
+		} else if config.IsWorkloadAuthMode(mode) {
 			// Workload modes: on-demand, memory-only. No disk cache; credentials
 			// are never present from configure show. Source type describes the
 			// local configuration; source_ready reports local readiness.
@@ -149,6 +153,8 @@ func buildProfileOutput(ctx *Context, name string, p config.Profile) map[string]
 			out["on_demand"] = true
 			out["memory_only"] = true
 			out["source_ready"] = workloadSourceReady(mode, p, ctx.cfg)
+		} else {
+			out["on_demand"] = true
 		}
 	}
 	return out
@@ -193,6 +199,8 @@ func dynamicProviderName(mode string) string {
 		return "oidc"
 	case config.AuthModeECSRole:
 		return "ecsrole"
+	case config.AuthModeVE:
+		return config.AuthModeVE
 	}
 	return "console-login"
 }

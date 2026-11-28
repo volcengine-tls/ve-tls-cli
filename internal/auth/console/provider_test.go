@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -147,11 +146,10 @@ func TestConsoleProviderFailsClosedOnBroadPermissionCache(t *testing.T) {
 	if err := cache.WriteRaw(session, makeCacheBytes(session, now, 3600, "refresh-token")); err != nil {
 		t.Fatalf("WriteRaw: %v", err)
 	}
-	name, err := CacheFilename(session)
+	cachePath, err := cache.dataPath(session)
 	if err != nil {
-		t.Fatalf("CacheFilename: %v", err)
+		t.Fatalf("cache data path: %v", err)
 	}
-	cachePath := filepath.Join(dir, name)
 	if err := os.Chmod(cachePath, 0o644); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}
