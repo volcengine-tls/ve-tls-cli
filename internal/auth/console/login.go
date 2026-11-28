@@ -1,6 +1,7 @@
 package console
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -73,14 +74,16 @@ func newSafeError(desc string, causes ...error) error {
 // cross-process locking. The production implementation (FileCache) uses
 // securestore primitives; tests inject fakes.
 //
-// WithLock holds the per-session lock for the duration of fn. Inside fn,
-// ReadRaw/WriteRaw/Delete operate on the explicit SHA-1 data path so that
-// Login rollback can restore the precise pre-existing bytes.
+// Prepare checks that a new login can use the credential store. WithLock
+// holds the per-session lock for compound operations. ReadRaw and WriteRaw
+// exchange the serialized session in memory, including during login rollback.
 type ConsoleCache interface {
+	Prepare(ctx context.Context) error
 	WithLock(ctx context.Context, loginSession string, fn func() error) error
 	ReadRaw(loginSession string) ([]byte, bool, error)
 	WriteRaw(loginSession string, data []byte) error
-	Delete(loginSession string) error
+	DeleteEncrypted(loginSession string) error
+	DeleteLegacy(loginSession string) error
 }
 
 // ProfileStore abstracts config load/update for the login service. The
@@ -289,6 +292,10 @@ func (s *LoginService) Login(ctx context.Context, opts LoginOptions) (*LoginResu
 		tlsEndpoint = strings.TrimSpace(profile.Endpoint)
 	}
 
+	if err := s.cache.Prepare(ctx); err != nil {
+		return nil, newSafeError("prepare cache failed", err)
+	}
+
 	// 2. Create the OAuth client. The selected flow controls the frozen client
 	// ID persisted in cache and reused by refresh.
 	useDeviceCode := opts.DeviceCode || opts.NoBrowser || opts.Remote
@@ -423,7 +430,9 @@ func (s *LoginService) Login(ctx context.Context, opts LoginOptions) (*LoginResu
 	err = s.cache.WithLock(ctx, loginSession, func() error {
 		// 11. Re-read and retain exact raw bytes plus prior existence.
 		priorBytes, existed, rerr := s.cache.ReadRaw(loginSession)
-		if rerr != nil {
+		// Fresh credentials can replace a legacy session. Its plaintext file
+		// remains available to the old CLI until the profile update commits.
+		if rerr != nil && !errors.Is(rerr, ErrLegacyCache) {
 			return newSafeError("read cache snapshot failed", rerr)
 		}
 
@@ -479,11 +488,14 @@ func (s *LoginService) Login(ctx context.Context, opts LoginOptions) (*LoginResu
 					return newSafeError("config update and cache rollback failed", configErr, rerr)
 				}
 			} else {
-				if derr := s.cache.Delete(loginSession); derr != nil {
+				if derr := s.cache.DeleteEncrypted(loginSession); derr != nil {
 					return newSafeError("config update and cache cleanup failed", configErr, derr)
 				}
 			}
 			return newSafeError("config update failed", configErr)
+		}
+		if err := s.cache.DeleteLegacy(loginSession); err != nil {
+			return newSafeError(diagnosticLegacyCleanup, err)
 		}
 		return nil
 	})
@@ -524,13 +536,12 @@ func scopeSatisfiesFrozen(returnedScope string) bool {
 	return true
 }
 
-// FileCache is the production ConsoleCache implementation. It uses
-// securestore.Store.WithLock for the outer per-session lock and
-// securestore.UpdateFile for the explicit SHA-1 data path, preserving
-// upstream-compatible cache filenames.
+// FileCache atomically stores protected sessions under the existing session
+// hash. The legacy file name still identifies the lock during upgrades.
 type FileCache struct {
-	store *securestore.Store
-	dir   string
+	store      *securestore.Store
+	dir        string
+	protection cacheProtection
 }
 
 // NewFileCache creates a FileCache rooted at dir. The dir must be explicitly
@@ -548,7 +559,13 @@ func NewFileCache(dir string) (*FileCache, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FileCache{store: store, dir: root}, nil
+	return &FileCache{store: store, dir: root, protection: newCacheProtection(root, store)}, nil
+}
+
+func (c *FileCache) Prepare(ctx context.Context) error {
+	return c.store.WithLock(ctx, "console", "prepare", func() error {
+		return c.protection.prepare(ctx)
+	})
 }
 
 // WithLock runs fn while holding the per-session cross-process lock.
@@ -579,17 +596,16 @@ func (c *FileCache) WithLock(ctx context.Context, loginSession string, fn func()
 	return c.store.WithLock(ctx, "console", name, fn)
 }
 
-// dataPath returns the explicit SHA-1 cache file path for the session.
 func (c *FileCache) dataPath(loginSession string) (string, error) {
 	name, err := CacheFilename(loginSession)
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(c.dir, name), nil
+	return filepath.Join(c.dir, strings.TrimSuffix(name, ".json")+".enc"), nil
 }
 
-// ReadRaw returns the exact raw bytes of the cache file and whether it existed.
-// It rejects symlink and non-regular targets rather than following them.
+// ReadRaw returns the authenticated session payload. Legacy plaintext files
+// are recognized by path so they can be removed without loading credentials.
 func (c *FileCache) ReadRaw(loginSession string) ([]byte, bool, error) {
 	if c == nil {
 		return nil, false, errors.New("nil *FileCache")
@@ -601,20 +617,44 @@ func (c *FileCache) ReadRaw(loginSession string) ([]byte, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	// Validate the file is a regular private (0600) file before reading.
-	// Broad-permission caches fail closed and are never used on the fast path.
-	if verr := securestore.ValidatePrivateFile(path); verr != nil {
-		if errors.Is(verr, os.ErrNotExist) {
-			return nil, false, nil
-		}
-		return nil, false, verr
+	data, exists, err := readPrivateCacheFile(path)
+	if err != nil {
+		return nil, false, err
 	}
-	data, rerr := os.ReadFile(path)
-	if rerr != nil {
-		if errors.Is(rerr, os.ErrNotExist) {
+	if !exists {
+		legacyPath := strings.TrimSuffix(path, ".enc") + ".json"
+		if err := securestore.ValidatePrivateFile(legacyPath); !errors.Is(err, os.ErrNotExist) {
+			if err != nil {
+				return nil, false, err
+			}
+			return nil, false, ErrLegacyCache
+		}
+		return nil, false, nil
+	}
+	payload, ok := bytes.CutPrefix(data, []byte(cacheHeader))
+	if !ok {
+		return nil, false, errCacheInvalid
+	}
+	cleartext, err := c.protection.open(loginSession, payload)
+	if err != nil {
+		return nil, false, err
+	}
+	return cleartext, true, nil
+}
+
+func readPrivateCacheFile(path string) ([]byte, bool, error) {
+	if err := securestore.ValidatePrivateFile(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
 			return nil, false, nil
 		}
-		return nil, false, rerr
+		return nil, false, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, false, nil
+		}
+		return nil, false, err
 	}
 	return data, true, nil
 }
@@ -646,13 +686,16 @@ func (c *FileCache) WriteRaw(loginSession string, data []byte) error {
 	} else if !errors.Is(lerr, os.ErrNotExist) {
 		return lerr
 	}
+	payload, err := c.protection.seal(loginSession, data)
+	if err != nil {
+		return err
+	}
 	return securestore.UpdateFile(path, 0o600, func([]byte) ([]byte, error) {
-		return data, nil
+		return append([]byte(cacheHeader), payload...), nil
 	})
 }
 
-// Delete removes the cache file; missing is idempotent. It rejects symlink
-// targets rather than following them.
+// Delete removes the encrypted and legacy files for a session.
 func (c *FileCache) Delete(loginSession string) error {
 	if c == nil {
 		return errors.New("nil *FileCache")
@@ -660,15 +703,40 @@ func (c *FileCache) Delete(loginSession string) error {
 	if c.store == nil {
 		return errors.New("nil *FileCache store")
 	}
+	if err := c.DeleteEncrypted(loginSession); err != nil {
+		return err
+	}
+	return c.DeleteLegacy(loginSession)
+}
+
+// DeleteEncrypted rolls back the file written by the current login.
+func (c *FileCache) DeleteEncrypted(loginSession string) error {
 	path, err := c.dataPath(loginSession)
 	if err != nil {
 		return err
 	}
-	// Reject symlinks before removing.
-	if info, lerr := os.Lstat(path); lerr == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			return errors.New("cache path is a symlink")
-		}
+	return removeCacheFile(path)
+}
+
+// DeleteLegacy removes the previous plaintext file after the upgrade commits.
+func (c *FileCache) DeleteLegacy(loginSession string) error {
+	name, err := CacheFilename(loginSession)
+	if err != nil {
+		return err
+	}
+	return removeCacheFile(filepath.Join(c.dir, name))
+}
+
+func removeCacheFile(path string) error {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return securestore.ErrInvalidPath
 	}
 	err = os.Remove(path)
 	if errors.Is(err, os.ErrNotExist) {

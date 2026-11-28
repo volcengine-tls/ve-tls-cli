@@ -37,6 +37,7 @@ const (
 	diagnosticNetworkFailure   = "console login network request failed"
 	diagnosticDNSFailure       = "console login DNS lookup failed"
 	diagnosticTLSFailure       = "console login TLS handshake failed"
+	diagnosticLegacyCleanup    = "encrypted login saved, legacy cache cleanup failed"
 )
 
 // safeDiagnosticPhases allows fixed descriptions and stages through the
@@ -56,8 +57,10 @@ var safeDiagnosticPhases = map[string]string{
 	"compute token expiration failed":         LoginStageTokenResponse,
 	"login session confirmation failed":       LoginStageConfirmation,
 	"read cache snapshot failed":              LoginStageCache,
+	"prepare cache failed":                    LoginStageCache,
 	"marshal cache failed":                    LoginStageCache,
 	"write cache failed":                      LoginStageCache,
+	diagnosticLegacyCleanup:                   LoginStageCache,
 	"config update and cache rollback failed": LoginStageConfigUpdate,
 	"config update and cache cleanup failed":  LoginStageConfigUpdate,
 	"config update failed":                    LoginStageConfigUpdate,
@@ -124,6 +127,8 @@ func DiagnoseError(err error) ErrorDiagnostic {
 		detail = diagnosticLoginCanceled
 	} else if errors.Is(err, context.DeadlineExceeded) {
 		detail = diagnosticLoginTimedOut
+	} else if _, action := CacheRecovery(err); action != "" {
+		detail = action
 	} else if networkKind := classifyNetworkError(err); networkKind != "" {
 		detail = networkKind
 	}

@@ -39,6 +39,10 @@ func buildDoctorOutput(state *doctorRuntimeState, online bool) (any, int, error)
 			credentials["provider"] = providerName
 			credentials["expires_at"] = formatExpiresAt(state.dynamicStatus.ExpiresAt)
 			credentials["refresh_required"] = refreshRequired
+			if state.dynamicStatus.CacheState != "" {
+				credentials["cache_state"] = state.dynamicStatus.CacheState
+				credentials["cache_action"] = state.dynamicStatus.CacheAction
+			}
 		} else {
 			// Workload modes are on-demand and memory-only.
 			state.sourceReady = workloadSourceReady(state.mode, state.profile, state.cfg)

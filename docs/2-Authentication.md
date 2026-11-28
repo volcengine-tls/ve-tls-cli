@@ -12,7 +12,7 @@ Regardless of the method, the goal is always the same: obtain a set of credentia
 | --- | --- | --- | --- |
 | Static AK/SK | Compatible with existing setups, fixed local identity | AK, SK | Saved to a profile, or injected via environment variables / secrets file; not rotated automatically |
 | Manual STS | Temporary credentials already obtained from another system | Temporary AK, temporary SK, Session Token | Injected by the user; a fresh full triple must be obtained after expiry |
-| Console Login | Personal terminal, no long-term AK/SK, willing to authorize through the console | Browser login authorization | Login state written to a local secure cache; refreshed automatically near expiry |
+| Console Login | Interactive use on a local or remote terminal with a least-privilege IAM user | Browser login authorization | Encrypted state in a private local cache, refreshed automatically near expiry |
 | SSO | Enterprise unified identity; accounts and roles assigned by SSO | SSO Start URL, account and role | OAuth and STS state written to a local secure cache; refreshed automatically near expiry |
 | RAM Role ARN | Use an existing identity to assume a role in a target account | Source AK/SK, target account ID, role name | Temporary STS cached only within the current process; re-AssumeRole automatically near expiry |
 | OIDC | VKE, CI, or other workloads that provide an OIDC Token | OIDC Token file, role TRN | Token file re-read on every refresh; temporary STS cached only within the current process |
@@ -385,7 +385,9 @@ Read the final JSON error on stderr. For failures with a known stage, `stage` an
 - The CLI never reads the Console password. Enter passwords and multi-factor authentication data only on the official HTTPS browser page.
 - Successful stdout contains only the profile, provider, region, endpoint, expiry, and masked AK. Raw AK, SK, SecurityToken, OAuth tokens, authorization codes, PKCE verifiers, and the internal device code must never appear in stdout, stderr, errors, or traces.
 - Device Code must write the verification URL and short-lived user code to stderr so the user can authorize. The user code is not persisted, but a terminal host may record stderr; never paste it into chats, tickets, CI logs, or other durable locations.
-- OAuth and STS dynamic material is stored only in the `0600` login cache and is updated with cache locking and atomic replacement. The profile stores only the login-session binding and TLS runtime configuration.
+- Console Login encrypts the temporary STS credentials and any `refresh_token` and `id_token` returned by the server. The cache defaults to `~/.volclog/login/cache/`. The CLI atomically replaces `<session-hash>.enc` under a session lock, with `0600` permissions on Unix and private ACLs on Windows. The profile records the login-session binding and TLS runtime configuration.
+- On **Linux, SSH hosts, and default Docker containers**, the cache uses a random key stored in `master.key` in the same `0700` directory. The key file has `0600` permissions. The same OS user can reuse the session from separate commands and after reconnecting over SSH. Reusing a session in a replacement container requires the cache directory and the profile's session binding on persistent storage accessible to the same user. Anyone who can read both the key and the ciphertext can recover the session. Treat the entire cache directory and its backups, image layers, or mounted volumes as credentials.
+- On **macOS**, the release uses the login Keychain for the cache directory key. If the Keychain is locked or the executable changes, use Keychain Access to unlock it and authorize the executable for the `volclog.console-login` item. On **Windows**, user-scoped DPAPI protects the session. Reuse depends on the same OS user and platform protection context.
 - A login failure never falls back to AK/SK from the environment or profile and never switches authorization flows automatically, preventing silent use of another identity.
 - Console Login receives only the permissions already held by the signed-in account; it does not elevate privileges. Grant the minimum required permissions and use `doctor --online` or a read-only API to verify the effective access boundary.
 - Run `volclog logout --profile NAME` after use to clear the login cache. An Agent may guide the user to the official authorization page, but must never ask the user to paste a password, user code, AK/SK, or token into a conversation.
@@ -437,6 +439,8 @@ volclog logout --profile console-dev
 ```bash
 volclog logout --all
 ```
+
+When upgrading from a release that stored plaintext sessions, close the older processes and run `volclog login --profile NAME` with the original profile name and account. Use the original configuration and `VOLCLOG_LOGIN_CACHE_DIRECTORY` if you customized those paths. The new release saves the encrypted session and profile binding, then removes the matching legacy `<session-hash>.json` file. Other profiles that share the session can keep using their existing settings. If the new session was saved and legacy cleanup failed, check the cache directory permissions and sign in again to retry cleanup. Confirm ownership before removing any legacy files for sessions you no longer use. Logout retains the shared Linux or macOS directory key.
 
 Logging out deletes the local login cache and clears the login-session binding on affected profiles, but does not delete the profiles or the TLS runtime configuration retained in them. It also does not remove any dormant static `AccessKeyID`, `SecretAccessKey`, `SecurityToken`, or `CredRef` fields that may remain from a previous static configuration.
 
@@ -895,6 +899,8 @@ volclog configure set --profile NAME \
 ```
 
 ### 11.3 `ReauthRequired`
+
+For protected Console Login cache failures, offline `doctor` reports `credentials.cache_state` and `credentials.cache_action`. For `legacy_plaintext`, sign in with the existing profile to upgrade the session. For `key_missing` or `cache_invalid`, log out of the affected profile, then sign in again. For `key_locked` or `key_unavailable`, follow the hint to unlock the Keychain, authorize the current executable, or check the Linux key file permissions.
 
 Console Login:
 

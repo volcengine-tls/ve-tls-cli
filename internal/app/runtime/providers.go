@@ -41,6 +41,8 @@ type AuthStatus struct {
 	Present         bool
 	ExpiresAt       time.Time
 	RefreshRequired bool
+	CacheState      string
+	CacheAction     string
 }
 
 // AuthStatusReader reads authentication status without refreshing, networking,
@@ -486,6 +488,14 @@ func (r *consoleAuthStatusReader) Status(context.Context, string) (AuthStatus, e
 		return AuthStatus{Provider: console.ProviderName, RefreshRequired: true}, nil
 	}
 	data, existed, err := r.cache.ReadRaw(r.loginSession)
+	if state, action := console.CacheRecovery(err); state != "" {
+		return AuthStatus{
+			Provider:        console.ProviderName,
+			RefreshRequired: true,
+			CacheState:      state,
+			CacheAction:     action,
+		}, nil
+	}
 	if err != nil || !existed || len(data) == 0 {
 		return AuthStatus{Provider: console.ProviderName, RefreshRequired: true}, nil
 	}

@@ -88,6 +88,13 @@ func (p *Provider) Retrieve(ctx context.Context) (auth.Value, error) {
 		// Re-read cache from disk inside the lock.
 		data, existed, rerr := p.cache.ReadRaw(p.loginSession)
 		if rerr != nil {
+			if state, action := CacheRecovery(rerr); action != "" {
+				message := "console login cache " + state + ". " + action
+				if errors.Is(rerr, errCacheInvalid) {
+					return reauthRequiredWithCorruptCause(message, rerr)
+				}
+				return &auth.Error{Kind: auth.ReauthRequired, Description: message, Cause: rerr}
+			}
 			return reauthRequiredWithCorruptCause("console login cache is unreadable; run: volclog login", rerr)
 		}
 		// A cache file that does not exist is a clean re-login signal: top-level
