@@ -1,5 +1,14 @@
 # Changelog
 
+## volclog-v1.2.2
+
+- Add opt-in `--mode ve` to use credentials from the VE CLI's active profile. Configure the TLS Region and Endpoint in volclog.
+- Encrypt Console Login sessions at rest and show cache recovery steps in `volclog doctor`.
+
+### Upgrade notes
+
+- If you use Console Login, run `volclog login --profile NAME` with your existing profile and account to replace the legacy plaintext cache. Other profiles bound to the same session can reuse the encrypted cache.
+
 ## volclog-v1.2.1
 
 - Fix Console Login automatic refresh when the token response omits `token_type`. Refresh keeps the cached token type and reuses the existing refresh token when no replacement is returned. (#28, #29)
